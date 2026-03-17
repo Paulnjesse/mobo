@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "mobo",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -17,6 +18,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mobo.mobile",
+      "config": {
+        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "MOBO needs your location to find nearby drivers and show your position on the map.",
         "NSLocationAlwaysUsageDescription": "MOBO needs your location in the background to track your ride.",
@@ -32,6 +36,11 @@
         "backgroundColor": "#1A1A2E"
       },
       "package": "com.mobo.mobile",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -41,9 +50,9 @@
         "WRITE_EXTERNAL_STORAGE",
         "RECORD_AUDIO",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
-      ],
-      "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -52,14 +61,20 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "MOBO needs your location to provide ride services."
+          "locationAlwaysAndWhenInUsePermission": "MOBO needs your location to provide ride services.",
+          "locationAlwaysPermission": "MOBO needs your location in the background to track your ride.",
+          "locationWhenInUsePermission": "MOBO needs your location to find nearby drivers and show your position on the map.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#1A1A2E"
+          "color": "#FF00BF",
+          "sounds": [],
+          "mode": "production"
         }
       ],
       "expo-secure-store"

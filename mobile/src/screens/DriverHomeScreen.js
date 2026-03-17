@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
+import { connectSockets, disconnectSockets, rideSocket, locationSocket } from '../services/socket';
 
 const COUNTDOWN_SECONDS = 15;
 
@@ -30,6 +31,9 @@ export default function DriverHomeScreen({ navigation }) {
   const ringAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(300)).current;
 
+  // Track whether sockets have been set up this session
+  const socketsReady = useRef(false);
+
   const mapRegion = {
     latitude: 3.848,
     longitude: 11.502,
@@ -37,6 +41,61 @@ export default function DriverHomeScreen({ navigation }) {
     longitudeDelta: 0.04,
   };
 
+  // -------------------------------------------------------------------------
+  // Connect sockets on mount; clean up on unmount
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await connectSockets();
+        socketsReady.current = true;
+        setupSocketListeners();
+      } catch (err) {
+        console.warn('[DriverHomeScreen] Socket connect failed:', err.message);
+      }
+    };
+    init();
+
+    return () => {
+      // Remove listeners but keep sockets alive — disconnection is handled by RideContext/logout
+      if (rideSocket) {
+        rideSocket.off('incoming_ride_request');
+        rideSocket.off('ride_request_expired');
+      }
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Register socket event listeners
+  // -------------------------------------------------------------------------
+  function setupSocketListeners() {
+    if (!rideSocket) return;
+
+    /**
+     * `incoming_ride_request` — server pushes a new trip request to this driver.
+     * Show the ride request popup with 15-second countdown.
+     */
+    rideSocket.on('incoming_ride_request', (data) => {
+      console.log('[DriverHomeScreen] incoming_ride_request', data);
+      setRideRequest(data);
+    });
+
+    /**
+     * `ride_request_expired` — server confirms the request timed out
+     * (15-second window elapsed with no response).
+     */
+    rideSocket.on('ride_request_expired', ({ rideId }) => {
+      setRideRequest((prev) => {
+        if (prev?.rideId === rideId) return null;
+        return prev;
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Ride request popup animation & countdown
+  // -------------------------------------------------------------------------
   useEffect(() => {
     if (rideRequest) {
       setCountdown(COUNTDOWN_SECONDS);
@@ -72,6 +131,9 @@ export default function DriverHomeScreen({ navigation }) {
     ).start();
   };
 
+  // -------------------------------------------------------------------------
+  // Online / offline toggle
+  // -------------------------------------------------------------------------
   const handleToggleOnline = () => {
     if (isOnline) {
       Alert.alert('Go Offline', 'Stop receiving ride requests?', [
@@ -79,36 +141,60 @@ export default function DriverHomeScreen({ navigation }) {
         {
           text: 'Go Offline',
           style: 'destructive',
-          onPress: () => { setIsOnline(false); setRideRequest(null); },
+          onPress: () => {
+            setIsOnline(false);
+            setRideRequest(null);
+            // Emit driver_offline via location socket
+            if (locationSocket?.connected) {
+              locationSocket.emit('driver_offline', {});
+            }
+          },
         },
       ]);
     } else {
       setIsOnline(true);
-      // Simulate incoming request after 3s for demo
-      setTimeout(() => {
-        setRideRequest({
-          id: 'req_demo',
-          pickup: { address: 'Marché Central, Yaoundé', coords: { latitude: 3.861, longitude: 11.521 } },
-          dropoff: { address: 'Aéroport International de Yaoundé', coords: { latitude: 3.722, longitude: 11.553 } },
-          fare: 3500,
-          distance: '12.4 km',
-          eta: '4 min',
-          rider: { name: 'Jean Dupont', rating: 4.8 },
+      // Emit driver_online via location socket
+      if (locationSocket?.connected) {
+        locationSocket.emit('driver_online', {
+          // Pass current location if available; omit if not yet fetched
+          latitude: null,
+          longitude: null,
         });
-      }, 3000);
+      }
     }
   };
 
+  // -------------------------------------------------------------------------
+  // Accept / Decline
+  // -------------------------------------------------------------------------
   const handleAccept = () => {
     if (countdownRef.current) clearInterval(countdownRef.current);
     const req = rideRequest;
     setRideRequest(null);
+
+    // Emit driver_response → accepted
+    if (rideSocket?.connected && req?.rideId) {
+      rideSocket.emit('driver_response', {
+        rideId: req.rideId,
+        accepted: true,
+      });
+    }
+
     navigation.navigate('DriverRide', { rideRequest: req });
   };
 
   const handleDecline = () => {
     if (countdownRef.current) clearInterval(countdownRef.current);
+    const req = rideRequest;
     setRideRequest(null);
+
+    // Emit driver_response → declined
+    if (rideSocket?.connected && req?.rideId) {
+      rideSocket.emit('driver_response', {
+        rideId: req.rideId,
+        accepted: false,
+      });
+    }
   };
 
   const ringColor = ringAnim.interpolate({
@@ -203,8 +289,8 @@ export default function DriverHomeScreen({ navigation }) {
               <View style={styles.dotDropoff} />
             </View>
             <View style={styles.requestRouteTexts}>
-              <Text style={styles.requestAddress} numberOfLines={1}>{rideRequest.pickup.address}</Text>
-              <Text style={styles.requestAddress} numberOfLines={1}>{rideRequest.dropoff.address}</Text>
+              <Text style={styles.requestAddress} numberOfLines={1}>{rideRequest.pickup?.address}</Text>
+              <Text style={styles.requestAddress} numberOfLines={1}>{rideRequest.dropoff?.address}</Text>
             </View>
           </View>
 

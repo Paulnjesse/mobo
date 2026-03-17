@@ -29,7 +29,8 @@
     "@react-native-async-storage/async-storage": "1.21.0",
     "react-native-paper": "^5.12.1",
     "date-fns": "^3.3.1",
-    "react-native-rating-element": "^2.1.0"
+    "react-native-rating-element": "^2.1.0",
+    "socket.io-client": "^4.6.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

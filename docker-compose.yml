@@ -64,6 +64,7 @@ services:
       JWT_SECRET: mobo_jwt_secret_change_in_production
       LOCATION_SERVICE_URL: http://location-service:3004
       PAYMENT_SERVICE_URL: http://payment-service:3003
+      SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
     depends_on:
       db:
         condition: service_healthy
@@ -95,6 +96,7 @@ services:
       DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
       JWT_SECRET: mobo_jwt_secret_change_in_production
       GOOGLE_MAPS_API_KEY: AIza_your_key_here
+      SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
     depends_on:
       db:
         condition: service_healthy

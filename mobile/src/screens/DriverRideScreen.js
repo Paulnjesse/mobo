@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,16 +13,26 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import * as ExpoLocation from 'expo-location';
 import { useLanguage } from '../context/LanguageContext';
 import SOSButton from '../components/SOSButton';
 import { colors, spacing, radius, shadows } from '../theme';
+import { connectSockets, rideSocket } from '../services/socket';
 
 const RIDE_STEPS = [
-  { key: 'pickup', label: 'Navigate to Pickup', action: 'Arrived at Pickup', icon: 'navigate-outline', color: colors.warning },
-  { key: 'verify', label: 'Verify Rider OTP', action: 'Start Ride', icon: 'shield-checkmark-outline', color: colors.primary },
-  { key: 'inprogress', label: 'Ride in Progress', action: 'Complete Ride', icon: 'car-outline', color: colors.success },
-  { key: 'completed', label: 'Ride Completed', action: null, icon: 'checkmark-circle-outline', color: colors.success },
+  { key: 'pickup',    label: 'Navigate to Pickup',  action: 'Arrived at Pickup',  icon: 'navigate-outline',           color: colors.warning },
+  { key: 'verify',   label: 'Verify Rider OTP',     action: 'Start Ride',         icon: 'shield-checkmark-outline',   color: colors.primary },
+  { key: 'inprogress', label: 'Ride in Progress',   action: 'Complete Ride',      icon: 'car-outline',                color: colors.success },
+  { key: 'completed',  label: 'Ride Completed',     action: null,                 icon: 'checkmark-circle-outline',   color: colors.success },
 ];
+
+/** Map step index → ride_status_change value emitted to riders */
+const STEP_STATUS_MAP = {
+  0: 'arriving',
+  1: 'arrived',
+  2: 'in_progress',
+  3: 'completed',
+};
 
 export default function DriverRideScreen({ navigation, route }) {
   const { rideRequest } = route.params || {};
@@ -34,27 +44,146 @@ export default function DriverRideScreen({ navigation, route }) {
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState(false);
 
+  // Incoming messages from the rider
+  const [riderMessage, setRiderMessage] = useState(null);
+  const messageTimerRef = useRef(null);
+
+  // GPS emit interval handle
+  const locationIntervalRef = useRef(null);
+
   const currentStep = RIDE_STEPS[stepIndex];
   const ride = rideRequest || {};
+  const rideId = ride.rideId || ride.id;
 
   const mapRegion = ride.pickup?.coords
     ? { latitude: ride.pickup.coords.latitude, longitude: ride.pickup.coords.longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 }
     : { latitude: 3.848, longitude: 11.502, latitudeDelta: 0.04, longitudeDelta: 0.04 };
 
+  // -------------------------------------------------------------------------
+  // Connect sockets + start GPS broadcasting + listen for rider messages
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await connectSockets();
+
+        // Listen for messages from the rider
+        if (rideSocket) {
+          rideSocket.on('message', handleRiderMessage);
+          rideSocket.on('ride_cancelled', handleRideCancelled);
+        }
+
+        // Start emitting GPS position every 5 seconds
+        await startGPSBroadcast();
+      } catch (err) {
+        console.warn('[DriverRideScreen] Socket init failed:', err.message);
+      }
+    };
+
+    init();
+
+    return () => {
+      stopGPSBroadcast();
+      if (rideSocket) {
+        rideSocket.off('message', handleRiderMessage);
+        rideSocket.off('ride_cancelled', handleRideCancelled);
+      }
+      if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    };
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // GPS broadcasting helpers
+  // -------------------------------------------------------------------------
+  const startGPSBroadcast = async () => {
+    // Request location permission
+    const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('[DriverRideScreen] Location permission denied — GPS broadcast disabled');
+      return;
+    }
+
+    const emit = async () => {
+      if (!rideSocket?.connected || !rideId) return;
+      try {
+        const loc = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.High,
+        });
+        rideSocket.emit('driver_location_update', {
+          rideId,
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          heading: loc.coords.heading ?? null,
+          speed: loc.coords.speed ?? null,
+          timestamp: loc.timestamp,
+        });
+      } catch (err) {
+        console.warn('[DriverRideScreen] GPS emit failed:', err.message);
+      }
+    };
+
+    // Emit immediately, then every 5 seconds
+    emit();
+    locationIntervalRef.current = setInterval(emit, 5000);
+  };
+
+  const stopGPSBroadcast = () => {
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Socket event handlers
+  // -------------------------------------------------------------------------
+  const handleRiderMessage = useCallback((data) => {
+    if (data.rideId !== rideId) return;
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    setRiderMessage({ text: data.text, senderName: data.senderName });
+    messageTimerRef.current = setTimeout(() => setRiderMessage(null), 4000);
+  }, [rideId]);
+
+  const handleRideCancelled = useCallback((data) => {
+    if (data.rideId !== rideId) return;
+    stopGPSBroadcast();
+    Alert.alert('Ride Cancelled', 'The rider has cancelled this ride.', [
+      { text: 'OK', onPress: () => navigation.goBack() },
+    ]);
+  }, [rideId]);
+
+  // -------------------------------------------------------------------------
+  // Emit ride_status_change when step advances
+  // -------------------------------------------------------------------------
+  const emitStatusChange = (newStepIndex) => {
+    if (!rideSocket?.connected || !rideId) return;
+    const status = STEP_STATUS_MAP[newStepIndex];
+    if (status) {
+      rideSocket.emit('ride_status_change', { rideId, status });
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Action button handler
+  // -------------------------------------------------------------------------
   const handleAction = () => {
     if (currentStep.key === 'verify') {
-      // Validate OTP — in production, compare with ride.otp
       if (otpInput.length < 4) {
         setOtpError(true);
         Alert.alert('Invalid OTP', 'Please enter the 4-digit OTP from the rider.');
         return;
       }
       setOtpError(false);
-      setStepIndex((prev) => prev + 1);
+      const next = stepIndex + 1;
+      setStepIndex(next);
+      emitStatusChange(next);
     } else if (currentStep.key === 'completed') {
+      stopGPSBroadcast();
       navigation.goBack();
     } else {
-      setStepIndex((prev) => prev + 1);
+      const next = stepIndex + 1;
+      setStepIndex(next);
+      emitStatusChange(next);
     }
   };
 
@@ -118,6 +247,20 @@ export default function DriverRideScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Rider message toast */}
+      {riderMessage && (
+        <View style={styles.messageToast}>
+          <Ionicons name="chatbubble-ellipses" size={16} color={colors.white} />
+          <View style={styles.messageToastTexts}>
+            <Text style={styles.messageToastSender} numberOfLines={1}>{riderMessage.senderName}</Text>
+            <Text style={styles.messageToastText} numberOfLines={2}>{riderMessage.text}</Text>
+          </View>
+          <TouchableOpacity onPress={handleMessageRider}>
+            <Text style={styles.messageToastReply}>Reply</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* SOS */}
       <SOSButton onPress={() => navigation.navigate('SOS')} style={{ bottom: insets.bottom + 300 }} />
@@ -222,6 +365,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.round, borderWidth: 1.5, backgroundColor: colors.white,
   },
   stepPillText: { fontSize: 12, fontWeight: '700' },
+  messageToast: {
+    position: 'absolute',
+    top: 100,
+    left: spacing.md,
+    right: spacing.md,
+    zIndex: 20,
+    backgroundColor: 'rgba(30,30,30,0.92)',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    ...shadows.md,
+  },
+  messageToastTexts: { flex: 1 },
+  messageToastSender: {
+    fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)', marginBottom: 2,
+  },
+  messageToastText: { fontSize: 14, color: colors.white, fontWeight: '500' },
+  messageToastReply: { fontSize: 13, fontWeight: '700', color: colors.primary },
   bottomCard: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28,

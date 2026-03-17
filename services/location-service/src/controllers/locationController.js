@@ -1,6 +1,7 @@
 const db = require('../config/database');
+const googleMaps = require('../services/googleMaps');
 
-// Average city speed for ETA estimation (km/h)
+// Average city speed for ETA estimation (km/h) — used as fallback
 const AVG_SPEED_KMH = 25;
 
 /**
@@ -74,7 +75,6 @@ const getLocation = async (req, res) => {
 
     // Allow users to see their own location or drivers involved in their active ride
     if (userId !== requestingUserId && req.user.role !== 'admin') {
-      // Check if there's an active ride linking the two users
       const rideCheck = await db.query(
         `SELECT r.id FROM rides r
          LEFT JOIN drivers d ON r.driver_id = d.id
@@ -89,7 +89,6 @@ const getLocation = async (req, res) => {
       }
     }
 
-    // Get latest location from history
     const historyResult = await db.query(
       `SELECT
         ST_Y(location::geometry) AS lat,
@@ -103,7 +102,6 @@ const getLocation = async (req, res) => {
     );
 
     if (historyResult.rows.length === 0) {
-      // Fall back to driver current_location if driver
       const driverResult = await db.query(
         `SELECT
           ST_Y(current_location::geometry) AS lat,
@@ -136,7 +134,9 @@ const getLocation = async (req, res) => {
 
 /**
  * GET /drivers/nearby
- * Find nearby available drivers using PostGIS ST_DWithin
+ * Find nearby available drivers using PostGIS ST_DWithin.
+ * If Google Maps API key is available, enrich each driver with a real driving ETA
+ * via the Distance Matrix API. Falls back to (distance_km / 30) * 60 minutes.
  */
 const getNearbyDrivers = async (req, res) => {
   try {
@@ -154,7 +154,6 @@ const getNearbyDrivers = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid coordinates' });
     }
 
-    // Map ride_type to vehicle_type filter
     const rideTypeToVehicle = {
       standard: ['standard', 'comfort', 'luxury'],
       comfort: ['comfort', 'luxury'],
@@ -224,11 +223,9 @@ const getNearbyDrivers = async (req, res) => {
 
     const result = await db.query(query, params);
 
-    // Enrich with ETA estimates
-    const driversWithEta = result.rows.map(driver => {
+    // Build initial driver list with straight-line ETAs
+    const drivers = result.rows.map((driver) => {
       const distanceKm = parseFloat(driver.distance_km);
-      const etaMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60) + 1; // +1 min buffer
-
       let locationData = null;
       if (driver.location_geojson) {
         const geojson = JSON.parse(driver.location_geojson);
@@ -237,23 +234,55 @@ const getNearbyDrivers = async (req, res) => {
           lng: geojson.coordinates[0]
         };
       }
-
       return {
         ...driver,
         distance_km: Math.round(distanceKm * 100) / 100,
-        eta_minutes: etaMinutes,
+        eta_minutes: Math.round((distanceKm / AVG_SPEED_KMH) * 60) + 1,
         location: locationData,
-        location_geojson: undefined // Remove raw geojson from response
+        location_geojson: undefined,
+        eta_source: 'straight_line_estimate'
       };
     });
+
+    // Enrich with real Google Maps ETAs if key available
+    if (googleMaps.hasApiKey() && drivers.length > 0) {
+      try {
+        const driverLocations = drivers
+          .filter((d) => d.location)
+          .map((d) => ({ lat: d.location.lat, lng: d.location.lng }));
+
+        const userDestination = [{ lat: latitude, lng: longitude }];
+
+        if (driverLocations.length > 0) {
+          const matrix = await googleMaps.getDistanceMatrix(driverLocations, userDestination);
+
+          // Map results back — origins in matrix correspond to filtered drivers
+          let matrixIdx = 0;
+          drivers.forEach((driver) => {
+            if (!driver.location) return;
+            const entry = matrix.find((m) => m.origin_index === matrixIdx);
+            if (entry && entry.source === 'google_maps') {
+              driver.eta_minutes = entry.duration_minutes;
+              driver.distance_km = entry.distance_km;
+              driver.eta_source = 'google_maps';
+            }
+            matrixIdx++;
+          });
+        }
+      } catch (mapsErr) {
+        console.error('[GetNearbyDrivers] Google Maps enrichment failed:', mapsErr.message);
+        // Keep fallback ETAs — no crash
+      }
+    }
 
     res.json({
       success: true,
       data: {
-        drivers: driversWithEta,
-        count: driversWithEta.length,
+        drivers,
+        count: drivers.length,
         search_radius_m: radiusMeters,
-        center: { lat: latitude, lng: longitude }
+        center: { lat: latitude, lng: longitude },
+        eta_source: googleMaps.hasApiKey() ? 'google_maps' : 'straight_line_estimate'
       }
     });
   } catch (err) {
@@ -277,7 +306,6 @@ const checkSurgeZone = async (req, res) => {
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lng);
 
-    // Check DB surge zones
     const result = await db.query(
       `SELECT id, name, city, multiplier, starts_at, ends_at
        FROM surge_zones
@@ -346,7 +374,11 @@ const checkSurgeZone = async (req, res) => {
 
 /**
  * GET /location/route/estimate
- * Calculate route estimate between two points
+ * Calculate route estimate between two points.
+ *
+ * If GOOGLE_MAPS_API_KEY is set: calls Google Maps Directions API to get
+ * real road distance, duration, encoded polyline, and turn-by-turn steps.
+ * Falls back to PostGIS ST_Distance when no key is present.
  */
 const getRouteEstimate = async (req, res) => {
   try {
@@ -368,20 +400,49 @@ const getRouteEstimate = async (req, res) => {
     const dLat = parseFloat(dropoff_lat);
     const dLng = parseFloat(dropoff_lng);
 
-    // Use PostGIS ST_Distance for accurate geographic distance
-    const distanceResult = await db.query(
-      `SELECT
-        ST_Distance(
-          ST_SetSRID(ST_Point($1, $2), 4326)::geography,
-          ST_SetSRID(ST_Point($3, $4), 4326)::geography
-        ) / 1000 AS distance_km`,
-      [pLng, pLat, dLng, dLat]
-    );
+    // ---------------------------------------------------------------------------
+    // Route calculation — Google Maps preferred, PostGIS fallback
+    // ---------------------------------------------------------------------------
+    let distanceKm;
+    let durationMinutes;
+    let polyline = null;
+    let steps = [];
+    let routeSource = 'postgis';
 
-    const distanceKm = parseFloat(distanceResult.rows[0].distance_km);
-    const durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+    if (googleMaps.hasApiKey()) {
+      try {
+        const directions = await googleMaps.getDirections(
+          { lat: pLat, lng: pLng },
+          { lat: dLat, lng: dLng }
+        );
+        distanceKm = directions.distance_km;
+        durationMinutes = directions.duration_minutes;
+        polyline = directions.polyline;
+        steps = directions.steps;
+        routeSource = directions.source || 'google_maps';
+      } catch (mapsErr) {
+        console.error('[GetRouteEstimate] Google Maps error, using PostGIS fallback:', mapsErr.message);
+      }
+    }
 
+    // PostGIS fallback (also runs if Google Maps failed)
+    if (!distanceKm) {
+      const distanceResult = await db.query(
+        `SELECT
+          ST_Distance(
+            ST_SetSRID(ST_Point($1, $2), 4326)::geography,
+            ST_SetSRID(ST_Point($3, $4), 4326)::geography
+          ) / 1000 AS distance_km`,
+        [pLng, pLat, dLng, dLat]
+      );
+      distanceKm = parseFloat(distanceResult.rows[0].distance_km);
+      durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+      routeSource = 'postgis';
+    }
+
+    // ---------------------------------------------------------------------------
     // Fare breakdown
+    // ---------------------------------------------------------------------------
     const FARE_CONFIG = {
       base_fare: 1000,
       per_km: 700,
@@ -415,7 +476,9 @@ const getRouteEstimate = async (req, res) => {
       [pLng, pLat]
     );
 
-    const surgeMultiplier = surgeResult.rows.length > 0 ? parseFloat(surgeResult.rows[0].multiplier) : 1.0;
+    const surgeMultiplier = surgeResult.rows.length > 0
+      ? parseFloat(surgeResult.rows[0].multiplier)
+      : 1.0;
 
     res.json({
       success: true,
@@ -423,6 +486,9 @@ const getRouteEstimate = async (req, res) => {
         distance_km: Math.round(distanceKm * 100) / 100,
         estimated_duration_minutes: durationMinutes,
         ride_type,
+        polyline,
+        steps,
+        route_source: routeSource,
         fare_breakdown: {
           base_fare: FARE_CONFIG.base_fare,
           distance_fare: Math.round(FARE_CONFIG.per_km * distanceKm),
@@ -446,7 +512,9 @@ const getRouteEstimate = async (req, res) => {
 
 /**
  * GET /rides/:id/route
- * Get the polyline / route for an active ride
+ * Return the Google Maps polyline for an active ride.
+ * Used by the mobile app to draw the route on the map.
+ * If no polyline is stored, fetches a fresh one from Google Maps.
  */
 const getRideRoute = async (req, res) => {
   try {
@@ -478,7 +546,6 @@ const getRideRoute = async (req, res) => {
 
     const ride = rideResult.rows[0];
 
-    // Authorization
     const isRider = ride.rider_id === userId;
     const isDriver = ride.driver_user_id === userId;
     const isAdmin = req.user.role === 'admin';
@@ -487,26 +554,63 @@ const getRideRoute = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to view this route' });
     }
 
-    // Build route data
+    const pickup = { lat: parseFloat(ride.pickup_lat), lng: parseFloat(ride.pickup_lng) };
+    const dropoff = { lat: parseFloat(ride.dropoff_lat), lng: parseFloat(ride.dropoff_lng) };
+    const driverLocation = ride.driver_lat && ride.driver_lng
+      ? { lat: parseFloat(ride.driver_lat), lng: parseFloat(ride.driver_lng) }
+      : null;
+
+    let polyline = ride.route_polyline || null;
+    let steps = [];
+    let routeSource = 'stored';
+    let distanceKm = null;
+    let durationMinutes = null;
+
+    // If no stored polyline, try to get one from Google Maps
+    if (!polyline && googleMaps.hasApiKey()) {
+      try {
+        const origin = driverLocation || pickup;
+        const directions = await googleMaps.getDirections(origin, dropoff);
+        polyline = directions.polyline;
+        steps = directions.steps;
+        distanceKm = directions.distance_km;
+        durationMinutes = directions.duration_minutes;
+        routeSource = directions.source || 'google_maps';
+
+        // Store the polyline for future calls
+        if (polyline) {
+          await db.query(
+            'UPDATE rides SET route_polyline = $1 WHERE id = $2',
+            [polyline, rideId]
+          );
+        }
+      } catch (mapsErr) {
+        console.error('[GetRideRoute] Google Maps fetch failed:', mapsErr.message);
+      }
+    }
+
     const routeData = {
       ride_id: rideId,
       status: ride.status,
-      pickup: { lat: parseFloat(ride.pickup_lat), lng: parseFloat(ride.pickup_lng) },
-      dropoff: { lat: parseFloat(ride.dropoff_lat), lng: parseFloat(ride.dropoff_lng) },
-      driver_location: ride.driver_lat && ride.driver_lng
-        ? { lat: parseFloat(ride.driver_lat), lng: parseFloat(ride.driver_lng) }
-        : null,
-      polyline: ride.route_polyline || null
+      pickup,
+      dropoff,
+      driver_location: driverLocation,
+      polyline,
+      steps,
+      distance_km: distanceKm,
+      duration_minutes: durationMinutes,
+      route_source: routeSource
     };
 
-    // If no polyline stored, generate a simple bounding route estimate
-    if (!routeData.polyline && ride.pickup_lat && ride.dropoff_lat) {
+    if (!polyline) {
       routeData.waypoints = [
-        routeData.pickup,
-        ...(routeData.driver_location ? [routeData.driver_location] : []),
-        routeData.dropoff
+        pickup,
+        ...(driverLocation ? [driverLocation] : []),
+        dropoff
       ];
-      routeData.note = 'Approximate route. Install Google Maps API for precise polylines.';
+      routeData.note = googleMaps.hasApiKey()
+        ? 'Could not fetch Google Maps polyline — using waypoints.'
+        : 'Set GOOGLE_MAPS_API_KEY for precise polylines.';
     }
 
     res.json({ success: true, data: { route: routeData } });

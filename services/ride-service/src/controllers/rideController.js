@@ -26,14 +26,74 @@ const RIDE_TYPE_MULTIPLIERS = {
   scheduled: 1.05
 };
 
-// Average speeds by city/context (km/h) for ETA estimation
+// Average city speed (km/h) — used when Google Maps unavailable
 const AVG_SPEED_KMH = 25;
+
+// ============================================================
+// GOOGLE MAPS CLIENT (graceful — only if key present)
+// ============================================================
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || null;
+
+function hasMapsKey() {
+  return (
+    !!GOOGLE_MAPS_API_KEY &&
+    GOOGLE_MAPS_API_KEY !== 'AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' &&
+    GOOGLE_MAPS_API_KEY.startsWith('AIza')
+  );
+}
+
+/**
+ * Get route data from Google Maps Directions API.
+ * Returns { distance_km, duration_minutes, polyline, steps } or null on failure.
+ */
+async function getGoogleMapsRoute(originLat, originLng, destLat, destLng) {
+  if (!hasMapsKey()) return null;
+
+  try {
+    const { Client } = require('@googlemaps/google-maps-services-js');
+    const mapsClient = new Client({});
+
+    const response = await mapsClient.directions({
+      params: {
+        origin: `${originLat},${originLng}`,
+        destination: `${destLat},${destLng}`,
+        mode: 'driving',
+        key: GOOGLE_MAPS_API_KEY
+      },
+      timeout: 8000
+    });
+
+    const data = response.data;
+    if (!data || data.status !== 'OK' || !data.routes || data.routes.length === 0) {
+      console.warn('[RideService Maps] Directions API status:', data?.status);
+      return null;
+    }
+
+    const route = data.routes[0];
+    const leg = route.legs[0];
+
+    return {
+      distance_km: Math.round((leg.distance.value / 1000) * 100) / 100,
+      duration_minutes: Math.round(leg.duration.value / 60),
+      polyline: route.overview_polyline?.points || null,
+      steps: (leg.steps || []).map((s) => ({
+        instruction: (s.html_instructions || '').replace(/<[^>]+>/g, ''),
+        distance_m: s.distance.value,
+        duration_s: s.duration.value
+      })),
+      source: 'google_maps'
+    };
+  } catch (err) {
+    console.error('[RideService Maps] getGoogleMapsRoute error:', err.message);
+    return null;
+  }
+}
 
 /**
  * Haversine formula — distance between two lat/lng points in km
  */
 function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -136,6 +196,9 @@ function generatePickupOtp() {
 
 /**
  * POST /rides/request
+ * Requests a new ride.
+ * Uses Google Maps for real distance/duration/polyline when key is available;
+ * falls back to Haversine otherwise.
  */
 const requestRide = async (req, res) => {
   try {
@@ -154,7 +217,6 @@ const requestRide = async (req, res) => {
       promo_code
     } = req.body;
 
-    // Validate required fields
     if (!pickup_address || !pickup_lat || !pickup_lng ||
         !dropoff_address || !dropoff_lat || !dropoff_lng) {
       return res.status(400).json({
@@ -206,16 +268,32 @@ const requestRide = async (req, res) => {
     const rider = riderResult.rows[0];
     const subscriptionPlan = rider ? rider.subscription_plan : 'none';
 
-    // Calculate distance and duration
-    const distanceKm = haversineDistance(pLat, pLng, dLat, dLng);
-    const durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+    // ---------------------------------------------------------------------------
+    // Distance & duration — Google Maps preferred, Haversine fallback
+    // ---------------------------------------------------------------------------
+    let distanceKm;
+    let durationMinutes;
+    let routePolyline = null;
+    let routeSource = 'haversine';
+
+    const googleRoute = await getGoogleMapsRoute(pLat, pLng, dLat, dLng);
+
+    if (googleRoute) {
+      distanceKm = googleRoute.distance_km;
+      durationMinutes = googleRoute.duration_minutes;
+      routePolyline = googleRoute.polyline;
+      routeSource = 'google_maps';
+    } else {
+      distanceKm = haversineDistance(pLat, pLng, dLat, dLng);
+      durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+    }
 
     // Check surge pricing
     const surgeZone = await checkSurgeZone(pLng, pLat);
     const surgeMultiplier = surgeZone ? parseFloat(surgeZone.multiplier) : 1.0;
     const surgeActive = surgeMultiplier > 1.0;
 
-    // Calculate fare
+    // Calculate fare using real distance
     const fareBreakdown = calculateFare(
       distanceKm,
       durationMinutes,
@@ -248,7 +326,6 @@ const requestRide = async (req, res) => {
         fareBreakdown.promo_discount = promoDiscount;
         fareBreakdown.total = Math.max(fareBreakdown.total - promoDiscount, FARE_CONFIG.min_fare);
 
-        // Increment promo usage
         await db.query(
           'UPDATE promo_codes SET used_count = used_count + 1 WHERE id = $1',
           [promoCodeData.id]
@@ -305,7 +382,8 @@ const requestRide = async (req, res) => {
         is_shared, shared_ride_group_id,
         is_scheduled, scheduled_at,
         is_delivery, delivery_refused,
-        pickup_otp, notes
+        pickup_otp, notes,
+        route_polyline
       ) VALUES (
         $1, $2, $3, 'searching',
         $4, ST_SetSRID(ST_Point($5, $6), 4326),
@@ -318,7 +396,8 @@ const requestRide = async (req, res) => {
         $21, $22,
         $23, $24,
         $25, $26,
-        $27, $28
+        $27, $28,
+        $29
       ) RETURNING
         id, rider_id, ride_type, status,
         pickup_address, dropoff_address,
@@ -327,7 +406,7 @@ const requestRide = async (req, res) => {
         surge_multiplier, surge_active,
         payment_method, is_scheduled, scheduled_at,
         is_delivery, delivery_refused,
-        pickup_otp, created_at`,
+        pickup_otp, route_polyline, created_at`,
       [
         rideId, riderId, ride_type,
         pickup_address, pLng, pLat,
@@ -340,7 +419,8 @@ const requestRide = async (req, res) => {
         ride_type === 'shared', sharedRideGroupId,
         isScheduled, scheduled_at || null,
         isDelivery, false,
-        pickupOtp, notes || null
+        pickupOtp, notes || null,
+        routePolyline
       ]
     );
 
@@ -352,9 +432,13 @@ const requestRide = async (req, res) => {
       data: {
         ride,
         fare_breakdown: fareBreakdown,
-        surge_info: surgeZone ? { active: true, zone: surgeZone.name, multiplier: surgeMultiplier } : { active: false },
+        surge_info: surgeZone
+          ? { active: true, zone: surgeZone.name, multiplier: surgeMultiplier }
+          : { active: false },
         delivery_refused_available: deliveryRefusedAvailable,
         pickup_otp: pickupOtp,
+        route_polyline: routePolyline,
+        route_source: routeSource,
         estimated_arrival_minutes: Math.round(3 + Math.random() * 7) // 3-10 min driver ETA
       }
     });
@@ -366,6 +450,9 @@ const requestRide = async (req, res) => {
 
 /**
  * GET /fare/estimate
+ * Returns fare estimates for all ride types.
+ * Uses Google Maps distance when key available; falls back to Haversine.
+ * Returns route_polyline when Google Maps is used.
  */
 const getFare = async (req, res) => {
   try {
@@ -387,8 +474,25 @@ const getFare = async (req, res) => {
     const dLat = parseFloat(dropoff_lat);
     const dLng = parseFloat(dropoff_lng);
 
-    const distanceKm = haversineDistance(pLat, pLng, dLat, dLng);
-    const durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+    // ---------------------------------------------------------------------------
+    // Distance — Google Maps preferred, Haversine fallback
+    // ---------------------------------------------------------------------------
+    let distanceKm;
+    let durationMinutes;
+    let routePolyline = null;
+    let routeSource = 'haversine';
+
+    const googleRoute = await getGoogleMapsRoute(pLat, pLng, dLat, dLng);
+
+    if (googleRoute) {
+      distanceKm = googleRoute.distance_km;
+      durationMinutes = googleRoute.duration_minutes;
+      routePolyline = googleRoute.polyline;
+      routeSource = 'google_maps';
+    } else {
+      distanceKm = haversineDistance(pLat, pLng, dLat, dLng);
+      durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+    }
 
     const surgeZone = await checkSurgeZone(pLng, pLat);
     const surgeMultiplier = surgeZone ? parseFloat(surgeZone.multiplier) : 1.0;
@@ -425,7 +529,9 @@ const getFare = async (req, res) => {
         all_ride_types: estimates,
         surge_active: surgeMultiplier > 1.0,
         surge_multiplier: surgeMultiplier,
-        surge_zone: surgeZone ? surgeZone.name : null
+        surge_zone: surgeZone ? surgeZone.name : null,
+        route_polyline: routePolyline,
+        route_source: routeSource
       }
     });
   } catch (err) {
@@ -443,7 +549,6 @@ const acceptRide = async (req, res) => {
     const driverId = req.user.id;
     const { id: rideId } = req.params;
 
-    // Get driver record
     const driverResult = await db.query(
       'SELECT id, is_approved, is_online, vehicle_id FROM drivers WHERE user_id = $1',
       [driverId]
@@ -463,7 +568,6 @@ const acceptRide = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Driver must be online to accept rides' });
     }
 
-    // Check driver has no active ride
     const activeRideCheck = await db.query(
       `SELECT id FROM rides WHERE driver_id = $1 AND status NOT IN ('completed','cancelled')`,
       [driver.id]
@@ -477,7 +581,6 @@ const acceptRide = async (req, res) => {
       });
     }
 
-    // Accept the ride
     const result = await db.query(
       `UPDATE rides
        SET status = 'accepted', driver_id = $1, vehicle_id = $2
@@ -495,7 +598,6 @@ const acceptRide = async (req, res) => {
 
     const ride = result.rows[0];
 
-    // Notify rider
     await db.query(
       `INSERT INTO notifications (user_id, title, message, type, data)
        VALUES ($1, $2, $3, 'ride_accepted', $4)`,
@@ -533,7 +635,6 @@ const updateRideStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
 
-    // Get ride
     const rideResult = await db.query(
       `SELECT r.*, d.user_id AS driver_user_id
        FROM rides r
@@ -548,12 +649,10 @@ const updateRideStatus = async (req, res) => {
 
     const ride = rideResult.rows[0];
 
-    // Verify driver owns this ride
     if (ride.driver_user_id !== userId && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized for this ride' });
     }
 
-    // Validate status transitions
     const statusTransitions = {
       'accepted': ['arriving'],
       'arriving': ['in_progress'],
@@ -567,7 +666,6 @@ const updateRideStatus = async (req, res) => {
       });
     }
 
-    // Verify pickup OTP before starting ride
     if (status === 'in_progress') {
       if (!pickup_otp) {
         return res.status(400).json({ success: false, message: 'Pickup OTP is required to start ride' });
@@ -584,11 +682,6 @@ const updateRideStatus = async (req, res) => {
 
     if (status === 'completed') {
       finalFare = ride.estimated_fare || 0;
-
-      // Calculate round-up
-      const roundUpAmount = ride.round_up_amount || 0;
-
-      // Award loyalty points: 1 point per 100 XAF
       loyaltyPointsEarned = Math.floor(finalFare / 100);
 
       updateQuery = `
@@ -613,9 +706,7 @@ const updateRideStatus = async (req, res) => {
     const result = await db.query(updateQuery, updateParams);
     const updatedRide = result.rows[0];
 
-    // Post-completion tasks
     if (status === 'completed') {
-      // Award loyalty points to rider
       if (loyaltyPointsEarned > 0) {
         await db.query(
           'UPDATE users SET loyalty_points = loyalty_points + $1, total_rides = total_rides + 1 WHERE id = $2',
@@ -629,9 +720,8 @@ const updateRideStatus = async (req, res) => {
         );
       }
 
-      // Update driver total earnings and ride count
       if (ride.driver_id) {
-        const driverEarnings = Math.round(finalFare * 0.80); // Driver gets 80%
+        const driverEarnings = Math.round(finalFare * 0.80);
         await db.query(
           'UPDATE drivers SET total_earnings = total_earnings + $1 WHERE id = $2',
           [driverEarnings, ride.driver_id]
@@ -642,7 +732,6 @@ const updateRideStatus = async (req, res) => {
         );
       }
 
-      // Notify rider
       await db.query(
         `INSERT INTO notifications (user_id, title, message, type, data)
          VALUES ($1, $2, $3, 'ride_completed', $4)`,
@@ -703,7 +792,6 @@ const cancelRide = async (req, res) => {
       });
     }
 
-    // Determine who is cancelling
     let cancelledBy;
     if (ride.rider_id === userId) {
       cancelledBy = 'rider';
@@ -715,7 +803,6 @@ const cancelRide = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to cancel this ride' });
     }
 
-    // Calculate cancellation fee
     let cancellationFee = 0;
     const driverAlreadyAccepted = ['accepted', 'arriving'].includes(ride.status);
 
@@ -723,10 +810,9 @@ const cancelRide = async (req, res) => {
       cancellationFee = FARE_CONFIG.cancellation_fee;
     }
 
-    // Delivery driver can refuse after 17:00 at no cost
     const currentHour = new Date().getHours();
     if (cancelledBy === 'driver' && ride.is_delivery && currentHour >= 17) {
-      cancellationFee = 0; // Free refusal after 5pm for delivery
+      cancellationFee = 0;
       await db.query('UPDATE rides SET delivery_refused = true WHERE id = $1', [rideId]);
     }
 
@@ -741,7 +827,6 @@ const cancelRide = async (req, res) => {
       [cancelledBy, reason || null, cancellationFee, rideId]
     );
 
-    // Update driver acceptance/cancellation rate
     if (cancelledBy === 'driver' && ride.driver_id) {
       await db.query(
         `UPDATE drivers
@@ -751,7 +836,6 @@ const cancelRide = async (req, res) => {
       );
     }
 
-    // Notify the other party
     const notifyUserId = cancelledBy === 'rider' ? ride.driver_user_id : ride.rider_id;
     if (notifyUserId) {
       const message = cancelledBy === 'rider'
@@ -817,7 +901,6 @@ const getRide = async (req, res) => {
 
     const ride = result.rows[0];
 
-    // Authorization check
     const isRider = ride.rider_id === userId;
     const isDriver = req.user.role === 'driver';
     const isAdmin = req.user.role === 'admin';
@@ -844,7 +927,6 @@ const listRides = async (req, res) => {
     let whereClause = 'WHERE r.rider_id = $1';
     const params = [userId];
 
-    // If driver, show their rides
     if (req.user.role === 'driver') {
       const driverResult = await db.query('SELECT id FROM drivers WHERE user_id = $1', [userId]);
       if (driverResult.rows.length > 0) {
@@ -881,7 +963,6 @@ const listRides = async (req, res) => {
       params
     );
 
-    // Count total
     const countParams = params.slice(0, params.length - 2);
     const countResult = await db.query(
       `SELECT COUNT(*) FROM rides r ${whereClause}`,
@@ -936,14 +1017,12 @@ const rateRide = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized to rate this ride' });
     }
 
-    // Determine who is being rated
     const ratedId = isRider ? ride.driver_user_id : ride.rider_id;
 
     if (!ratedId) {
       return res.status(400).json({ success: false, message: 'Cannot rate — no counterpart found' });
     }
 
-    // Insert rating
     await db.query(
       `INSERT INTO ride_ratings (ride_id, rater_id, rated_id, rating, comment)
        VALUES ($1, $2, $3, $4, $5)
@@ -951,7 +1030,6 @@ const rateRide = async (req, res) => {
       [rideId, userId, ratedId, parseInt(rating), comment || null]
     );
 
-    // Recalculate user's average rating
     const avgResult = await db.query(
       'SELECT AVG(rating) FROM ride_ratings WHERE rated_id = $1',
       [ratedId]
@@ -1034,7 +1112,6 @@ const roundUpFare = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Round-up already applied' });
     }
 
-    // Round up to nearest 500 XAF
     const roundedUp = Math.ceil(fare / 500) * 500;
     const roundUpAmount = roundedUp - fare;
 
@@ -1047,7 +1124,6 @@ const roundUpFare = async (req, res) => {
       [roundUpAmount, rideId]
     );
 
-    // Convert round-up to loyalty points (1 point per 10 XAF)
     const pointsEarned = Math.floor(roundUpAmount / 10);
     await db.query(
       'UPDATE users SET loyalty_points = loyalty_points + $1, wallet_balance = wallet_balance + $2 WHERE id = $3',
@@ -1134,7 +1210,6 @@ const getNearbyDrivers = async (req, res) => {
     } catch (locationErr) {
       console.error('[GetNearbyDrivers] Location service error:', locationErr.message);
 
-      // Fallback: query DB directly
       const result = await db.query(
         `SELECT d.id, u.full_name, u.rating,
                 v.make, v.model, v.vehicle_type, v.color, v.plate,

@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -17,6 +18,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import SOSButton from '../components/SOSButton';
 import { colors, spacing, radius, shadows } from '../theme';
+import { connectSockets, onDriverLocation, onRideStatus, onMessage } from '../services/socket';
 
 const STATUS_LABELS = {
   pending: 'Finding your driver...',
@@ -45,19 +47,96 @@ export default function RideTrackingScreen({ navigation, route }) {
   const mapRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Real-time driver position received via WebSocket
+  const [driverLocation, setDriverLocation] = useState(null);
+  // Toast notification for incoming messages
+  const [messageToast, setMessageToast] = useState(null);
+  const messageToastTimer = useRef(null);
+
   const ride = activeRide;
   const status = ride?.status || 'pending';
   const driver = ride?.driver;
   const otp = ride?.otp || ride?.pickupOtp;
 
+  // Derive the displayed status — WebSocket ride_status_change updates this
+  const [liveStatus, setLiveStatus] = useState(status);
+
+  // Sync liveStatus when REST-polled activeRide status changes
   useEffect(() => {
-    if (rideId) refreshActiveRide(rideId);
-    const interval = setInterval(() => {
-      if (rideId) refreshActiveRide(rideId);
-    }, 5000);
-    return () => clearInterval(interval);
+    setLiveStatus(ride?.status || 'pending');
+  }, [ride?.status]);
+
+  // -------------------------------------------------------------------------
+  // WebSocket setup — connect sockets, join ride room, subscribe to events
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (!rideId) return;
+
+    let unsubLocation = () => {};
+    let unsubStatus = () => {};
+    let unsubMessage = () => {};
+
+    const setup = async () => {
+      await connectSockets();
+
+      // Subscribe to driver GPS updates → update marker on map
+      unsubLocation = onDriverLocation(rideId, (data) => {
+        const { latitude, longitude } = data;
+        if (latitude != null && longitude != null) {
+          setDriverLocation({ latitude, longitude });
+          // Smoothly animate map camera to keep driver in view
+          if (mapRef.current) {
+            mapRef.current.animateCamera(
+              { center: { latitude, longitude }, zoom: 15 },
+              { duration: 800 }
+            );
+          }
+        }
+      });
+
+      // Subscribe to ride status changes → update status banner
+      unsubStatus = onRideStatus(rideId, (data) => {
+        setLiveStatus(data.status);
+        if (data.status === 'completed') {
+          // Give the rider a moment to see the "completed" state before navigating
+          setTimeout(() => {
+            navigation.replace('RideComplete', { rideId });
+          }, 2000);
+        }
+        if (data.status === 'cancelled') {
+          Alert.alert('Ride Cancelled', 'Your ride has been cancelled.');
+          navigation.goBack();
+        }
+      });
+
+      // Subscribe to in-app messages → show toast notification
+      unsubMessage = onMessage(rideId, (data) => {
+        if (messageToastTimer.current) clearTimeout(messageToastTimer.current);
+        setMessageToast({ text: data.text, senderName: data.senderName });
+        messageToastTimer.current = setTimeout(() => setMessageToast(null), 4000);
+      });
+    };
+
+    setup().catch((err) => {
+      console.warn('[RideTrackingScreen] Socket setup failed:', err.message);
+    });
+
+    // Fallback REST polling every 5 s (keeps data fresh if socket drops)
+    refreshActiveRide(rideId);
+    const pollInterval = setInterval(() => refreshActiveRide(rideId), 5000);
+
+    return () => {
+      unsubLocation();
+      unsubStatus();
+      unsubMessage();
+      clearInterval(pollInterval);
+      if (messageToastTimer.current) clearTimeout(messageToastTimer.current);
+    };
   }, [rideId]);
 
+  // -------------------------------------------------------------------------
+  // Pulse animation for status dot
+  // -------------------------------------------------------------------------
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -67,6 +146,9 @@ export default function RideTrackingScreen({ navigation, route }) {
     ).start();
   }, []);
 
+  // -------------------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------------------
   const handleCancel = () => {
     Alert.alert('Cancel Ride', 'Are you sure you want to cancel?', [
       { text: 'No', style: 'cancel' },
@@ -91,12 +173,18 @@ export default function RideTrackingScreen({ navigation, route }) {
     Linking.openURL(`tel:${phone}`);
   };
 
+  // -------------------------------------------------------------------------
+  // Map region — prefer live WebSocket position, fallback to REST data
+  // -------------------------------------------------------------------------
   const mapRegion = ride?.pickup?.coords
     ? { latitude: ride.pickup.coords.latitude, longitude: ride.pickup.coords.longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 }
     : { latitude: 3.848, longitude: 11.502, latitudeDelta: 0.04, longitudeDelta: 0.04 };
 
-  const statusColor = STATUS_COLORS[status] || colors.primary;
-  const statusLabel = STATUS_LABELS[status] || status;
+  // Driver marker coordinate — live WebSocket position takes precedence
+  const driverCoord = driverLocation || driver?.location;
+
+  const statusColor = STATUS_COLORS[liveStatus] || colors.primary;
+  const statusLabel = STATUS_LABELS[liveStatus] || liveStatus;
 
   return (
     <View style={styles.root}>
@@ -110,8 +198,12 @@ export default function RideTrackingScreen({ navigation, route }) {
         region={mapRegion}
         showsUserLocation
       >
-        {driver?.location && (
-          <Marker coordinate={{ latitude: driver.location.latitude, longitude: driver.location.longitude }} title={driver.name}>
+        {driverCoord && (
+          <Marker
+            coordinate={{ latitude: driverCoord.latitude, longitude: driverCoord.longitude }}
+            title={driver?.name || 'Driver'}
+            tracksViewChanges={false}
+          >
             <View style={styles.driverMarker}>
               <Ionicons name="car" size={16} color={colors.white} />
             </View>
@@ -145,7 +237,7 @@ export default function RideTrackingScreen({ navigation, route }) {
             <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
 
-          {(status === 'pending' || status === 'accepted') ? (
+          {(liveStatus === 'pending' || liveStatus === 'accepted') ? (
             <TouchableOpacity style={styles.cancelChip} onPress={handleCancel}>
               <Text style={styles.cancelChipText}>Cancel</Text>
             </TouchableOpacity>
@@ -155,13 +247,27 @@ export default function RideTrackingScreen({ navigation, route }) {
         </View>
       </SafeAreaView>
 
+      {/* Message toast notification */}
+      {messageToast && (
+        <View style={styles.messageToast}>
+          <Ionicons name="chatbubble-ellipses" size={16} color={colors.white} />
+          <View style={styles.messageToastTexts}>
+            <Text style={styles.messageToastSender} numberOfLines={1}>{messageToast.senderName}</Text>
+            <Text style={styles.messageToastText} numberOfLines={2}>{messageToast.text}</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('Messages')}>
+            <Text style={styles.messageToastReply}>Reply</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* SOS button */}
       <SOSButton onPress={() => navigation.navigate('SOS')} style={{ bottom: insets.bottom + 280 }} />
 
       {/* Bottom card */}
       <View style={[styles.bottomCard, { paddingBottom: insets.bottom + spacing.md }]}>
         {/* OTP banner */}
-        {otp && (status === 'accepted' || status === 'arriving' || status === 'arrived') && (
+        {otp && (liveStatus === 'accepted' || liveStatus === 'arriving' || liveStatus === 'arrived') && (
           <View style={styles.otpBanner}>
             <View style={styles.otpLeft}>
               <Text style={styles.otpLabel}>{t('pickupOtp')}</Text>
@@ -313,6 +419,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.danger,
+  },
+  messageToast: {
+    position: 'absolute',
+    top: 100,
+    left: spacing.md,
+    right: spacing.md,
+    zIndex: 20,
+    backgroundColor: 'rgba(30,30,30,0.92)',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    ...shadows.md,
+  },
+  messageToastTexts: {
+    flex: 1,
+  },
+  messageToastSender: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 2,
+  },
+  messageToastText: {
+    fontSize: 14,
+    color: colors.white,
+    fontWeight: '500',
+  },
+  messageToastReply: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
   },
   driverMarker: {
     width: 36,
