@@ -1,0 +1,289 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import Input from '../components/Input';
+import { colors, spacing, radius, shadows } from '../theme';
+
+export default function LoginScreen({ navigation }) {
+  const { t } = useLanguage();
+  const { login } = useAuth();
+
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  const validate = () => {
+    const e = {};
+    if (!identifier.trim()) e.identifier = 'Phone or email is required';
+    if (!password) e.password = 'Password is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleLogin = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      await login(identifier.trim(), password);
+    } catch (err) {
+      const msg = err.message || t('loginError');
+      Alert.alert('Login Failed', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Back button */}
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          {/* Logo + header */}
+          <View style={styles.header}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoLetter}>M</Text>
+            </View>
+            <Text style={styles.title}>{t('loginTitle')}</Text>
+            <Text style={styles.subtitle}>{t('loginSubtitle')}</Text>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
+            <Input
+              label={t('phoneOrEmail')}
+              placeholder="+237 6XX XXX XXX or email"
+              value={identifier}
+              onChangeText={setIdentifier}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              error={errors.identifier}
+              icon={<Ionicons name="person-outline" size={18} color={colors.gray400} />}
+            />
+
+            <Input
+              label={t('password')}
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              error={errors.password}
+              icon={<Ionicons name="lock-closed-outline" size={18} color={colors.gray400} />}
+            />
+
+            <TouchableOpacity style={styles.forgotRow} onPress={() => {}}>
+              <Text style={styles.forgotText}>{t('forgotPassword')}</Text>
+            </TouchableOpacity>
+
+            {/* Login button */}
+            <TouchableOpacity
+              style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.88}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.loginBtnText}>{t('loginBtn')}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>{t('orContinueWith')}</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google placeholder */}
+          <TouchableOpacity style={styles.googleBtn} activeOpacity={0.85}>
+            <Text style={styles.googleIcon}>G</Text>
+            <Text style={styles.googleText}>{t('loginWithGoogle')}</Text>
+          </TouchableOpacity>
+
+          {/* Sign up link */}
+          <View style={styles.signupRow}>
+            <Text style={styles.signupText}>{t('newToMobo')} </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.signupLink}>{t('signUp')}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.white,
+  },
+  flex: {
+    flex: 1,
+  },
+  scroll: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
+    flexGrow: 1,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  header: {
+    alignItems: 'center',
+    paddingBottom: spacing.xl,
+  },
+  logoMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  logoLetter: {
+    fontSize: 34,
+    fontWeight: '900',
+    color: colors.white,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: spacing.xs,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  form: {
+    marginTop: spacing.sm,
+  },
+  forgotRow: {
+    alignItems: 'flex-end',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  forgotText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  loginBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  loginBtnDisabled: {
+    opacity: 0.7,
+  },
+  loginBtnText: {
+    color: colors.white,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.gray200,
+  },
+  dividerText: {
+    fontSize: 13,
+    color: colors.textLight,
+    paddingHorizontal: spacing.md,
+    fontWeight: '500',
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.gray200,
+    borderRadius: radius.pill,
+    height: 52,
+    backgroundColor: colors.white,
+    gap: spacing.sm,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#4285F4',
+  },
+  googleText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  signupRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  signupText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  signupLink: {
+    fontSize: 15,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+});

@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "MOBO",
+    "slug": "mobo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A1A2E"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mobo.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "MOBO needs your location to find nearby drivers and show your position on the map.",
+        "NSLocationAlwaysUsageDescription": "MOBO needs your location in the background to track your ride.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "MOBO needs your location to provide ride services.",
+        "NSCameraUsageDescription": "MOBO needs camera access to update your profile photo.",
+        "NSPhotoLibraryUsageDescription": "MOBO needs photo library access to update your profile photo.",
+        "NSMicrophoneUsageDescription": "MOBO needs microphone access for in-app communication."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A1A2E"
+      },
+      "package": "com.mobo.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "MOBO needs your location to provide ride services."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1A1A2E"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiBaseUrl": "https://mobo-api-gateway.onrender.com/api"
+    }
+  }
+}
