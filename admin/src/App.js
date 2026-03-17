@@ -14,6 +14,7 @@ import LocationMap from './pages/LocationMap';
 import SurgePricing from './pages/SurgePricing';
 import Promotions from './pages/Promotions';
 import Notifications from './pages/Notifications';
+import SafetyReports from './pages/SafetyReports';
 import Settings from './pages/Settings';
 
 const theme = createTheme({
@@ -129,6 +130,7 @@ function App() {
               <Route path="/surge" element={<SurgePricing />} />
               <Route path="/promotions" element={<Promotions />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/safety" element={<SafetyReports />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

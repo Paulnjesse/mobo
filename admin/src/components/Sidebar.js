@@ -20,6 +20,7 @@ import {
   Map as MapIcon,
   Bolt as BoltIcon,
   LocalOffer as LocalOfferIcon,
+  Shield as ShieldIcon,
   Notifications as NotificationsIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { label: 'Live Map', path: '/map', icon: <MapIcon /> },
   { label: 'Surge Pricing', path: '/surge', icon: <BoltIcon /> },
   { label: 'Promotions', path: '/promotions', icon: <LocalOfferIcon /> },
+  { label: 'Safety', path: '/safety', icon: <ShieldIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
 ];

@@ -12,13 +12,46 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import SOSButton from '../components/SOSButton';
+import { getDirections } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, onDriverLocation, onRideStatus, onMessage } from '../services/socket';
+
+// Decode a Google Maps encoded polyline string into an array of { latitude, longitude }
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const points = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let b;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+    points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return points;
+}
 
 const STATUS_LABELS = {
   pending: 'Finding your driver...',
@@ -52,6 +85,11 @@ export default function RideTrackingScreen({ navigation, route }) {
   // Toast notification for incoming messages
   const [messageToast, setMessageToast] = useState(null);
   const messageToastTimer = useRef(null);
+  // Google Maps polyline for drawing route on map
+  const [routeCoords, setRouteCoords] = useState([]);
+  // Smooth driver marker animation
+  const driverAnimCoord = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const [driverAnimReady, setDriverAnimReady] = useState(false);
 
   const ride = activeRide;
   const status = ride?.status || 'pending';
@@ -147,6 +185,75 @@ export default function RideTrackingScreen({ navigation, route }) {
   }, []);
 
   // -------------------------------------------------------------------------
+  // Google Maps route polyline — fetch when pickup/dropoff are known
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (!ride?.pickup?.coords || !ride?.dropoff?.coords) return;
+
+    // Use stored polyline from the ride record first
+    if (ride.route_polyline) {
+      const coords = decodePolyline(ride.route_polyline);
+      if (coords.length > 0) {
+        setRouteCoords(coords);
+        if (mapRef.current) {
+          mapRef.current.fitToCoordinates(coords, {
+            edgePadding: { top: 100, right: 60, bottom: 280, left: 60 },
+            animated: true,
+          });
+        }
+        return;
+      }
+    }
+
+    // Otherwise fetch a fresh route from Google Maps
+    const origin = driverLocation
+      ? { lat: driverLocation.latitude, lng: driverLocation.longitude }
+      : { lat: ride.pickup.coords.latitude, lng: ride.pickup.coords.longitude };
+    const destination = {
+      lat: ride.dropoff.coords.latitude,
+      lng: ride.dropoff.coords.longitude,
+    };
+
+    getDirections(origin, destination)
+      .then((result) => {
+        if (result.polyline) {
+          const coords = decodePolyline(result.polyline);
+          setRouteCoords(coords);
+          if (mapRef.current && coords.length > 1) {
+            mapRef.current.fitToCoordinates(coords, {
+              edgePadding: { top: 100, right: 60, bottom: 280, left: 60 },
+              animated: true,
+            });
+          }
+        }
+      })
+      .catch((err) => console.warn('[RideTracking] Route fetch failed:', err.message));
+  }, [ride?.pickup?.coords, ride?.dropoff?.coords, ride?.route_polyline]);
+
+  // -------------------------------------------------------------------------
+  // Smooth driver marker animation — animate coordinate changes
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const coord = driverLocation || driver?.location;
+    if (!coord) return;
+    const lat = coord.latitude || coord.lat;
+    const lng = coord.longitude || coord.lng;
+    if (!lat || !lng) return;
+
+    if (!driverAnimReady) {
+      driverAnimCoord.setValue({ x: lng, y: lat });
+      setDriverAnimReady(true);
+      return;
+    }
+
+    Animated.timing(driverAnimCoord, {
+      toValue: { x: lng, y: lat },
+      duration: 900,
+      useNativeDriver: false,
+    }).start();
+  }, [driverLocation, driver?.location]);
+
+  // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
   const handleCancel = () => {
@@ -190,18 +297,46 @@ export default function RideTrackingScreen({ navigation, route }) {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Full-screen map */}
+      {/* Full-screen Google Maps with traffic layer */}
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        provider={PROVIDER_GOOGLE}
         region={mapRegion}
         showsUserLocation
+        showsTraffic={liveStatus === 'in_progress'}
       >
-        {driverCoord && (
+        {/* Route polyline from Google Maps Directions */}
+        {routeCoords.length > 1 && (
+          <Polyline
+            coordinates={routeCoords}
+            strokeWidth={4}
+            strokeColor={colors.primary}
+            lineDashPattern={liveStatus === 'accepted' ? [8, 4] : undefined}
+          />
+        )}
+
+        {/* Driver marker — uses animated coordinate for smooth movement */}
+        {driverCoord && driverAnimReady && (
+          <Marker.Animated
+            coordinate={{
+              latitude: driverAnimCoord.y,
+              longitude: driverAnimCoord.x,
+            }}
+            title={driver?.name || driver?.full_name || 'Driver'}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <View style={styles.driverMarker}>
+              <Ionicons name="car" size={16} color={colors.white} />
+            </View>
+          </Marker.Animated>
+        )}
+
+        {/* Static driver fallback before animation is ready */}
+        {driverCoord && !driverAnimReady && (
           <Marker
-            coordinate={{ latitude: driverCoord.latitude, longitude: driverCoord.longitude }}
-            title={driver?.name || 'Driver'}
+            coordinate={{ latitude: driverCoord.latitude || driverCoord.lat, longitude: driverCoord.longitude || driverCoord.lng }}
+            title={driver?.name || driver?.full_name || 'Driver'}
             tracksViewChanges={false}
           >
             <View style={styles.driverMarker}>
@@ -209,6 +344,7 @@ export default function RideTrackingScreen({ navigation, route }) {
             </View>
           </Marker>
         )}
+
         {ride?.pickup?.coords && (
           <Marker coordinate={ride.pickup.coords} title="Pickup">
             <View style={styles.pickupMarker}>

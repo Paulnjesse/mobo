@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,48 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import { locationService } from '../services/location';
+import { searchPlaces, getPlaceDetails, getDirections } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
+
+// Decode a Google Maps encoded polyline string into an array of { latitude, longitude }
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const points = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let b;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+    points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+  }
+  return points;
+}
 
 const RECENT_DESTINATIONS = [
   { id: '1', name: 'Yaoundé Centre Commercial', address: 'Av. Kennedy, Yaoundé' },
@@ -30,6 +65,7 @@ const RECENT_DESTINATIONS = [
 export default function BookRideScreen({ navigation, route }) {
   const { t } = useLanguage();
   const { getFareEstimate } = useRide();
+  const mapRef = useRef(null);
 
   const initialRideType = route.params?.initialRideType || 'standard';
   const initialDropoff = route.params?.dropoff || null;
@@ -41,6 +77,27 @@ export default function BookRideScreen({ navigation, route }) {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingEstimate, setLoadingEstimate] = useState(false);
 
+  // Coordinates for selected locations
+  const [pickupCoords, setPickupCoords] = useState(null);
+  const [dropoffCoords, setDropoffCoords] = useState(
+    initialDropoff?.coords
+      ? { latitude: initialDropoff.coords.latitude, longitude: initialDropoff.coords.longitude }
+      : null
+  );
+
+  // Google Places autocomplete
+  const [pickupSuggestions, setPickupSuggestions] = useState([]);
+  const [dropoffSuggestions, setDropoffSuggestions] = useState([]);
+  const pickupDebounce = useRef(null);
+  const dropoffDebounce = useRef(null);
+
+  // Map route preview
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [showMapPreview, setShowMapPreview] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Current location
+  // ---------------------------------------------------------------------------
   const getCurrentLocation = async () => {
     setLoadingLocation(true);
     try {
@@ -49,7 +106,9 @@ export default function BookRideScreen({ navigation, route }) {
         loc.coords.latitude,
         loc.coords.longitude
       );
-      setPickup(address);
+      setPickup(address || 'Current Location');
+      setPickupCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      setPickupSuggestions([]);
     } catch (err) {
       Alert.alert('Location Error', 'Could not get your current location.');
     } finally {
@@ -57,10 +116,111 @@ export default function BookRideScreen({ navigation, route }) {
     }
   };
 
-  const handleSelectRecent = (dest) => {
-    setDropoff(dest.name);
+  // ---------------------------------------------------------------------------
+  // Places autocomplete handlers
+  // ---------------------------------------------------------------------------
+  const handlePickupChange = useCallback((text) => {
+    setPickup(text);
+    setPickupCoords(null);
+    setRouteCoords([]);
+    setShowMapPreview(false);
+    if (pickupDebounce.current) clearTimeout(pickupDebounce.current);
+    if (!text || text.length < 2) { setPickupSuggestions([]); return; }
+    pickupDebounce.current = setTimeout(async () => {
+      const results = await searchPlaces(text, pickupCoords || dropoffCoords
+        ? { lat: (pickupCoords || dropoffCoords).latitude, lng: (pickupCoords || dropoffCoords).longitude }
+        : null
+      );
+      setPickupSuggestions(results);
+    }, 350);
+  }, [pickupCoords, dropoffCoords]);
+
+  const handleDropoffChange = useCallback((text) => {
+    setDropoff(text);
+    setDropoffCoords(null);
+    setRouteCoords([]);
+    setShowMapPreview(false);
+    if (dropoffDebounce.current) clearTimeout(dropoffDebounce.current);
+    if (!text || text.length < 2) { setDropoffSuggestions([]); return; }
+    dropoffDebounce.current = setTimeout(async () => {
+      const results = await searchPlaces(text, pickupCoords
+        ? { lat: pickupCoords.latitude, lng: pickupCoords.longitude }
+        : null
+      );
+      setDropoffSuggestions(results);
+    }, 350);
+  }, [pickupCoords]);
+
+  const selectPickupPlace = async (place) => {
+    setPickup(place.description);
+    setPickupSuggestions([]);
+    const details = await getPlaceDetails(place.placeId);
+    if (details) {
+      const coords = { latitude: details.lat, longitude: details.lng };
+      setPickupCoords(coords);
+      await tryFetchRoute(coords, dropoffCoords);
+    }
   };
 
+  const selectDropoffPlace = async (place) => {
+    setDropoff(place.description);
+    setDropoffSuggestions([]);
+    const details = await getPlaceDetails(place.placeId);
+    if (details) {
+      const coords = { latitude: details.lat, longitude: details.lng };
+      setDropoffCoords(coords);
+      await tryFetchRoute(pickupCoords, coords);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Fetch route preview once both coords are known
+  // ---------------------------------------------------------------------------
+  const tryFetchRoute = async (pCoords, dCoords) => {
+    if (!pCoords || !dCoords) return;
+    try {
+      const result = await getDirections(
+        { lat: pCoords.latitude, lng: pCoords.longitude },
+        { lat: dCoords.latitude, lng: dCoords.longitude }
+      );
+      if (result.polyline) {
+        const decoded = decodePolyline(result.polyline);
+        setRouteCoords(decoded);
+        setShowMapPreview(true);
+        setTimeout(() => {
+          if (mapRef.current && decoded.length > 1) {
+            mapRef.current.fitToCoordinates(decoded, {
+              edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+              animated: true,
+            });
+          }
+        }, 300);
+      } else {
+        setShowMapPreview(true);
+      }
+    } catch (err) {
+      console.warn('[BookRide] Route preview failed:', err.message);
+      setShowMapPreview(true);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Recent destinations
+  // ---------------------------------------------------------------------------
+  const handleSelectRecent = (dest) => {
+    setDropoff(dest.name);
+    setDropoffSuggestions([]);
+    // If coords provided (e.g. from initialDropoff)
+    if (dest.coords) {
+      const coords = { latitude: dest.coords.latitude, longitude: dest.coords.longitude };
+      setDropoffCoords(coords);
+      tryFetchRoute(pickupCoords, coords);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Continue → FareEstimate
+  // ---------------------------------------------------------------------------
   const handleContinue = async () => {
     if (!pickup.trim() || !dropoff.trim()) {
       Alert.alert('Missing Locations', t('locationRequired'));
@@ -69,20 +229,25 @@ export default function BookRideScreen({ navigation, route }) {
     setLoadingEstimate(true);
     try {
       const estimate = await getFareEstimate(
-        { address: pickup },
-        { address: dropoff },
+        { address: pickup, coords: pickupCoords },
+        { address: dropoff, coords: dropoffCoords },
         initialRideType
       );
       navigation.navigate('FareEstimate', {
         pickup,
         dropoff,
+        pickupCoords,
+        dropoffCoords,
         rideType: initialRideType,
         estimate,
+        routePolyline: routeCoords.length > 0 ? routeCoords : null,
       });
     } catch (err) {
       navigation.navigate('FareEstimate', {
         pickup,
         dropoff,
+        pickupCoords,
+        dropoffCoords,
         rideType: initialRideType,
         estimate: null,
       });
@@ -120,15 +285,16 @@ export default function BookRideScreen({ navigation, route }) {
               <View style={styles.dropoffDot} />
             </View>
             <View style={styles.inputsColumn}>
+              {/* Pickup input with Google Places autocomplete */}
               <View style={[styles.inputWrap, pickupFocused && styles.inputWrapFocused]}>
                 <TextInput
                   style={styles.inputField}
                   placeholder={t('pickupLocation')}
                   placeholderTextColor={colors.textLight}
                   value={pickup}
-                  onChangeText={setPickup}
+                  onChangeText={handlePickupChange}
                   onFocus={() => setPickupFocused(true)}
-                  onBlur={() => setPickupFocused(false)}
+                  onBlur={() => setTimeout(() => setPickupFocused(false), 200)}
                 />
                 {loadingLocation ? (
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -137,31 +303,119 @@ export default function BookRideScreen({ navigation, route }) {
                     <Ionicons name="locate" size={18} color={colors.primary} />
                   </TouchableOpacity>
                 ) : (
-                  <TouchableOpacity onPress={() => setPickup('')} activeOpacity={0.7}>
+                  <TouchableOpacity onPress={() => { setPickup(''); setPickupCoords(null); setPickupSuggestions([]); setRouteCoords([]); setShowMapPreview(false); }} activeOpacity={0.7}>
                     <Ionicons name="close-circle" size={18} color={colors.gray400} />
                   </TouchableOpacity>
                 )}
               </View>
+
+              {/* Pickup autocomplete dropdown */}
+              {pickupFocused && pickupSuggestions.length > 0 && (
+                <View style={styles.suggestionsDropdown}>
+                  <FlatList
+                    data={pickupSuggestions}
+                    keyExtractor={(item) => item.placeId}
+                    keyboardShouldPersistTaps="handled"
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.suggestionItem}
+                        onPress={() => selectPickupPlace(item)}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons name="location-outline" size={14} color={colors.primary} style={{ marginRight: 8 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestionMain} numberOfLines={1}>{item.mainText}</Text>
+                          {item.secondaryText ? <Text style={styles.suggestionSub} numberOfLines={1}>{item.secondaryText}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              )}
+
               <View style={styles.inputGap} />
+
+              {/* Dropoff input with Google Places autocomplete */}
               <View style={[styles.inputWrap, dropoffFocused && styles.inputWrapFocused]}>
                 <TextInput
                   style={styles.inputField}
                   placeholder={t('dropoffLocation')}
                   placeholderTextColor={colors.textLight}
                   value={dropoff}
-                  onChangeText={setDropoff}
+                  onChangeText={handleDropoffChange}
                   onFocus={() => setDropoffFocused(true)}
-                  onBlur={() => setDropoffFocused(false)}
+                  onBlur={() => setTimeout(() => setDropoffFocused(false), 200)}
                   autoFocus={!!initialDropoff}
                 />
                 {dropoff ? (
-                  <TouchableOpacity onPress={() => setDropoff('')} activeOpacity={0.7}>
+                  <TouchableOpacity onPress={() => { setDropoff(''); setDropoffCoords(null); setDropoffSuggestions([]); setRouteCoords([]); setShowMapPreview(false); }} activeOpacity={0.7}>
                     <Ionicons name="close-circle" size={18} color={colors.gray400} />
                   </TouchableOpacity>
                 ) : null}
               </View>
+
+              {/* Dropoff autocomplete dropdown */}
+              {dropoffFocused && dropoffSuggestions.length > 0 && (
+                <View style={styles.suggestionsDropdown}>
+                  <FlatList
+                    data={dropoffSuggestions}
+                    keyExtractor={(item) => item.placeId}
+                    keyboardShouldPersistTaps="handled"
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.suggestionItem}
+                        onPress={() => selectDropoffPlace(item)}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons name="location-outline" size={14} color={colors.text} style={{ marginRight: 8 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.suggestionMain} numberOfLines={1}>{item.mainText}</Text>
+                          {item.secondaryText ? <Text style={styles.suggestionSub} numberOfLines={1}>{item.secondaryText}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              )}
             </View>
           </View>
+
+          {/* Map preview of route — shown after both locations selected */}
+          {showMapPreview && pickupCoords && dropoffCoords && (
+            <View style={styles.mapPreviewContainer}>
+              <MapView
+                ref={mapRef}
+                style={styles.mapPreview}
+                provider={PROVIDER_GOOGLE}
+                initialRegion={{
+                  latitude: (pickupCoords.latitude + dropoffCoords.latitude) / 2,
+                  longitude: (pickupCoords.longitude + dropoffCoords.longitude) / 2,
+                  latitudeDelta: Math.abs(pickupCoords.latitude - dropoffCoords.latitude) * 2.5 + 0.01,
+                  longitudeDelta: Math.abs(pickupCoords.longitude - dropoffCoords.longitude) * 2.5 + 0.01,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+              >
+                {routeCoords.length > 1 && (
+                  <Polyline
+                    coordinates={routeCoords}
+                    strokeWidth={3}
+                    strokeColor={colors.primary}
+                  />
+                )}
+                <Marker coordinate={pickupCoords} title="Pickup">
+                  <View style={styles.mapPickupDot} />
+                </Marker>
+                <Marker coordinate={dropoffCoords} title="Dropoff">
+                  <View style={styles.mapDropoffDot}>
+                    <Ionicons name="location" size={16} color={colors.white} />
+                  </View>
+                </Marker>
+              </MapView>
+            </View>
+          )}
 
           {/* Current location shortcut */}
           {!pickup && (
@@ -414,5 +668,63 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: colors.white,
+  },
+  suggestionsDropdown: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    marginTop: 4,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    ...shadows.md,
+    overflow: 'hidden',
+    zIndex: 100,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray200,
+  },
+  suggestionMain: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  suggestionSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  mapPreviewContainer: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    ...shadows.sm,
+  },
+  mapPreview: {
+    height: 160,
+    width: '100%',
+  },
+  mapPickupDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  mapDropoffDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.text,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

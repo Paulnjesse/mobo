@@ -1244,6 +1244,286 @@ const getNearbyDrivers = async (req, res) => {
   }
 };
 
+/**
+ * POST /rides/promo/apply
+ * body: { code, ride_id (optional) }
+ * Validates a promo code and returns discount info.
+ */
+const applyPromoCode = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { code, ride_id } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Promo code is required' });
+    }
+
+    const upperCode = code.toUpperCase().trim();
+
+    // 1. Find active promo code
+    const promoResult = await db.query(
+      `SELECT * FROM promo_codes
+       WHERE code = $1
+         AND is_active = true
+         AND (expires_at IS NULL OR expires_at > NOW())`,
+      [upperCode]
+    );
+
+    if (promoResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Promo code not found or expired' });
+    }
+
+    const promo = promoResult.rows[0];
+
+    // 2. Check if user already used this promo
+    const usedResult = await db.query(
+      'SELECT id FROM promo_code_uses WHERE promo_code_id = $1 AND user_id = $2',
+      [promo.id, userId]
+    );
+
+    if (usedResult.rows.length > 0) {
+      return res.status(409).json({ success: false, message: 'You have already used this promo code' });
+    }
+
+    // 3. Check max uses
+    if (promo.used_count >= promo.max_uses) {
+      return res.status(410).json({ success: false, message: 'Promo code usage limit reached' });
+    }
+
+    // 4. Calculate discount based on ride fare if ride_id provided
+    let fare = null;
+    let discount_amount = 0;
+    let final_fare = null;
+
+    if (ride_id) {
+      const rideResult = await db.query(
+        'SELECT estimated_fare, final_fare, status FROM rides WHERE id = $1',
+        [ride_id]
+      );
+
+      if (rideResult.rows.length > 0) {
+        const ride = rideResult.rows[0];
+        fare = ride.final_fare || ride.estimated_fare || 0;
+
+        if (fare < promo.min_fare) {
+          return res.status(400).json({
+            success: false,
+            message: `Minimum fare of ${promo.min_fare.toLocaleString()} XAF required for this promo`
+          });
+        }
+      }
+    }
+
+    if (fare !== null) {
+      if (promo.discount_type === 'percent') {
+        discount_amount = Math.round(fare * promo.discount_value / 100);
+      } else {
+        discount_amount = promo.discount_value;
+      }
+      final_fare = Math.max(fare - discount_amount, FARE_CONFIG.min_fare);
+    } else {
+      // No fare context — return promo details only
+      discount_amount = promo.discount_type === 'fixed' ? promo.discount_value : null;
+    }
+
+    res.json({
+      success: true,
+      message: 'Promo code is valid',
+      data: {
+        valid: true,
+        code: upperCode,
+        discount_type: promo.discount_type,
+        discount_value: promo.discount_value,
+        discount_amount,
+        final_fare,
+        min_fare: promo.min_fare,
+        expires_at: promo.expires_at,
+        currency: 'XAF'
+      }
+    });
+  } catch (err) {
+    console.error('[ApplyPromoCode Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to apply promo code' });
+  }
+};
+
+/**
+ * GET /rides/promos
+ * Returns all active promos not yet used by the requesting user.
+ */
+const getActivePromos = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await db.query(
+      `SELECT p.id, p.code, p.discount_type, p.discount_value,
+              p.min_fare, p.expires_at, p.max_uses, p.used_count
+       FROM promo_codes p
+       WHERE p.is_active = true
+         AND (p.expires_at IS NULL OR p.expires_at > NOW())
+         AND p.used_count < p.max_uses
+         AND p.id NOT IN (
+           SELECT promo_code_id FROM promo_code_uses WHERE user_id = $1
+         )
+       ORDER BY p.created_at DESC`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        promos: result.rows,
+        count: result.rows.length,
+        currency: 'XAF'
+      }
+    });
+  } catch (err) {
+    console.error('[GetActivePromos Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get promos' });
+  }
+};
+
+/**
+ * GET /rides/:id/messages
+ * Get all messages for a ride. Marks messages as read for the requesting user.
+ */
+const getMessages = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id: rideId } = req.params;
+
+    // Verify user is rider or driver for this ride
+    const rideResult = await db.query(
+      `SELECT r.rider_id, d.user_id AS driver_user_id
+       FROM rides r
+       LEFT JOIN drivers d ON r.driver_id = d.id
+       WHERE r.id = $1`,
+      [rideId]
+    );
+
+    if (rideResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const ride = rideResult.rows[0];
+    const isRider = ride.rider_id === userId;
+    const isDriver = ride.driver_user_id === userId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isRider && !isDriver && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view messages for this ride' });
+    }
+
+    // Fetch messages ordered by created_at ASC
+    const messagesResult = await db.query(
+      `SELECT m.id, m.ride_id, m.sender_id, m.receiver_id, m.content, m.is_read, m.created_at,
+              u.full_name AS sender_name
+       FROM messages m
+       JOIN users u ON m.sender_id = u.id
+       WHERE m.ride_id = $1
+       ORDER BY m.created_at ASC`,
+      [rideId]
+    );
+
+    // Mark incoming messages as read
+    await db.query(
+      'UPDATE messages SET is_read = true WHERE ride_id = $1 AND receiver_id = $2 AND is_read = false',
+      [rideId, userId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        messages: messagesResult.rows,
+        count: messagesResult.rows.length
+      }
+    });
+  } catch (err) {
+    console.error('[GetMessages Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get messages' });
+  }
+};
+
+/**
+ * POST /rides/:id/messages
+ * body: { content }
+ * Send a message in a ride. Ride must be active; user must be rider or driver.
+ */
+const sendMessage = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id: rideId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ success: false, message: 'Message content is required' });
+    }
+
+    // Verify ride is active and user is participant
+    const rideResult = await db.query(
+      `SELECT r.rider_id, r.status, d.user_id AS driver_user_id
+       FROM rides r
+       LEFT JOIN drivers d ON r.driver_id = d.id
+       WHERE r.id = $1`,
+      [rideId]
+    );
+
+    if (rideResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const ride = rideResult.rows[0];
+    const activeStatuses = ['accepted', 'arriving', 'in_progress'];
+
+    if (!activeStatuses.includes(ride.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Messages can only be sent during an active ride'
+      });
+    }
+
+    const isRider = ride.rider_id === userId;
+    const isDriver = ride.driver_user_id === userId;
+
+    if (!isRider && !isDriver) {
+      return res.status(403).json({ success: false, message: 'Not authorized to send messages for this ride' });
+    }
+
+    const receiverId = isRider ? ride.driver_user_id : ride.rider_id;
+
+    if (!receiverId) {
+      return res.status(400).json({ success: false, message: 'No counterpart found for this ride' });
+    }
+
+    const insertResult = await db.query(
+      `INSERT INTO messages (ride_id, sender_id, receiver_id, content)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, ride_id, sender_id, receiver_id, content, is_read, created_at`,
+      [rideId, userId, receiverId, content.trim()]
+    );
+
+    const message = insertResult.rows[0];
+
+    // Emit via Socket.IO if available (req.app.get('io'))
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ride_${rideId}`).emit('new_message', {
+        ...message,
+        sender_name: req.user.full_name || req.user.name || 'User'
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Message sent',
+      data: { message }
+    });
+  } catch (err) {
+    console.error('[SendMessage Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to send message' });
+  }
+};
+
 module.exports = {
   requestRide,
   getFare,
@@ -1256,5 +1536,9 @@ module.exports = {
   addTip,
   roundUpFare,
   getSurgePricing,
-  getNearbyDrivers
+  getNearbyDrivers,
+  applyPromoCode,
+  getActivePromos,
+  getMessages,
+  sendMessage
 };

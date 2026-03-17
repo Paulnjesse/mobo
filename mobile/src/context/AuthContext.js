@@ -1,9 +1,62 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 import { authService } from '../services/auth';
 
 const TOKEN_KEY = '@mobo_token';
 const USER_KEY = '@mobo_user';
+
+// Configure how notifications appear when the app is in the foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+/**
+ * Register the device for Expo push notifications.
+ * Returns the Expo push token string, or null if unavailable/denied.
+ */
+async function registerForPushNotifications() {
+  if (!Device.isDevice) {
+    console.log('[PushNotifications] Physical device required for push tokens.');
+    return null;
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+
+  if (finalStatus !== 'granted') {
+    console.log('[PushNotifications] Permission not granted.');
+    return null;
+  }
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'MOBO',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF00BF',
+    });
+  }
+
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    return tokenData.data;
+  } catch (err) {
+    console.warn('[PushNotifications] Failed to get push token:', err.message);
+    return null;
+  }
+}
 
 const AuthContext = createContext(null);
 
@@ -12,9 +65,25 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [lastNotification, setLastNotification] = useState(null);
 
   useEffect(() => {
     loadStoredAuth();
+
+    // Listen for notifications received while app is in foreground
+    const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
+      setLastNotification(notification);
+    });
+
+    // Listen for notification taps (background / killed state)
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      setLastNotification(response.notification);
+    });
+
+    return () => {
+      foregroundSub.remove();
+      responseSub.remove();
+    };
   }, []);
 
   const loadStoredAuth = async () => {
@@ -58,6 +127,19 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (identifier, password) => {
     const response = await authService.login(identifier, password);
     await persistAuth(response.token, response.user);
+
+    // Register for push notifications after successful login
+    try {
+      const pushToken = await registerForPushNotifications();
+      if (pushToken) {
+        // Send token to backend so server can push notifications to this device
+        await authService.updateProfile({ expo_push_token: pushToken }).catch(() => {});
+      }
+    } catch (pushErr) {
+      // Non-fatal — login still succeeds
+      console.warn('[AuthContext] Push registration failed:', pushErr.message);
+    }
+
     return response;
   }, []);
 
@@ -121,6 +203,7 @@ export function AuthProvider({ children }) {
         updateProfile,
         refreshToken,
         setUser,
+        lastNotification,
       }}
     >
       {children}

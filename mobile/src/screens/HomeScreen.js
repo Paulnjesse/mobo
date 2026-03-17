@@ -8,6 +8,8 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  TextInput,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -16,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import { locationService } from '../services/location';
+import { searchPlaces, getPlaceDetails } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
 
 const { height, width } = Dimensions.get('window');
@@ -49,6 +52,10 @@ export default function HomeScreen({ navigation }) {
 
   const [location, setLocation] = useState(null);
   const [selectedType, setSelectedType] = useState('standard');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchDebounce, setSearchDebounce] = useState(null);
   const mapRef = useRef(null);
 
   const firstName = user?.name?.split(' ')[0] || 'there';
@@ -69,6 +76,41 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     initLocation();
   }, []);
+
+  // Google Places autocomplete with debounce
+  const handleSearchChange = useCallback((text) => {
+    setSearchQuery(text);
+    if (searchDebounce) clearTimeout(searchDebounce);
+    if (!text || text.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const bias = location
+        ? { lat: location.latitude, lng: location.longitude }
+        : null;
+      const results = await searchPlaces(text, bias);
+      setSearchResults(results);
+    }, 350);
+    setSearchDebounce(timer);
+  }, [location, searchDebounce]);
+
+  const handlePlaceSelect = async (place) => {
+    setSearchQuery(place.description);
+    setSearchResults([]);
+    setSearchFocused(false);
+    // Navigate to BookRide with the selected destination
+    const details = await getPlaceDetails(place.placeId);
+    navigation.navigate('BookRide', {
+      initialRideType: selectedType,
+      dropoff: {
+        name: place.mainText,
+        address: place.description,
+        coords: details ? { latitude: details.lat, longitude: details.lng } : null,
+      },
+    });
+    setSearchQuery('');
+  };
 
   const handleBookRide = () => {
     navigation.navigate('BookRide', { initialRideType: selectedType });
@@ -98,24 +140,25 @@ export default function HomeScreen({ navigation }) {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      {/* Full-screen map — top 60% */}
+      {/* Full-screen map — Google Maps provider for better African city maps + traffic */}
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        provider={PROVIDER_GOOGLE}
         region={mapRegion}
         showsUserLocation
         showsMyLocationButton={false}
+        showsTraffic
         customMapStyle={[]}
       >
         {nearbyDrivers.map((driver, idx) => (
           <Marker
             key={driver._id || driver.id || idx}
             coordinate={{
-              latitude: driver.location?.latitude || driver.lat || mapRegion.latitude + (Math.random() - 0.5) * 0.01,
-              longitude: driver.location?.longitude || driver.lng || mapRegion.longitude + (Math.random() - 0.5) * 0.01,
+              latitude: driver.location?.latitude || driver.location?.lat || driver.lat || mapRegion.latitude + (Math.random() - 0.5) * 0.01,
+              longitude: driver.location?.longitude || driver.location?.lng || driver.lng || mapRegion.longitude + (Math.random() - 0.5) * 0.01,
             }}
-            title={driver.name}
+            title={driver.name || driver.full_name}
           >
             <View style={styles.driverMarker}>
               <Ionicons name="car" size={13} color={colors.white} />
@@ -179,18 +222,65 @@ export default function HomeScreen({ navigation }) {
         {/* Handle bar */}
         <View style={styles.handleBar} />
 
-        {/* "Where to?" search pill */}
-        <TouchableOpacity
-          style={styles.searchPill}
-          onPress={handleBookRide}
-          activeOpacity={0.9}
-        >
+        {/* "Where to?" search pill — Google Places autocomplete */}
+        <View style={[styles.searchPill, searchFocused && styles.searchPillFocused]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} />
-          <Text style={styles.searchPillText}>{t('whereAreYouGoing')}</Text>
-          <View style={styles.searchPillArrow}>
-            <Ionicons name="arrow-forward" size={14} color={colors.white} />
+          <TextInput
+            style={styles.searchPillInput}
+            placeholder={t('whereAreYouGoing')}
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => {
+              // Small delay so place tap registers
+              setTimeout(() => setSearchFocused(false), 200);
+            }}
+            returnKeyType="search"
+          />
+          {searchQuery ? (
+            <TouchableOpacity
+              onPress={() => { setSearchQuery(''); setSearchResults([]); }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle" size={18} color={colors.gray400} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.searchPillArrow}
+              onPress={handleBookRide}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="arrow-forward" size={14} color={colors.white} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Autocomplete dropdown */}
+        {searchFocused && searchResults.length > 0 && (
+          <View style={styles.autocompleteDropdown}>
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => item.placeId}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.autocompleteItem}
+                  onPress={() => handlePlaceSelect(item)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="location-outline" size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.autocompleteMain} numberOfLines={1}>{item.mainText}</Text>
+                    {item.secondaryText ? (
+                      <Text style={styles.autocompleteSecondary} numberOfLines={1}>{item.secondaryText}</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
           </View>
-        </TouchableOpacity>
+        )}
 
         {/* Ride type selector — horizontal scroll */}
         <ScrollView
@@ -225,24 +315,28 @@ export default function HomeScreen({ navigation }) {
         </ScrollView>
 
         {/* Recent destinations */}
-        <Text style={styles.sectionLabel}>{t('recentDestinations')}</Text>
-        {RECENT_DESTINATIONS.map((dest) => (
-          <TouchableOpacity
-            key={dest.id}
-            style={styles.recentRow}
-            onPress={() => handleDestinationPress(dest)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.recentIcon}>
-              <Ionicons name="time-outline" size={16} color={colors.gray500} />
-            </View>
-            <View style={styles.recentInfo}>
-              <Text style={styles.recentName} numberOfLines={1}>{dest.name}</Text>
-              <Text style={styles.recentAddress} numberOfLines={1}>{dest.address}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.gray300} />
-          </TouchableOpacity>
-        ))}
+        {!searchFocused && (
+          <>
+            <Text style={styles.sectionLabel}>{t('recentDestinations')}</Text>
+            {RECENT_DESTINATIONS.map((dest) => (
+              <TouchableOpacity
+                key={dest.id}
+                style={styles.recentRow}
+                onPress={() => handleDestinationPress(dest)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.recentIcon}>
+                  <Ionicons name="time-outline" size={16} color={colors.gray500} />
+                </View>
+                <View style={styles.recentInfo}>
+                  <Text style={styles.recentName} numberOfLines={1}>{dest.name}</Text>
+                  <Text style={styles.recentAddress} numberOfLines={1}>{dest.address}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.gray300} />
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
       </View>
     </View>
   );
@@ -388,14 +482,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     gap: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
-  searchPillText: {
+  searchPillFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.white,
+  },
+  searchPillInput: {
     flex: 1,
     fontSize: 16,
-    color: colors.textSecondary,
+    color: colors.text,
     fontWeight: '400',
+    paddingVertical: 0,
   },
   searchPillArrow: {
     width: 30,
@@ -404,6 +505,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  autocompleteDropdown: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    ...shadows.md,
+    overflow: 'hidden',
+  },
+  autocompleteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray200,
+  },
+  autocompleteMain: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  autocompleteSecondary: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   rideTypesScroll: {
     paddingBottom: spacing.sm,

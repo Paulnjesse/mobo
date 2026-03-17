@@ -442,6 +442,480 @@ const getLoyaltyInfo = async (req, res) => {
   }
 };
 
+/**
+ * POST /users/corporate
+ * body: { company_name, billing_email, monthly_budget }
+ * Create a corporate account and set the requesting user as admin.
+ */
+const createCorporateAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { company_name, billing_email, monthly_budget = 0 } = req.body;
+
+    if (!company_name || !billing_email) {
+      return res.status(400).json({
+        success: false,
+        message: 'company_name and billing_email are required'
+      });
+    }
+
+    // Check user doesn't already have a corporate account
+    const existingCheck = await db.query(
+      'SELECT id FROM corporate_accounts WHERE admin_user_id = $1 AND is_active = true',
+      [userId]
+    );
+
+    if (existingCheck.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'You already have an active corporate account'
+      });
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const corpId = uuidv4();
+
+    const result = await db.query(
+      `INSERT INTO corporate_accounts
+         (id, company_name, admin_user_id, billing_email, monthly_budget, currency)
+       VALUES ($1, $2, $3, $4, $5, 'XAF')
+       RETURNING *`,
+      [corpId, company_name, userId, billing_email, parseInt(monthly_budget)]
+    );
+
+    const corp = result.rows[0];
+
+    // Link user as admin
+    await db.query(
+      `UPDATE users SET corporate_account_id = $1, corporate_role = 'admin' WHERE id = $2`,
+      [corpId, userId]
+    );
+
+    // Add user as admin member
+    await db.query(
+      `INSERT INTO corporate_members (corporate_account_id, user_id, role)
+       VALUES ($1, $2, 'admin')
+       ON CONFLICT (corporate_account_id, user_id) DO NOTHING`,
+      [corpId, userId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Corporate account created successfully',
+      data: { corporate_account: corp }
+    });
+  } catch (err) {
+    console.error('[CreateCorporateAccount Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to create corporate account' });
+  }
+};
+
+/**
+ * GET /users/corporate
+ * Get corporate account details, members list, and current month spend.
+ */
+const getCorporateAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find corporate account for this user
+    const userResult = await db.query(
+      'SELECT corporate_account_id, corporate_role FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!userResult.rows[0] || !userResult.rows[0].corporate_account_id) {
+      return res.status(404).json({ success: false, message: 'No corporate account found' });
+    }
+
+    const { corporate_account_id } = userResult.rows[0];
+
+    const corpResult = await db.query(
+      'SELECT * FROM corporate_accounts WHERE id = $1 AND is_active = true',
+      [corporate_account_id]
+    );
+
+    if (corpResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Corporate account not found or inactive' });
+    }
+
+    const corp = corpResult.rows[0];
+
+    // Fetch members
+    const membersResult = await db.query(
+      `SELECT cm.id, cm.user_id, cm.role, cm.spending_limit, cm.is_active, cm.joined_at,
+              u.full_name, u.phone, u.email, u.total_rides, u.rating
+       FROM corporate_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.corporate_account_id = $1
+       ORDER BY cm.joined_at ASC`,
+      [corporate_account_id]
+    );
+
+    // Current month spend
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const spendResult = await db.query(
+      `SELECT COALESCE(SUM(r.final_fare), 0) AS current_spend
+       FROM rides r
+       JOIN users u ON r.rider_id = u.id
+       WHERE u.corporate_account_id = $1
+         AND r.status = 'completed'
+         AND r.created_at >= $2`,
+      [corporate_account_id, monthStart]
+    );
+
+    const currentSpend = parseInt(spendResult.rows[0].current_spend);
+
+    res.json({
+      success: true,
+      data: {
+        corporate_account: corp,
+        members: membersResult.rows,
+        member_count: membersResult.rows.length,
+        current_month_spend: currentSpend,
+        budget_remaining: Math.max(corp.monthly_budget - currentSpend, 0),
+        currency: 'XAF'
+      }
+    });
+  } catch (err) {
+    console.error('[GetCorporateAccount Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get corporate account' });
+  }
+};
+
+/**
+ * POST /users/corporate/members
+ * body: { user_phone_or_email, role, spending_limit }
+ * Add a user to the corporate account.
+ */
+const addCorporateMember = async (req, res) => {
+  try {
+    const adminUserId = req.user.id;
+    const { user_phone_or_email, role = 'employee', spending_limit = 0 } = req.body;
+
+    if (!user_phone_or_email) {
+      return res.status(400).json({ success: false, message: 'user_phone_or_email is required' });
+    }
+
+    const validRoles = ['admin', 'manager', 'employee'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: 'Role must be admin, manager, or employee' });
+    }
+
+    // Verify requester is admin of a corporate account
+    const adminResult = await db.query(
+      `SELECT ca.id AS corp_id FROM corporate_accounts ca
+       WHERE ca.admin_user_id = $1 AND ca.is_active = true`,
+      [adminUserId]
+    );
+
+    if (adminResult.rows.length === 0) {
+      return res.status(403).json({ success: false, message: 'Only corporate admins can add members' });
+    }
+
+    const corpId = adminResult.rows[0].corp_id;
+
+    // Find target user by phone or email
+    const targetResult = await db.query(
+      'SELECT id, full_name, phone, email FROM users WHERE phone = $1 OR email = $1',
+      [user_phone_or_email]
+    );
+
+    if (targetResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found with that phone/email' });
+    }
+
+    const targetUser = targetResult.rows[0];
+
+    // Check if already a member
+    const existingMember = await db.query(
+      'SELECT id FROM corporate_members WHERE corporate_account_id = $1 AND user_id = $2',
+      [corpId, targetUser.id]
+    );
+
+    if (existingMember.rows.length > 0) {
+      return res.status(409).json({ success: false, message: 'User is already a member of this corporate account' });
+    }
+
+    const memberResult = await db.query(
+      `INSERT INTO corporate_members (corporate_account_id, user_id, role, spending_limit)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [corpId, targetUser.id, role, parseInt(spending_limit)]
+    );
+
+    // Update user's corporate link
+    await db.query(
+      'UPDATE users SET corporate_account_id = $1, corporate_role = $2 WHERE id = $3',
+      [corpId, role, targetUser.id]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `${targetUser.full_name} added to corporate account`,
+      data: {
+        member: memberResult.rows[0],
+        user: { id: targetUser.id, full_name: targetUser.full_name, phone: targetUser.phone }
+      }
+    });
+  } catch (err) {
+    console.error('[AddCorporateMember Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to add corporate member' });
+  }
+};
+
+/**
+ * DELETE /users/corporate/members/:userId
+ * Remove a member from the corporate account.
+ */
+const removeCorporateMember = async (req, res) => {
+  try {
+    const adminUserId = req.user.id;
+    const { userId: targetUserId } = req.params;
+
+    // Verify requester is admin
+    const adminResult = await db.query(
+      'SELECT id AS corp_id FROM corporate_accounts WHERE admin_user_id = $1 AND is_active = true',
+      [adminUserId]
+    );
+
+    if (adminResult.rows.length === 0) {
+      return res.status(403).json({ success: false, message: 'Only corporate admins can remove members' });
+    }
+
+    const corpId = adminResult.rows[0].corp_id;
+
+    // Cannot remove self (admin)
+    if (targetUserId === adminUserId) {
+      return res.status(400).json({ success: false, message: 'Cannot remove yourself from your own corporate account' });
+    }
+
+    const deleteResult = await db.query(
+      'DELETE FROM corporate_members WHERE corporate_account_id = $1 AND user_id = $2 RETURNING id',
+      [corpId, targetUserId]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Member not found in this corporate account' });
+    }
+
+    // Clear user's corporate link
+    await db.query(
+      `UPDATE users SET corporate_account_id = NULL, corporate_role = 'employee' WHERE id = $1`,
+      [targetUserId]
+    );
+
+    res.json({ success: true, message: 'Member removed from corporate account' });
+  } catch (err) {
+    console.error('[RemoveCorporateMember Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to remove corporate member' });
+  }
+};
+
+/**
+ * GET /users/corporate/rides
+ * List all rides by corporate members this month with costs.
+ */
+const getCorporateRides = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { limit = 50, offset = 0 } = req.query;
+
+    // Find user's corporate account
+    const userResult = await db.query(
+      'SELECT corporate_account_id, corporate_role FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!userResult.rows[0] || !userResult.rows[0].corporate_account_id) {
+      return res.status(404).json({ success: false, message: 'No corporate account found' });
+    }
+
+    const { corporate_account_id } = userResult.rows[0];
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const ridesResult = await db.query(
+      `SELECT
+         r.id, r.ride_type, r.status,
+         r.pickup_address, r.dropoff_address,
+         r.distance_km, r.duration_minutes,
+         r.estimated_fare, r.final_fare,
+         r.payment_method, r.payment_status,
+         r.created_at, r.completed_at,
+         u.id AS rider_id, u.full_name AS rider_name, u.phone AS rider_phone,
+         cm.role AS member_role
+       FROM rides r
+       JOIN users u ON r.rider_id = u.id
+       JOIN corporate_members cm ON cm.user_id = u.id AND cm.corporate_account_id = $1
+       WHERE u.corporate_account_id = $1
+         AND r.created_at >= $2
+       ORDER BY r.created_at DESC
+       LIMIT $3 OFFSET $4`,
+      [corporate_account_id, monthStart, parseInt(limit), parseInt(offset)]
+    );
+
+    const totalSpendResult = await db.query(
+      `SELECT COALESCE(SUM(r.final_fare), 0) AS total_spend
+       FROM rides r
+       JOIN users u ON r.rider_id = u.id
+       WHERE u.corporate_account_id = $1
+         AND r.status = 'completed'
+         AND r.created_at >= $2`,
+      [corporate_account_id, monthStart]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        rides: ridesResult.rows,
+        count: ridesResult.rows.length,
+        total_spend_this_month: parseInt(totalSpendResult.rows[0].total_spend),
+        currency: 'XAF'
+      }
+    });
+  } catch (err) {
+    console.error('[GetCorporateRides Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get corporate rides' });
+  }
+};
+
+/**
+ * GET /users/subscription
+ * Return current user's subscription plan, expiry, and benefits.
+ */
+const getSubscription = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const userResult = await db.query(
+      'SELECT subscription_plan, subscription_expiry FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const { subscription_plan, subscription_expiry } = userResult.rows[0];
+
+    // Fetch active subscription record
+    const subResult = await db.query(
+      `SELECT id, plan, price, currency, started_at, expires_at, is_active
+       FROM subscriptions
+       WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    const activeSubscription = subResult.rows[0] || null;
+
+    const PLAN_BENEFITS = {
+      none: {
+        name: 'No Subscription',
+        price: 0,
+        discount_percent: 0,
+        description: 'Standard fares apply',
+        features: []
+      },
+      basic: {
+        name: 'MOBO Basic',
+        price: 5000,
+        discount_percent: 10,
+        description: '10% off all rides, 5,000 XAF/month',
+        features: [
+          '10% discount on all rides',
+          'Priority customer support',
+          'Monthly ride summary report'
+        ]
+      },
+      premium: {
+        name: 'MOBO Premium',
+        price: 10000,
+        discount_percent: 20,
+        description: '20% off all rides, 10,000 XAF/month',
+        features: [
+          '20% discount on all rides',
+          'Priority driver matching',
+          'Free cancellation (up to 3/month)',
+          'Dedicated support line',
+          'Monthly ride summary report',
+          'Early access to new features'
+        ]
+      }
+    };
+
+    const plan = subscription_plan || 'none';
+    const benefits = PLAN_BENEFITS[plan] || PLAN_BENEFITS.none;
+
+    res.json({
+      success: true,
+      data: {
+        current_plan: plan,
+        subscription_expiry,
+        is_active: activeSubscription !== null,
+        active_subscription: activeSubscription,
+        benefits,
+        available_plans: [
+          PLAN_BENEFITS.basic,
+          PLAN_BENEFITS.premium
+        ],
+        currency: 'XAF'
+      }
+    });
+  } catch (err) {
+    console.error('[GetSubscription Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get subscription info' });
+  }
+};
+
+/**
+ * PUT /users/push-token
+ * body: { expo_push_token }
+ * Update the user's Expo push notification token.
+ */
+const updateExpoPushToken = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { expo_push_token } = req.body;
+
+    if (!expo_push_token) {
+      return res.status(400).json({ success: false, message: 'expo_push_token is required' });
+    }
+
+    // Basic validation: Expo tokens start with ExponentPushToken[ or exp://
+    const isValidFormat =
+      typeof expo_push_token === 'string' &&
+      expo_push_token.length > 10 &&
+      (expo_push_token.startsWith('ExponentPushToken[') ||
+       expo_push_token.startsWith('ExpoPushToken['));
+
+    if (!isValidFormat) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Expo push token format. Expected ExponentPushToken[...] or ExpoPushToken[...]'
+      });
+    }
+
+    await db.query(
+      'UPDATE users SET expo_push_token = $1 WHERE id = $2',
+      [expo_push_token, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Push notification token updated successfully',
+      data: { expo_push_token }
+    });
+  } catch (err) {
+    console.error('[UpdateExpoPushToken Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to update push token' });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -451,5 +925,12 @@ module.exports = {
   deleteAccount,
   getNotifications,
   markNotificationRead,
-  getLoyaltyInfo
+  getLoyaltyInfo,
+  createCorporateAccount,
+  getCorporateAccount,
+  addCorporateMember,
+  removeCorporateMember,
+  getCorporateRides,
+  getSubscription,
+  updateExpoPushToken
 };

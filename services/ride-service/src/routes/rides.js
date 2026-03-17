@@ -13,8 +13,16 @@ const {
   addTip,
   roundUpFare,
   getSurgePricing,
-  getNearbyDrivers
+  getNearbyDrivers,
+  applyPromoCode,
+  getActivePromos,
+  getMessages,
+  sendMessage
 } = require('../controllers/rideController');
+
+// Promo codes — must be before /:id routes to avoid conflicts
+router.post('/promo/apply', authenticate, applyPromoCode);
+router.get('/promos', authenticate, getActivePromos);
 
 // Fare estimation (public or authenticated)
 router.get('/estimate', (req, res, next) => {
@@ -58,5 +66,9 @@ router.post('/:id/tip', authenticate, addTip);
 
 // Round up fare
 router.post('/:id/round-up', authenticate, roundUpFare);
+
+// Messages for a ride
+router.get('/:id/messages', authenticate, getMessages);
+router.post('/:id/messages', authenticate, sendMessage);
 
 module.exports = router;

@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_teen_account BOOLEAN DEFAULT false,
   parent_id UUID REFERENCES users(id) ON DELETE SET NULL,
   corporate_account_id UUID,
+  corporate_role VARCHAR(20) DEFAULT 'employee' CHECK (corporate_role IN ('admin','manager','employee')),
+  expo_push_token TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

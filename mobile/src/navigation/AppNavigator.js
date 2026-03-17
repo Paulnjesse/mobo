@@ -32,6 +32,16 @@ import SettingsScreen from '../screens/SettingsScreen';
 import SOSScreen from '../screens/SOSScreen';
 import TeenAccountScreen from '../screens/TeenAccountScreen';
 
+// New Rider Screens
+import ScheduledRideScreen from '../screens/ScheduledRideScreen';
+import SharedRideScreen from '../screens/SharedRideScreen';
+import RideReceiptScreen from '../screens/RideReceiptScreen';
+import SearchLocationScreen from '../screens/SearchLocationScreen';
+import PromoCodeScreen from '../screens/PromoCodeScreen';
+import SafetyScreen from '../screens/SafetyScreen';
+import HelpScreen from '../screens/HelpScreen';
+import CorporateScreen from '../screens/CorporateScreen';
+
 // Driver Screens
 import DriverHomeScreen from '../screens/DriverHomeScreen';
 import DriverRideScreen from '../screens/DriverRideScreen';
@@ -103,6 +113,18 @@ function RiderStack() {
       <Stack.Screen name="SOS" component={SOSScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="TeenAccounts" component={TeenAccountScreen} />
       <Stack.Screen name="Language" component={LanguageScreen} />
+      <Stack.Screen name="ScheduledRide" component={ScheduledRideScreen} />
+      <Stack.Screen name="SharedRide" component={SharedRideScreen} />
+      <Stack.Screen name="RideReceipt" component={RideReceiptScreen} />
+      <Stack.Screen
+        name="SearchLocation"
+        component={SearchLocationScreen}
+        options={{ presentation: 'modal' }}
+      />
+      <Stack.Screen name="PromoCode" component={PromoCodeScreen} />
+      <Stack.Screen name="Safety" component={SafetyScreen} />
+      <Stack.Screen name="Help" component={HelpScreen} />
+      <Stack.Screen name="Corporate" component={CorporateScreen} />
     </Stack.Navigator>
   );
 }

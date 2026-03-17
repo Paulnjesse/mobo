@@ -10,7 +10,14 @@ const {
   deleteAccount,
   getNotifications,
   markNotificationRead,
-  getLoyaltyInfo
+  getLoyaltyInfo,
+  createCorporateAccount,
+  getCorporateAccount,
+  addCorporateMember,
+  removeCorporateMember,
+  getCorporateRides,
+  getSubscription,
+  updateExpoPushToken
 } = require('../controllers/profileController');
 
 // All profile routes require authentication
@@ -30,5 +37,18 @@ router.get('/notifications', getNotifications);
 router.put('/notifications/:id/read', markNotificationRead);
 
 router.get('/loyalty', getLoyaltyInfo);
+
+// Corporate account routes
+router.post('/corporate', createCorporateAccount);
+router.get('/corporate', getCorporateAccount);
+router.post('/corporate/members', addCorporateMember);
+router.delete('/corporate/members/:userId', removeCorporateMember);
+router.get('/corporate/rides', getCorporateRides);
+
+// Subscription info
+router.get('/subscription', getSubscription);
+
+// Push notification token
+router.put('/push-token', updateExpoPushToken);
 
 module.exports = router;

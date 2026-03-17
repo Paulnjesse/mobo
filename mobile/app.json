@@ -80,7 +80,8 @@
       "expo-secure-store"
     ],
     "extra": {
-      "apiBaseUrl": "https://mobo-api-gateway.onrender.com/api"
+      "apiBaseUrl": "https://mobo-api-gateway.onrender.com/api",
+      "googleMapsKey": "YOUR_GOOGLE_MAPS_KEY_HERE"
     }
   }
 }

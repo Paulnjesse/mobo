@@ -39,12 +39,15 @@ export default function ProfileScreen({ navigation }) {
   const MENU_ITEMS = [
     { icon: 'card-outline', label: t('paymentMethods') || 'Payment Methods', screen: 'PaymentMethods', color: colors.primary },
     { icon: 'star-outline', label: 'Subscriptions', screen: 'Subscription', color: colors.warning },
-    { icon: 'shield-checkmark-outline', label: 'Safety', screen: 'SOS', color: colors.success },
+    { icon: 'shield-checkmark-outline', label: 'Safety', screen: 'Safety', color: colors.success },
+    { icon: 'pricetag-outline', label: 'Promo Codes', screen: 'PromoCode', color: colors.primary },
+    { icon: 'calendar-outline', label: 'Scheduled Rides', screen: 'ScheduledRide', color: colors.primary },
+    { icon: 'briefcase-outline', label: 'Corporate Account', screen: 'Corporate', color: colors.text },
     { icon: 'people-outline', label: 'Teen Accounts', screen: 'TeenAccounts', color: colors.primary },
     { icon: 'diamond-outline', label: 'Loyalty Points', screen: 'Loyalty', color: colors.primaryDark || colors.primary },
     { icon: 'notifications-outline', label: t('notifications'), screen: 'Notifications', color: colors.text },
     { icon: 'settings-outline', label: t('settings'), screen: 'Settings', color: colors.text },
-    { icon: 'help-circle-outline', label: t('helpSupport'), screen: null, color: colors.text },
+    { icon: 'help-circle-outline', label: t('helpSupport') || 'Help & Support', screen: 'Help', color: colors.text },
   ];
 
   return (
