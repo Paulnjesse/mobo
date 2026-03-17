@@ -1,0 +1,613 @@
+const db = require('../config/database');
+
+// Average city speed for ETA estimation (km/h)
+const AVG_SPEED_KMH = 25;
+
+/**
+ * POST /location
+ * Driver or rider updates their live location
+ */
+const updateLocation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { lat, lng, heading, speed, accuracy } = req.body;
+
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ success: false, message: 'lat and lng are required' });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({ success: false, message: 'Invalid coordinates' });
+    }
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return res.status(400).json({ success: false, message: 'Coordinates out of valid range' });
+    }
+
+    // Insert into location history
+    await db.query(
+      `INSERT INTO locations (user_id, location, heading, speed, accuracy)
+       VALUES ($1, ST_SetSRID(ST_Point($2, $3), 4326), $4, $5, $6)`,
+      [userId, longitude, latitude,
+       heading !== undefined ? parseFloat(heading) : null,
+       speed !== undefined ? parseFloat(speed) : null,
+       accuracy !== undefined ? parseFloat(accuracy) : null]
+    );
+
+    // If driver, update their real-time current_location
+    if (req.user.role === 'driver') {
+      const driverResult = await db.query(
+        `UPDATE drivers
+         SET current_location = ST_SetSRID(ST_Point($1, $2), 4326)
+         WHERE user_id = $3
+         RETURNING id, is_online`,
+        [longitude, latitude, userId]
+      );
+
+      if (driverResult.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Driver profile not found' });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Location updated',
+      data: { lat: latitude, lng: longitude, timestamp: new Date().toISOString() }
+    });
+  } catch (err) {
+    console.error('[UpdateLocation Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to update location' });
+  }
+};
+
+/**
+ * GET /location/:userId
+ * Get latest location for a user/driver
+ */
+const getLocation = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const requestingUserId = req.user.id;
+
+    // Allow users to see their own location or drivers involved in their active ride
+    if (userId !== requestingUserId && req.user.role !== 'admin') {
+      // Check if there's an active ride linking the two users
+      const rideCheck = await db.query(
+        `SELECT r.id FROM rides r
+         LEFT JOIN drivers d ON r.driver_id = d.id
+         WHERE (r.rider_id = $1 AND d.user_id = $2)
+            OR (r.rider_id = $2 AND d.user_id = $1)
+           AND r.status NOT IN ('completed','cancelled')`,
+        [requestingUserId, userId]
+      );
+
+      if (rideCheck.rows.length === 0) {
+        return res.status(403).json({ success: false, message: 'Not authorized to view this location' });
+      }
+    }
+
+    // Get latest location from history
+    const historyResult = await db.query(
+      `SELECT
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng,
+        heading, speed, accuracy, recorded_at
+       FROM locations
+       WHERE user_id = $1
+       ORDER BY recorded_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (historyResult.rows.length === 0) {
+      // Fall back to driver current_location if driver
+      const driverResult = await db.query(
+        `SELECT
+          ST_Y(current_location::geometry) AS lat,
+          ST_X(current_location::geometry) AS lng,
+          updated_at AS recorded_at
+         FROM drivers
+         WHERE user_id = $1 AND current_location IS NOT NULL`,
+        [userId]
+      );
+
+      if (driverResult.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'No location data available' });
+      }
+
+      return res.json({
+        success: true,
+        data: { location: driverResult.rows[0] }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { location: historyResult.rows[0] }
+    });
+  } catch (err) {
+    console.error('[GetLocation Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get location' });
+  }
+};
+
+/**
+ * GET /drivers/nearby
+ * Find nearby available drivers using PostGIS ST_DWithin
+ */
+const getNearbyDrivers = async (req, res) => {
+  try {
+    const { lat, lng, radius = 5000, ride_type, vehicle_type } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: 'lat and lng are required' });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const radiusMeters = parseFloat(radius);
+
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({ success: false, message: 'Invalid coordinates' });
+    }
+
+    // Map ride_type to vehicle_type filter
+    const rideTypeToVehicle = {
+      standard: ['standard', 'comfort', 'luxury'],
+      comfort: ['comfort', 'luxury'],
+      luxury: ['luxury'],
+      shared: ['standard', 'comfort', 'van'],
+      bike: ['bike'],
+      scooter: ['scooter'],
+      delivery: ['standard', 'comfort', 'van', 'bike'],
+      scheduled: ['standard', 'comfort', 'luxury']
+    };
+
+    let vehicleTypeFilter = null;
+    if (ride_type && rideTypeToVehicle[ride_type]) {
+      vehicleTypeFilter = rideTypeToVehicle[ride_type];
+    } else if (vehicle_type) {
+      vehicleTypeFilter = [vehicle_type];
+    }
+
+    let query = `
+      SELECT
+        d.id AS driver_id,
+        u.id AS user_id,
+        u.full_name,
+        u.rating,
+        u.profile_picture,
+        v.id AS vehicle_id,
+        v.make,
+        v.model,
+        v.year,
+        v.vehicle_type,
+        v.color,
+        v.plate,
+        v.seats,
+        v.is_wheelchair_accessible,
+        ST_Distance(
+          d.current_location::geography,
+          ST_SetSRID(ST_Point($1, $2), 4326)::geography
+        ) / 1000 AS distance_km,
+        ST_AsGeoJSON(d.current_location) AS location_geojson,
+        d.acceptance_rate,
+        d.total_earnings
+      FROM drivers d
+      JOIN users u ON d.user_id = u.id
+      JOIN vehicles v ON d.vehicle_id = v.id
+      WHERE
+        d.is_online = true
+        AND d.is_approved = true
+        AND d.current_location IS NOT NULL
+        AND v.is_active = true
+        AND u.is_active = true
+        AND u.is_suspended = false
+        AND ST_DWithin(
+          d.current_location::geography,
+          ST_SetSRID(ST_Point($1, $2), 4326)::geography,
+          $3
+        )
+    `;
+
+    const params = [longitude, latitude, radiusMeters];
+
+    if (vehicleTypeFilter && vehicleTypeFilter.length > 0) {
+      params.push(vehicleTypeFilter);
+      query += ` AND v.vehicle_type = ANY($${params.length})`;
+    }
+
+    query += ` ORDER BY distance_km ASC LIMIT 20`;
+
+    const result = await db.query(query, params);
+
+    // Enrich with ETA estimates
+    const driversWithEta = result.rows.map(driver => {
+      const distanceKm = parseFloat(driver.distance_km);
+      const etaMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60) + 1; // +1 min buffer
+
+      let locationData = null;
+      if (driver.location_geojson) {
+        const geojson = JSON.parse(driver.location_geojson);
+        locationData = {
+          lat: geojson.coordinates[1],
+          lng: geojson.coordinates[0]
+        };
+      }
+
+      return {
+        ...driver,
+        distance_km: Math.round(distanceKm * 100) / 100,
+        eta_minutes: etaMinutes,
+        location: locationData,
+        location_geojson: undefined // Remove raw geojson from response
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        drivers: driversWithEta,
+        count: driversWithEta.length,
+        search_radius_m: radiusMeters,
+        center: { lat: latitude, lng: longitude }
+      }
+    });
+  } catch (err) {
+    console.error('[GetNearbyDrivers Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get nearby drivers' });
+  }
+};
+
+/**
+ * GET /location/surge
+ * Check if a location is inside a surge zone
+ */
+const checkSurgeZone = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ success: false, message: 'lat and lng are required' });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+
+    // Check DB surge zones
+    const result = await db.query(
+      `SELECT id, name, city, multiplier, starts_at, ends_at
+       FROM surge_zones
+       WHERE is_active = true
+         AND ST_Within(
+           ST_SetSRID(ST_Point($1, $2), 4326),
+           zone
+         )
+         AND (starts_at IS NULL OR starts_at <= NOW())
+         AND (ends_at IS NULL OR ends_at >= NOW())
+       ORDER BY multiplier DESC
+       LIMIT 1`,
+      [longitude, latitude]
+    );
+
+    if (result.rows.length > 0) {
+      const zone = result.rows[0];
+      return res.json({
+        success: true,
+        data: {
+          surge_active: true,
+          multiplier: parseFloat(zone.multiplier),
+          zone_name: zone.name,
+          city: zone.city,
+          zone_id: zone.id,
+          message: `High demand in ${zone.name}. Fares are ${zone.multiplier}x.`
+        }
+      });
+    }
+
+    // Check peak hour surge (West Africa Time approximation)
+    const nowUtc = new Date();
+    const watHour = (nowUtc.getUTCHours() + 1) % 24;
+    const isPeakMorning = watHour >= 7 && watHour <= 9;
+    const isPeakEvening = watHour >= 17 && watHour <= 20;
+
+    if (isPeakMorning || isPeakEvening) {
+      const periodName = isPeakMorning ? 'morning rush hour' : 'evening rush hour';
+      return res.json({
+        success: true,
+        data: {
+          surge_active: true,
+          multiplier: 1.5,
+          zone_name: 'Peak Hours',
+          city: null,
+          zone_id: null,
+          message: `Fares are higher during ${periodName} (1.5x).`
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        surge_active: false,
+        multiplier: 1.0,
+        zone_name: null,
+        message: 'Normal pricing in this area.'
+      }
+    });
+  } catch (err) {
+    console.error('[CheckSurgeZone Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to check surge zone' });
+  }
+};
+
+/**
+ * GET /location/route/estimate
+ * Calculate route estimate between two points
+ */
+const getRouteEstimate = async (req, res) => {
+  try {
+    const {
+      pickup_lat, pickup_lng,
+      dropoff_lat, dropoff_lng,
+      ride_type = 'standard'
+    } = req.query;
+
+    if (!pickup_lat || !pickup_lng || !dropoff_lat || !dropoff_lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'pickup_lat, pickup_lng, dropoff_lat, dropoff_lng are required'
+      });
+    }
+
+    const pLat = parseFloat(pickup_lat);
+    const pLng = parseFloat(pickup_lng);
+    const dLat = parseFloat(dropoff_lat);
+    const dLng = parseFloat(dropoff_lng);
+
+    // Use PostGIS ST_Distance for accurate geographic distance
+    const distanceResult = await db.query(
+      `SELECT
+        ST_Distance(
+          ST_SetSRID(ST_Point($1, $2), 4326)::geography,
+          ST_SetSRID(ST_Point($3, $4), 4326)::geography
+        ) / 1000 AS distance_km`,
+      [pLng, pLat, dLng, dLat]
+    );
+
+    const distanceKm = parseFloat(distanceResult.rows[0].distance_km);
+    const durationMinutes = Math.round((distanceKm / AVG_SPEED_KMH) * 60);
+
+    // Fare breakdown
+    const FARE_CONFIG = {
+      base_fare: 1000,
+      per_km: 700,
+      per_minute: 100,
+      booking_fee: 500,
+      service_fee_rate: 0.20
+    };
+
+    const RIDE_TYPE_MULTIPLIERS = {
+      standard: 1.0, shared: 0.75, comfort: 1.3,
+      luxury: 2.0, bike: 0.6, scooter: 0.65,
+      delivery: 1.1, scheduled: 1.05
+    };
+
+    const typeMultiplier = RIDE_TYPE_MULTIPLIERS[ride_type] || 1.0;
+    const subtotal = Math.round(
+      (FARE_CONFIG.base_fare + FARE_CONFIG.per_km * distanceKm + FARE_CONFIG.per_minute * durationMinutes)
+      * typeMultiplier
+    );
+    const serviceFee = Math.round(subtotal * FARE_CONFIG.service_fee_rate);
+    const total = subtotal + serviceFee + FARE_CONFIG.booking_fee;
+
+    // Check surge
+    const surgeResult = await db.query(
+      `SELECT multiplier, name FROM surge_zones
+       WHERE is_active = true
+         AND ST_Within(ST_SetSRID(ST_Point($1, $2), 4326), zone)
+         AND (starts_at IS NULL OR starts_at <= NOW())
+         AND (ends_at IS NULL OR ends_at >= NOW())
+       ORDER BY multiplier DESC LIMIT 1`,
+      [pLng, pLat]
+    );
+
+    const surgeMultiplier = surgeResult.rows.length > 0 ? parseFloat(surgeResult.rows[0].multiplier) : 1.0;
+
+    res.json({
+      success: true,
+      data: {
+        distance_km: Math.round(distanceKm * 100) / 100,
+        estimated_duration_minutes: durationMinutes,
+        ride_type,
+        fare_breakdown: {
+          base_fare: FARE_CONFIG.base_fare,
+          distance_fare: Math.round(FARE_CONFIG.per_km * distanceKm),
+          duration_fare: Math.round(FARE_CONFIG.per_minute * durationMinutes),
+          type_multiplier: typeMultiplier,
+          subtotal,
+          service_fee: serviceFee,
+          booking_fee: FARE_CONFIG.booking_fee,
+          surge_multiplier: surgeMultiplier,
+          surge_active: surgeMultiplier > 1.0,
+          total: Math.round(total * surgeMultiplier),
+          currency: 'XAF'
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[GetRouteEstimate Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get route estimate' });
+  }
+};
+
+/**
+ * GET /rides/:id/route
+ * Get the polyline / route for an active ride
+ */
+const getRideRoute = async (req, res) => {
+  try {
+    const { id: rideId } = req.params;
+    const userId = req.user.id;
+
+    const rideResult = await db.query(
+      `SELECT
+        r.id,
+        r.status,
+        r.route_polyline,
+        r.rider_id,
+        ST_Y(r.pickup_location::geometry) AS pickup_lat,
+        ST_X(r.pickup_location::geometry) AS pickup_lng,
+        ST_Y(r.dropoff_location::geometry) AS dropoff_lat,
+        ST_X(r.dropoff_location::geometry) AS dropoff_lng,
+        d.user_id AS driver_user_id,
+        ST_Y(d.current_location::geometry) AS driver_lat,
+        ST_X(d.current_location::geometry) AS driver_lng
+       FROM rides r
+       LEFT JOIN drivers d ON r.driver_id = d.id
+       WHERE r.id = $1`,
+      [rideId]
+    );
+
+    if (rideResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const ride = rideResult.rows[0];
+
+    // Authorization
+    const isRider = ride.rider_id === userId;
+    const isDriver = ride.driver_user_id === userId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isRider && !isDriver && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Not authorized to view this route' });
+    }
+
+    // Build route data
+    const routeData = {
+      ride_id: rideId,
+      status: ride.status,
+      pickup: { lat: parseFloat(ride.pickup_lat), lng: parseFloat(ride.pickup_lng) },
+      dropoff: { lat: parseFloat(ride.dropoff_lat), lng: parseFloat(ride.dropoff_lng) },
+      driver_location: ride.driver_lat && ride.driver_lng
+        ? { lat: parseFloat(ride.driver_lat), lng: parseFloat(ride.driver_lng) }
+        : null,
+      polyline: ride.route_polyline || null
+    };
+
+    // If no polyline stored, generate a simple bounding route estimate
+    if (!routeData.polyline && ride.pickup_lat && ride.dropoff_lat) {
+      routeData.waypoints = [
+        routeData.pickup,
+        ...(routeData.driver_location ? [routeData.driver_location] : []),
+        routeData.dropoff
+      ];
+      routeData.note = 'Approximate route. Install Google Maps API for precise polylines.';
+    }
+
+    res.json({ success: true, data: { route: routeData } });
+  } catch (err) {
+    console.error('[GetRideRoute Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get ride route' });
+  }
+};
+
+/**
+ * GET /location/history
+ * Get location history for a user
+ */
+const getLocationHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { limit = 50, since } = req.query;
+
+    let query = `
+      SELECT
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng,
+        heading, speed, accuracy, recorded_at
+      FROM locations
+      WHERE user_id = $1
+    `;
+    const params = [userId];
+
+    if (since) {
+      params.push(new Date(since));
+      query += ` AND recorded_at >= $${params.length}`;
+    }
+
+    params.push(parseInt(limit));
+    query += ` ORDER BY recorded_at DESC LIMIT $${params.length}`;
+
+    const result = await db.query(query, params);
+
+    res.json({
+      success: true,
+      data: {
+        locations: result.rows,
+        count: result.rows.length
+      }
+    });
+  } catch (err) {
+    console.error('[GetLocationHistory Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to get location history' });
+  }
+};
+
+/**
+ * POST /location/driver/status
+ * Driver goes online/offline
+ */
+const updateDriverStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { is_online } = req.body;
+
+    if (is_online === undefined) {
+      return res.status(400).json({ success: false, message: 'is_online is required' });
+    }
+
+    const result = await db.query(
+      `UPDATE drivers SET is_online = $1 WHERE user_id = $2
+       RETURNING id, is_online, is_approved`,
+      [Boolean(is_online), userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    const driver = result.rows[0];
+
+    if (!driver.is_approved && is_online) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your driver account is pending approval. You cannot go online yet.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `You are now ${is_online ? 'online' : 'offline'}`,
+      data: { is_online: driver.is_online }
+    });
+  } catch (err) {
+    console.error('[UpdateDriverStatus Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to update driver status' });
+  }
+};
+
+module.exports = {
+  updateLocation,
+  getLocation,
+  getNearbyDrivers,
+  checkSurgeZone,
+  getRouteEstimate,
+  getRideRoute,
+  getLocationHistory,
+  updateDriverStatus
+};

@@ -1,0 +1,103 @@
+version: '3.9'
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: mobo_db
+    environment:
+      POSTGRES_DB: mobo
+      POSTGRES_USER: mobo_user
+      POSTGRES_PASSWORD: mobo_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobo_user -d mobo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: mobo_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      USER_SERVICE_URL: http://user-service:3001
+      RIDE_SERVICE_URL: http://ride-service:3002
+      PAYMENT_SERVICE_URL: http://payment-service:3003
+      LOCATION_SERVICE_URL: http://location-service:3004
+      JWT_SECRET: mobo_jwt_secret_change_in_production
+    depends_on:
+      - user-service
+      - ride-service
+      - payment-service
+      - location-service
+
+  user-service:
+    build: ./services/user-service
+    container_name: mobo_user
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
+      JWT_SECRET: mobo_jwt_secret_change_in_production
+      JWT_EXPIRES_IN: 7d
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ride-service:
+    build: ./services/ride-service
+    container_name: mobo_ride
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
+      JWT_SECRET: mobo_jwt_secret_change_in_production
+      LOCATION_SERVICE_URL: http://location-service:3004
+      PAYMENT_SERVICE_URL: http://payment-service:3003
+    depends_on:
+      db:
+        condition: service_healthy
+
+  payment-service:
+    build: ./services/payment-service
+    container_name: mobo_payment
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
+      JWT_SECRET: mobo_jwt_secret_change_in_production
+      FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-xxxx
+      STRIPE_SECRET_KEY: sk_test_xxxx
+    depends_on:
+      db:
+        condition: service_healthy
+
+  location-service:
+    build: ./services/location-service
+    container_name: mobo_location
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
+      JWT_SECRET: mobo_jwt_secret_change_in_production
+      GOOGLE_MAPS_API_KEY: AIza_your_key_here
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
