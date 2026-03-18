@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./src/routes/auth');
 const profileRoutes = require('./src/routes/profile');
+const fleetRoutes = require('./src/routes/fleet');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ const authLimiter = rateLimit({
 // Routes
 app.use('/auth', authLimiter, authRoutes);
 app.use('/users', profileRoutes);
+app.use('/fleet', fleetRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

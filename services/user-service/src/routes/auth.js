@@ -7,7 +7,9 @@ const {
   verify,
   resendOtp,
   logout,
-  refreshToken
+  refreshToken,
+  registerDriver,
+  registerFleetOwner
 } = require('../controllers/authController');
 
 // Public routes
@@ -17,7 +19,9 @@ router.post('/verify', verify);
 router.post('/resend-otp', resendOtp);
 router.post('/logout', logout);
 
-// Protected route
+// Protected routes
 router.post('/refresh-token', authenticate, refreshToken);
+router.post('/register-driver', authenticate, registerDriver);
+router.post('/register-fleet-owner', authenticate, registerFleetOwner);
 
 module.exports = router;

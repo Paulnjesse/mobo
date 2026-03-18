@@ -52,4 +52,17 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, requireDriver, requireAdmin };
+/**
+ * Require fleet_owner role
+ */
+const requireFleetOwner = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  if (req.user.role !== 'fleet_owner' && req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Fleet owner access required' });
+  }
+  next();
+};
+
+module.exports = { authenticate, requireDriver, requireAdmin, requireFleetOwner };

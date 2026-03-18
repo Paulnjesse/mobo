@@ -8,61 +8,78 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius } from '../theme';
 
-// Auth Screens
-import WelcomeScreen from '../screens/WelcomeScreen';
-import LanguageScreen from '../screens/LanguageScreen';
-import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/RegisterScreen';
-import VerificationScreen from '../screens/VerificationScreen';
+// ── Auth Screens ───────────────────────────────────────────────────────────────
+import WelcomeScreen        from '../screens/WelcomeScreen';
+import LanguageScreen       from '../screens/LanguageScreen';
+import LoginScreen          from '../screens/LoginScreen';
+import RegisterScreen       from '../screens/RegisterScreen';
+import VerificationScreen   from '../screens/VerificationScreen';
 
-// Rider Screens
-import HomeScreen from '../screens/HomeScreen';
-import BookRideScreen from '../screens/BookRideScreen';
-import FareEstimateScreen from '../screens/FareEstimateScreen';
-import RideTrackingScreen from '../screens/RideTrackingScreen';
-import RideHistoryScreen from '../screens/RideHistoryScreen';
-import PaymentScreen from '../screens/PaymentScreen';
+// New multi-role registration screens
+import RoleSelectionScreen    from '../screens/auth/RoleSelectionScreen';
+import RiderRegisterScreen    from '../screens/auth/RiderRegisterScreen';
+import DriverRegisterScreen   from '../screens/auth/DriverRegisterScreen';
+import FleetOwnerRegisterScreen from '../screens/auth/FleetOwnerRegisterScreen';
+
+// ── Rider Screens ──────────────────────────────────────────────────────────────
+import HomeScreen           from '../screens/HomeScreen';
+import BookRideScreen       from '../screens/BookRideScreen';
+import FareEstimateScreen   from '../screens/FareEstimateScreen';
+import RideTrackingScreen   from '../screens/RideTrackingScreen';
+import RideHistoryScreen    from '../screens/RideHistoryScreen';
+import PaymentScreen        from '../screens/PaymentScreen';
 import PaymentMethodsScreen from '../screens/PaymentMethodsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import LoyaltyScreen from '../screens/LoyaltyScreen';
-import SubscriptionScreen from '../screens/SubscriptionScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import NotificationsScreen from '../screens/NotificationsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import SOSScreen from '../screens/SOSScreen';
-import TeenAccountScreen from '../screens/TeenAccountScreen';
-
-// New Rider Screens
-import ScheduledRideScreen from '../screens/ScheduledRideScreen';
-import SharedRideScreen from '../screens/SharedRideScreen';
-import RideReceiptScreen from '../screens/RideReceiptScreen';
+import ProfileScreen        from '../screens/ProfileScreen';
+import LoyaltyScreen        from '../screens/LoyaltyScreen';
+import SubscriptionScreen   from '../screens/SubscriptionScreen';
+import MessagesScreen       from '../screens/MessagesScreen';
+import NotificationsScreen  from '../screens/NotificationsScreen';
+import SettingsScreen       from '../screens/SettingsScreen';
+import SOSScreen            from '../screens/SOSScreen';
+import TeenAccountScreen    from '../screens/TeenAccountScreen';
+import ScheduledRideScreen  from '../screens/ScheduledRideScreen';
+import SharedRideScreen     from '../screens/SharedRideScreen';
+import RideReceiptScreen    from '../screens/RideReceiptScreen';
 import SearchLocationScreen from '../screens/SearchLocationScreen';
-import PromoCodeScreen from '../screens/PromoCodeScreen';
-import SafetyScreen from '../screens/SafetyScreen';
-import HelpScreen from '../screens/HelpScreen';
-import CorporateScreen from '../screens/CorporateScreen';
+import PromoCodeScreen      from '../screens/PromoCodeScreen';
+import SafetyScreen         from '../screens/SafetyScreen';
+import HelpScreen           from '../screens/HelpScreen';
+import CorporateScreen      from '../screens/CorporateScreen';
 
-// Driver Screens
+// ── Driver Screens ─────────────────────────────────────────────────────────────
 import DriverHomeScreen from '../screens/DriverHomeScreen';
 import DriverRideScreen from '../screens/DriverRideScreen';
 
-const Stack = createStackNavigator();
-const Tab = createBottomTabNavigator();
+// ── Fleet Owner Screens ────────────────────────────────────────────────────────
+import FleetDashboardScreen   from '../screens/fleet/FleetDashboardScreen';
+import FleetManagementScreen  from '../screens/fleet/FleetManagementScreen';
+import AddVehicleScreen       from '../screens/fleet/AddVehicleScreen';
+import VehicleDetailScreen    from '../screens/fleet/VehicleDetailScreen';
 
+const Stack = createStackNavigator();
+const Tab   = createBottomTabNavigator();
+
+// ── Auth Stack ─────────────────────────────────────────────────────────────────
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      <Stack.Screen name="Language" component={LanguageScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="Verification" component={VerificationScreen} />
+      <Stack.Screen name="Welcome"          component={WelcomeScreen} />
+      <Stack.Screen name="Language"         component={LanguageScreen} />
+      <Stack.Screen name="Login"            component={LoginScreen} />
+      {/* Legacy register — kept for back-compat */}
+      <Stack.Screen name="Register"         component={RegisterScreen} />
+      {/* New role-based registration flow */}
+      <Stack.Screen name="RoleSelection"    component={RoleSelectionScreen} />
+      <Stack.Screen name="RiderRegister"    component={RiderRegisterScreen} />
+      <Stack.Screen name="DriverRegister"   component={DriverRegisterScreen} />
+      <Stack.Screen name="FleetOwnerRegister" component={FleetOwnerRegisterScreen} />
+      <Stack.Screen name="Verification"     component={VerificationScreen} />
     </Stack.Navigator>
   );
 }
 
+// ── Rider Tabs ─────────────────────────────────────────────────────────────────
 function RiderTabs() {
-  const { t } = useLanguage();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -71,7 +88,7 @@ function RiderTabs() {
         tabBarInactiveTintColor: colors.gray400,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabBarLabel,
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           let iconName;
           if (route.name === 'HomeTab') {
             iconName = focused ? 'map' : 'map-outline';
@@ -89,59 +106,110 @@ function RiderTabs() {
         },
       })}
     >
-      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
+      <Tab.Screen name="HomeTab"     component={HomeScreen}        options={{ tabBarLabel: 'Home' }} />
       <Tab.Screen name="ActivityTab" component={RideHistoryScreen} options={{ tabBarLabel: 'Activity' }} />
-      <Tab.Screen name="AccountTab" component={ProfileScreen} options={{ tabBarLabel: 'Account' }} />
+      <Tab.Screen name="AccountTab"  component={ProfileScreen}     options={{ tabBarLabel: 'Account' }} />
     </Tab.Navigator>
   );
 }
 
+// ── Rider Stack ────────────────────────────────────────────────────────────────
 function RiderStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="RiderTabs" component={RiderTabs} />
-      <Stack.Screen name="BookRide" component={BookRideScreen} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="FareEstimate" component={FareEstimateScreen} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
-      <Stack.Screen name="Payment" component={PaymentScreen} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
-      <Stack.Screen name="Loyalty" component={LoyaltyScreen} />
-      <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-      <Stack.Screen name="Messages" component={MessagesScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="SOS" component={SOSScreen} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="TeenAccounts" component={TeenAccountScreen} />
-      <Stack.Screen name="Language" component={LanguageScreen} />
-      <Stack.Screen name="ScheduledRide" component={ScheduledRideScreen} />
-      <Stack.Screen name="SharedRide" component={SharedRideScreen} />
-      <Stack.Screen name="RideReceipt" component={RideReceiptScreen} />
-      <Stack.Screen
-        name="SearchLocation"
-        component={SearchLocationScreen}
-        options={{ presentation: 'modal' }}
-      />
-      <Stack.Screen name="PromoCode" component={PromoCodeScreen} />
-      <Stack.Screen name="Safety" component={SafetyScreen} />
-      <Stack.Screen name="Help" component={HelpScreen} />
-      <Stack.Screen name="Corporate" component={CorporateScreen} />
+      <Stack.Screen name="RiderTabs"       component={RiderTabs} />
+      <Stack.Screen name="BookRide"        component={BookRideScreen}        options={{ presentation: 'modal' }} />
+      <Stack.Screen name="FareEstimate"    component={FareEstimateScreen}    options={{ presentation: 'modal' }} />
+      <Stack.Screen name="RideTracking"    component={RideTrackingScreen} />
+      <Stack.Screen name="Payment"         component={PaymentScreen}         options={{ presentation: 'modal' }} />
+      <Stack.Screen name="PaymentMethods"  component={PaymentMethodsScreen} />
+      <Stack.Screen name="Loyalty"         component={LoyaltyScreen} />
+      <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
+      <Stack.Screen name="Messages"        component={MessagesScreen} />
+      <Stack.Screen name="Notifications"   component={NotificationsScreen} />
+      <Stack.Screen name="Settings"        component={SettingsScreen} />
+      <Stack.Screen name="SOS"             component={SOSScreen}             options={{ presentation: 'modal' }} />
+      <Stack.Screen name="TeenAccounts"    component={TeenAccountScreen} />
+      <Stack.Screen name="Language"        component={LanguageScreen} />
+      <Stack.Screen name="ScheduledRide"   component={ScheduledRideScreen} />
+      <Stack.Screen name="SharedRide"      component={SharedRideScreen} />
+      <Stack.Screen name="RideReceipt"     component={RideReceiptScreen} />
+      <Stack.Screen name="SearchLocation"  component={SearchLocationScreen}  options={{ presentation: 'modal' }} />
+      <Stack.Screen name="PromoCode"       component={PromoCodeScreen} />
+      <Stack.Screen name="Safety"          component={SafetyScreen} />
+      <Stack.Screen name="Help"            component={HelpScreen} />
+      <Stack.Screen name="Corporate"       component={CorporateScreen} />
     </Stack.Navigator>
   );
 }
 
+// ── Driver Stack ───────────────────────────────────────────────────────────────
 function DriverStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="DriverHome" component={DriverHomeScreen} />
-      <Stack.Screen name="DriverRide" component={DriverRideScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="DriverHome"    component={DriverHomeScreen} />
+      <Stack.Screen name="DriverRide"    component={DriverRideScreen} />
+      <Stack.Screen name="Settings"      component={SettingsScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Messages" component={MessagesScreen} />
-      <Stack.Screen name="SOS" component={SOSScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="Messages"      component={MessagesScreen} />
+      <Stack.Screen name="SOS"           component={SOSScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
 
+// ── Fleet Owner Tabs ───────────────────────────────────────────────────────────
+function FleetOwnerTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.gray400,
+        tabBarStyle: styles.tabBar,
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarIcon: ({ focused, color }) => {
+          let iconName;
+          if (route.name === 'FleetTab') {
+            iconName = focused ? 'car' : 'car-outline';
+          } else if (route.name === 'EarningsTab') {
+            iconName = focused ? 'cash' : 'cash-outline';
+          } else if (route.name === 'AccountTab') {
+            iconName = focused ? 'person' : 'person-outline';
+          }
+          return (
+            <View style={styles.tabIconWrap}>
+              <Ionicons name={iconName} size={22} color={color} />
+              {focused && <View style={styles.tabActiveDot} />}
+            </View>
+          );
+        },
+      })}
+    >
+      <Tab.Screen name="FleetTab"    component={FleetDashboardScreen} options={{ tabBarLabel: 'My Fleets' }} />
+      <Tab.Screen name="EarningsTab" component={FleetDashboardScreen} options={{ tabBarLabel: 'Earnings' }} />
+      <Tab.Screen name="AccountTab"  component={ProfileScreen}        options={{ tabBarLabel: 'Account' }} />
+    </Tab.Navigator>
+  );
+}
+
+// ── Fleet Owner Stack ──────────────────────────────────────────────────────────
+function FleetOwnerStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="FleetOwnerTabs"   component={FleetOwnerTabs} />
+      <Stack.Screen name="FleetDashboard"   component={FleetDashboardScreen} />
+      <Stack.Screen name="FleetManagement"  component={FleetManagementScreen} />
+      <Stack.Screen name="AddVehicle"       component={AddVehicleScreen} />
+      <Stack.Screen name="VehicleDetail"    component={VehicleDetailScreen} />
+      <Stack.Screen name="Notifications"    component={NotificationsScreen} />
+      <Stack.Screen name="Settings"         component={SettingsScreen} />
+      <Stack.Screen name="Language"         component={LanguageScreen} />
+      <Stack.Screen name="Help"             component={HelpScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// ── Root Navigator ─────────────────────────────────────────────────────────────
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -161,6 +229,11 @@ export default function AppNavigator() {
     return <DriverStack />;
   }
 
+  if (user?.role === 'fleet_owner') {
+    return <FleetOwnerStack />;
+  }
+
+  // Default: rider
   return <RiderStack />;
 }
 

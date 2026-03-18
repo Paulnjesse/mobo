@@ -24,21 +24,23 @@ import {
   Notifications as NotificationsIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
+  LocalShipping as FleetIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/', icon: <BarChartIcon /> },
-  { label: 'Users', path: '/users', icon: <PeopleIcon /> },
-  { label: 'Drivers', path: '/drivers', icon: <DriveEtaIcon /> },
-  { label: 'Rides', path: '/rides', icon: <DirectionsCarIcon /> },
-  { label: 'Payments', path: '/payments', icon: <PaymentIcon /> },
-  { label: 'Live Map', path: '/map', icon: <MapIcon /> },
-  { label: 'Surge Pricing', path: '/surge', icon: <BoltIcon /> },
-  { label: 'Promotions', path: '/promotions', icon: <LocalOfferIcon /> },
-  { label: 'Safety', path: '/safety', icon: <ShieldIcon /> },
+  { label: 'Dashboard',    path: '/',             icon: <BarChartIcon /> },
+  { label: 'Users',        path: '/users',         icon: <PeopleIcon /> },
+  { label: 'Drivers',      path: '/drivers',       icon: <DriveEtaIcon /> },
+  { label: 'Fleets',       path: '/fleets',        icon: <FleetIcon /> },
+  { label: 'Rides',        path: '/rides',         icon: <DirectionsCarIcon /> },
+  { label: 'Payments',     path: '/payments',      icon: <PaymentIcon /> },
+  { label: 'Live Map',     path: '/map',           icon: <MapIcon /> },
+  { label: 'Surge Pricing', path: '/surge',        icon: <BoltIcon /> },
+  { label: 'Promotions',   path: '/promotions',    icon: <LocalOfferIcon /> },
+  { label: 'Safety',       path: '/safety',        icon: <ShieldIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
-  { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+  { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];
 
 export default function Sidebar({ width = 240 }) {

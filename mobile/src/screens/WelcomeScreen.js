@@ -39,7 +39,7 @@ export default function WelcomeScreen({ navigation }) {
         <View style={styles.bottomSection}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('Register')}
+            onPress={() => navigation.navigate('RoleSelection')}
             activeOpacity={0.88}
           >
             <Text style={styles.primaryButtonText}>Get Started</Text>

@@ -34,7 +34,6 @@ async function getOtpSendCount(phone) {
     );
     return parseInt(result.rows[0].count || '0', 10);
   } catch (err) {
-    // Notifications table may not have this column yet — fail open
     console.warn('[AuthController] OTP rate limit check failed:', err.message);
     return 0;
   }
@@ -104,15 +103,26 @@ async function resetOtpAttempts(userId) {
 
 /**
  * POST /auth/signup
+ * Accepts role: 'rider' | 'driver' | 'fleet_owner'
+ * Common fields: full_name, phone, email, password, country, city, language
+ * Driver extra: license_number, license_expiry, vehicle_make, vehicle_model,
+ *               vehicle_year, vehicle_plate, vehicle_color, vehicle_type
+ * Fleet owner extra: company_name (fleet name)
  */
 const signup = async (req, res) => {
   try {
     const {
       full_name, phone, email, password,
       role = 'rider', country = 'Cameroon',
-      city, language = 'fr', date_of_birth, gender
+      city, language = 'fr', date_of_birth, gender,
+      // Driver-specific
+      license_number, license_expiry,
+      vehicle_make, vehicle_model, vehicle_year, vehicle_plate, vehicle_color, vehicle_type,
+      // Fleet owner-specific
+      company_name,
     } = req.body;
 
+    // 1. Validate required common fields
     if (!full_name || !phone || !password) {
       return res.status(400).json({
         success: false,
@@ -127,12 +137,32 @@ const signup = async (req, res) => {
       });
     }
 
-    const validRoles = ['rider', 'driver'];
+    const validRoles = ['rider', 'driver', 'fleet_owner'];
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid role' });
+      return res.status(400).json({ success: false, message: 'Invalid role. Must be rider, driver, or fleet_owner' });
     }
 
-    // Check phone uniqueness
+    // Validate driver-specific required fields
+    if (role === 'driver') {
+      if (!license_number || !license_expiry) {
+        return res.status(400).json({
+          success: false,
+          message: 'Driver registration requires: license_number, license_expiry'
+        });
+      }
+    }
+
+    // Validate fleet owner required fields
+    if (role === 'fleet_owner') {
+      if (!company_name) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fleet owner registration requires: company_name'
+        });
+      }
+    }
+
+    // 2. Check phone uniqueness
     const existingPhone = await db.query('SELECT id FROM users WHERE phone = $1', [phone]);
     if (existingPhone.rows.length > 0) {
       return res.status(409).json({ success: false, message: 'Phone number already registered' });
@@ -146,7 +176,7 @@ const signup = async (req, res) => {
       }
     }
 
-    // OTP rate limit check (no user yet, use phone)
+    // OTP rate limit check
     const recentSends = await getOtpSendCount(phone);
     if (recentSends >= MAX_OTP_REQUESTS_PER_HOUR) {
       return res.status(429).json({
@@ -155,34 +185,101 @@ const signup = async (req, res) => {
       });
     }
 
+    // 3. Hash password
     const password_hash = await bcrypt.hash(password, 10);
     const otp_code = generateOtp();
     const otp_expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     const id = uuidv4();
 
+    // Determine registration_step based on role
+    const registration_step = role === 'fleet_owner' ? 'add_vehicles' : 'complete';
+    const registration_completed = role === 'fleet_owner' ? false : true;
+
+    // 4. Create user record with role
     const result = await db.query(
       `INSERT INTO users (
         id, full_name, phone, email, password_hash, role,
         country, city, language, date_of_birth, gender,
-        otp_code, otp_expiry, is_verified, loyalty_points, otp_attempts
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,50,0)
+        otp_code, otp_expiry, is_verified, loyalty_points, otp_attempts,
+        registration_step, registration_completed
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,50,0,$14,$15)
       RETURNING id, full_name, phone, email, role, country, city, language,
-                is_verified, loyalty_points, created_at`,
+                is_verified, loyalty_points, registration_step, registration_completed, created_at`,
       [id, full_name, phone, email || null, password_hash, role,
        country, city || null, language, date_of_birth || null, gender || null,
-       otp_code, otp_expiry]
+       otp_code, otp_expiry, registration_step, registration_completed]
     );
 
     const user = result.rows[0];
 
-    // Award signup loyalty points transaction
+    // 8. Award signup loyalty points transaction
     await db.query(
       `INSERT INTO loyalty_transactions (user_id, points, action, description)
        VALUES ($1, 50, 'signup_bonus', 'Welcome to MOBO — 50 bonus points!')`,
       [id]
     );
 
-    // Send OTP via SMS (with user's language preference)
+    let roleData = null;
+
+    // 5. If driver: create drivers record (is_approved=false)
+    if (role === 'driver' && license_number && license_expiry) {
+      try {
+        const driverResult = await db.query(
+          `INSERT INTO drivers (user_id, license_number, license_expiry, is_approved, is_online)
+           VALUES ($1, $2, $3, false, false)
+           RETURNING id, license_number, license_expiry, is_approved`,
+          [id, license_number, license_expiry]
+        );
+        const driverRecord = driverResult.rows[0];
+
+        // Create vehicle if vehicle details provided
+        if (vehicle_make && vehicle_model && vehicle_year && vehicle_plate) {
+          try {
+            const vehicleResult = await db.query(
+              `INSERT INTO vehicles (driver_id, make, model, year, plate, color, vehicle_type, seats, is_active)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 4, true)
+               RETURNING id, make, model, year, plate, color, vehicle_type`,
+              [driverRecord.id, vehicle_make, vehicle_model,
+               parseInt(vehicle_year, 10), vehicle_plate.toUpperCase(),
+               vehicle_color || null, vehicle_type || 'standard']
+            );
+            const vehicle = vehicleResult.rows[0];
+
+            // Link vehicle to driver
+            await db.query(
+              `UPDATE drivers SET vehicle_id = $1 WHERE id = $2`,
+              [vehicle.id, driverRecord.id]
+            );
+
+            roleData = { driver: { ...driverRecord, vehicle } };
+          } catch (vErr) {
+            console.warn('[Signup] Vehicle creation failed (plate may be duplicate):', vErr.message);
+            roleData = { driver: driverRecord };
+          }
+        } else {
+          roleData = { driver: driverRecord };
+        }
+      } catch (dErr) {
+        console.warn('[Signup] Driver record creation failed:', dErr.message);
+      }
+    }
+
+    // 6. If fleet_owner: create first fleet record
+    if (role === 'fleet_owner') {
+      try {
+        const fleetResult = await db.query(
+          `INSERT INTO fleets (owner_id, name, city, country, fleet_number, is_active, is_approved)
+           VALUES ($1, $2, $3, $4, 1, false, false)
+           RETURNING id, name, fleet_number, is_active, is_approved`,
+          [id, company_name, city || null, country]
+        );
+        roleData = { fleet: fleetResult.rows[0] };
+      } catch (fErr) {
+        console.warn('[Signup] Fleet creation failed:', fErr.message);
+      }
+    }
+
+    // 7. Generate OTP, send SMS
     const smsResult = await smsService.sendOTP(phone, otp_code, language);
 
     // Send email OTP as backup if email is provided
@@ -194,11 +291,13 @@ const signup = async (req, res) => {
     // Log the OTP send attempt
     await logOtpSend(id, phone);
 
+    // 9. Return user + role-specific data
     res.status(201).json({
       success: true,
       message: 'Account created! Please verify your phone number with the OTP sent.',
       data: {
         user,
+        ...roleData,
         otp_sent: true,
         sms_sent: smsResult.success,
         email_sent: emailResult ? emailResult.success : false,
@@ -208,6 +307,208 @@ const signup = async (req, res) => {
   } catch (err) {
     console.error('[Signup Error]', err);
     res.status(500).json({ success: false, message: 'Failed to create account' });
+  }
+};
+
+/**
+ * POST /auth/register-driver
+ * Called after OTP verification for drivers to complete their profile.
+ * Creates driver record + vehicle record and links to user account.
+ * Sets registration_step = 'complete'.
+ */
+const registerDriver = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const {
+      license_number, license_expiry, license_doc_url,
+      national_id, national_id_doc_url,
+      vehicle_make, vehicle_model, vehicle_year, vehicle_plate,
+      vehicle_color, vehicle_type, seats, is_wheelchair_accessible,
+      insurance_doc_url, insurance_expiry, photos
+    } = req.body;
+
+    if (!license_number || !license_expiry) {
+      return res.status(400).json({
+        success: false,
+        message: 'license_number and license_expiry are required'
+      });
+    }
+
+    // Check user exists and is a driver
+    const userResult = await db.query(
+      'SELECT id, role FROM users WHERE id = $1',
+      [userId]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const user = userResult.rows[0];
+    if (user.role !== 'driver') {
+      return res.status(400).json({ success: false, message: 'User is not registered as a driver' });
+    }
+
+    // Check if driver record already exists
+    const existingDriver = await db.query(
+      'SELECT id FROM drivers WHERE user_id = $1',
+      [userId]
+    );
+
+    let driverRecord;
+    if (existingDriver.rows.length > 0) {
+      // Update existing driver record
+      const updateResult = await db.query(
+        `UPDATE drivers SET
+           license_number = $1, license_expiry = $2, license_doc_url = $3,
+           national_id = $4, national_id_doc_url = $5
+         WHERE user_id = $6
+         RETURNING id, license_number, license_expiry, is_approved`,
+        [license_number, license_expiry, license_doc_url || null,
+         national_id || null, national_id_doc_url || null, userId]
+      );
+      driverRecord = updateResult.rows[0];
+    } else {
+      // Create new driver record
+      const driverResult = await db.query(
+        `INSERT INTO drivers (user_id, license_number, license_expiry, license_doc_url, national_id, national_id_doc_url, is_approved, is_online)
+         VALUES ($1, $2, $3, $4, $5, $6, false, false)
+         RETURNING id, license_number, license_expiry, is_approved`,
+        [userId, license_number, license_expiry, license_doc_url || null,
+         national_id || null, national_id_doc_url || null]
+      );
+      driverRecord = driverResult.rows[0];
+    }
+
+    let vehicle = null;
+    if (vehicle_make && vehicle_model && vehicle_year && vehicle_plate) {
+      try {
+        const vehicleResult = await db.query(
+          `INSERT INTO vehicles (driver_id, make, model, year, plate, color, vehicle_type, seats, is_wheelchair_accessible, insurance_doc_url, insurance_expiry, photos, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+           ON CONFLICT (plate) DO UPDATE SET
+             make = EXCLUDED.make, model = EXCLUDED.model, year = EXCLUDED.year,
+             color = EXCLUDED.color, vehicle_type = EXCLUDED.vehicle_type, seats = EXCLUDED.seats
+           RETURNING id, make, model, year, plate, color, vehicle_type, seats`,
+          [driverRecord.id, vehicle_make, vehicle_model,
+           parseInt(vehicle_year, 10), vehicle_plate.toUpperCase(),
+           vehicle_color || null, vehicle_type || 'standard',
+           seats || 4, is_wheelchair_accessible || false,
+           insurance_doc_url || null, insurance_expiry || null,
+           JSON.stringify(photos || [])]
+        );
+        vehicle = vehicleResult.rows[0];
+
+        await db.query(
+          `UPDATE drivers SET vehicle_id = $1 WHERE id = $2`,
+          [vehicle.id, driverRecord.id]
+        );
+      } catch (vErr) {
+        console.warn('[RegisterDriver] Vehicle creation failed:', vErr.message);
+      }
+    }
+
+    // Mark registration as complete
+    await db.query(
+      `UPDATE users SET registration_step = 'complete', registration_completed = true WHERE id = $1`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Driver profile completed. Your application will be reviewed within 24 hours.',
+      data: {
+        driver: { ...driverRecord, vehicle }
+      }
+    });
+  } catch (err) {
+    console.error('[RegisterDriver Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to complete driver registration' });
+  }
+};
+
+/**
+ * POST /auth/register-fleet-owner
+ * Called after OTP verification for fleet owners.
+ * Creates fleet record and sets registration_step = 'add_vehicles'.
+ * Returns fleet_id for vehicle addition step.
+ */
+const registerFleetOwner = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const {
+      company_name, description, city, country = 'Cameroon',
+      business_reg_number
+    } = req.body;
+
+    if (!company_name) {
+      return res.status(400).json({ success: false, message: 'company_name is required' });
+    }
+
+    // Check user exists and is a fleet_owner
+    const userResult = await db.query(
+      'SELECT id, role, city, country FROM users WHERE id = $1',
+      [userId]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const user = userResult.rows[0];
+    if (user.role !== 'fleet_owner') {
+      return res.status(400).json({ success: false, message: 'User is not registered as a fleet owner' });
+    }
+
+    // Check if fleet already exists for this owner
+    const existingFleet = await db.query(
+      'SELECT id, fleet_number FROM fleets WHERE owner_id = $1 ORDER BY fleet_number ASC',
+      [userId]
+    );
+
+    let fleet;
+    if (existingFleet.rows.length > 0) {
+      // Return existing first fleet
+      const fleetDetail = await db.query(
+        `SELECT f.*, (SELECT COUNT(*) FROM fleet_vehicles fv WHERE fv.fleet_id = f.id) as vehicle_count
+         FROM fleets f WHERE f.id = $1`,
+        [existingFleet.rows[0].id]
+      );
+      fleet = fleetDetail.rows[0];
+    } else {
+      // Create first fleet record
+      const fleetResult = await db.query(
+        `INSERT INTO fleets (owner_id, name, description, city, country, fleet_number, is_active, is_approved)
+         VALUES ($1, $2, $3, $4, $5, 1, false, false)
+         RETURNING id, name, description, city, country, fleet_number, is_active, is_approved, created_at`,
+        [userId, company_name, description || null, city || user.city || null, country]
+      );
+      fleet = { ...fleetResult.rows[0], vehicle_count: 0 };
+    }
+
+    // Update registration step
+    await db.query(
+      `UPDATE users SET registration_step = 'add_vehicles', registration_completed = false WHERE id = $1`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Fleet account created! Now add your first fleet of 5-15 vehicles.',
+      data: {
+        fleet,
+        next_step: 'add_vehicles',
+        min_vehicles: 5,
+        max_vehicles: 15
+      }
+    });
+  } catch (err) {
+    console.error('[RegisterFleetOwner Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to complete fleet owner registration' });
   }
 };
 
@@ -270,6 +571,17 @@ const login = async (req, res) => {
       driverInfo = driverResult.rows[0] || null;
     }
 
+    // Get fleet info if fleet_owner
+    let fleetInfo = null;
+    if (user.role === 'fleet_owner') {
+      const fleetResult = await db.query(
+        `SELECT f.*, (SELECT COUNT(*) FROM fleet_vehicles fv WHERE fv.fleet_id = f.id) as vehicle_count
+         FROM fleets f WHERE f.owner_id = $1 ORDER BY f.fleet_number ASC`,
+        [user.id]
+      );
+      fleetInfo = fleetResult.rows;
+    }
+
     const tokenPayload = {
       id: user.id,
       phone: user.phone,
@@ -300,9 +612,12 @@ const login = async (req, res) => {
           loyalty_points: user.loyalty_points,
           wallet_balance: user.wallet_balance,
           subscription_plan: user.subscription_plan,
-          profile_picture: user.profile_picture
+          profile_picture: user.profile_picture,
+          registration_step: user.registration_step,
+          registration_completed: user.registration_completed
         },
-        driver: driverInfo
+        driver: driverInfo,
+        fleets: fleetInfo
       }
     });
   } catch (err) {
@@ -325,7 +640,9 @@ const verify = async (req, res) => {
     }
 
     const result = await db.query(
-      'SELECT id, otp_code, otp_expiry, is_verified, is_suspended, language, full_name, email, otp_attempts FROM users WHERE phone = $1',
+      `SELECT id, otp_code, otp_expiry, is_verified, is_suspended, language, full_name, email,
+              otp_attempts, role, registration_step
+       FROM users WHERE phone = $1`,
       [phone]
     );
 
@@ -336,7 +653,7 @@ const verify = async (req, res) => {
     const user = result.rows[0];
 
     if (user.is_verified) {
-      return res.json({ success: true, message: 'Account already verified' });
+      return res.json({ success: true, message: 'Account already verified', role: user.role });
     }
 
     if (user.is_suspended) {
@@ -374,7 +691,12 @@ const verify = async (req, res) => {
         .catch((err) => console.warn('[AuthController] Welcome email failed:', err.message));
     }
 
-    res.json({ success: true, message: 'Phone verified successfully. Welcome to MOBO!' });
+    res.json({
+      success: true,
+      message: 'Phone verified successfully. Welcome to MOBO!',
+      role: user.role,
+      registration_step: user.registration_step
+    });
   } catch (err) {
     console.error('[Verify Error]', err);
     res.status(500).json({ success: false, message: 'Verification failed' });
@@ -384,7 +706,6 @@ const verify = async (req, res) => {
 /**
  * POST /auth/resend-otp
  * Rate limited: max 3 OTP requests per phone per hour.
- * Sends OTP via SMS (with language preference) + email backup.
  */
 const resendOtp = async (req, res) => {
   try {
@@ -409,7 +730,6 @@ const resendOtp = async (req, res) => {
       return res.json({ success: true, message: 'Account already verified' });
     }
 
-    // Rate limiting
     const recentSends = await getOtpSendCount(phone);
     if (recentSends >= MAX_OTP_REQUESTS_PER_HOUR) {
       return res.status(429).json({
@@ -426,11 +746,9 @@ const resendOtp = async (req, res) => {
       [otp_code, otp_expiry, user.id]
     );
 
-    // Send via SMS with language preference
     const userLanguage = user.language || 'en';
     const smsResult = await smsService.sendOTP(phone, otp_code, userLanguage);
 
-    // Email backup if available
     let emailResult = null;
     if (user.email) {
       emailResult = await emailService.sendVerificationEmail(
@@ -438,7 +756,6 @@ const resendOtp = async (req, res) => {
       );
     }
 
-    // Log the attempt
     await logOtpSend(user.id, phone);
 
     res.json({
@@ -515,4 +832,4 @@ const refreshToken = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, verify, resendOtp, logout, refreshToken };
+module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner };

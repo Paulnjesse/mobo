@@ -16,6 +16,7 @@ import Promotions from './pages/Promotions';
 import Notifications from './pages/Notifications';
 import SafetyReports from './pages/SafetyReports';
 import Settings from './pages/Settings';
+import FleetManagement from './pages/FleetManagement';
 
 const theme = createTheme({
   palette: {
@@ -121,18 +122,19 @@ function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedLayout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/drivers" element={<Drivers />} />
-              <Route path="/rides" element={<Rides />} />
-              <Route path="/payments" element={<Payments />} />
-              <Route path="/map" element={<LocationMap />} />
-              <Route path="/surge" element={<SurgePricing />} />
-              <Route path="/promotions" element={<Promotions />} />
+              <Route path="/"             element={<Dashboard />} />
+              <Route path="/users"        element={<Users />} />
+              <Route path="/drivers"      element={<Drivers />} />
+              <Route path="/fleets"       element={<FleetManagement />} />
+              <Route path="/rides"        element={<Rides />} />
+              <Route path="/payments"     element={<Payments />} />
+              <Route path="/map"          element={<LocationMap />} />
+              <Route path="/surge"        element={<SurgePricing />} />
+              <Route path="/promotions"   element={<Promotions />} />
               <Route path="/notifications" element={<Notifications />} />
-              <Route path="/safety" element={<SafetyReports />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/safety"       element={<SafetyReports />} />
+              <Route path="/settings"     element={<Settings />} />
+              <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -4,9 +4,10 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { authService } from '../services/auth';
+import { fleetService } from '../services/fleet';
 
 const TOKEN_KEY = '@mobo_token';
-const USER_KEY = '@mobo_user';
+const USER_KEY  = '@mobo_user';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -61,21 +62,22 @@ async function registerForPushNotifications() {
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser]                     = useState(null);
+  const [token, setToken]                   = useState(null);
+  const [isLoading, setIsLoading]           = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lastNotification, setLastNotification] = useState(null);
+
+  // Fleet owner state
+  const [myFleets, setMyFleets]             = useState([]);
+  const [fleetsLoading, setFleetsLoading]   = useState(false);
 
   useEffect(() => {
     loadStoredAuth();
 
-    // Listen for notifications received while app is in foreground
     const foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
       setLastNotification(notification);
     });
-
-    // Listen for notification taps (background / killed state)
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       setLastNotification(response.notification);
     });
@@ -93,8 +95,9 @@ export function AuthProvider({ children }) {
         AsyncStorage.getItem(USER_KEY),
       ]);
       if (storedToken && storedUser) {
+        const parsedUser = JSON.parse(storedUser);
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setUser(parsedUser);
         setIsAuthenticated(true);
       }
     } catch (err) {
@@ -121,38 +124,85 @@ export function AuthProvider({ children }) {
     ]);
     setToken(null);
     setUser(null);
+    setMyFleets([]);
     setIsAuthenticated(false);
   };
 
+  // ── Login ──────────────────────────────────────────────────
   const login = useCallback(async (identifier, password) => {
     const response = await authService.login(identifier, password);
-    await persistAuth(response.token, response.user);
+    const { token: authToken, user: authUser, fleets } = response.data;
 
-    // Register for push notifications after successful login
+    await persistAuth(authToken, authUser);
+
+    // Pre-load fleet data if fleet owner
+    if (authUser.role === 'fleet_owner' && fleets) {
+      setMyFleets(fleets);
+    }
+
+    // Register for push notifications
     try {
       const pushToken = await registerForPushNotifications();
       if (pushToken) {
-        // Send token to backend so server can push notifications to this device
         await authService.updateProfile({ expo_push_token: pushToken }).catch(() => {});
       }
     } catch (pushErr) {
-      // Non-fatal — login still succeeds
       console.warn('[AuthContext] Push registration failed:', pushErr.message);
     }
 
     return response;
   }, []);
 
-  const register = useCallback(async (userData) => {
-    const response = await authService.signup(userData);
+  // ── Rider registration ─────────────────────────────────────
+  const registerRider = useCallback(async (userData) => {
+    const response = await authService.registerRider(userData);
+    // Don't persist token yet — user needs OTP verification first
     return response;
   }, []);
 
+  // ── Driver registration ────────────────────────────────────
+  const registerDriver = useCallback(async (userData) => {
+    // Single unified call: backend creates user + driver record in one step
+    const response = await authService.signup({ ...userData, role: 'driver' });
+    return response;
+  }, []);
+
+  const completeDriverRegistration = useCallback(async (driverData) => {
+    const response = await authService.registerDriverComplete(driverData);
+    // Update stored user with completed registration step
+    if (user) {
+      const updatedUser = { ...user, registration_step: 'complete', registration_completed: true };
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+    return response;
+  }, [user]);
+
+  // ── Fleet owner registration ───────────────────────────────
+  const registerFleetOwner = useCallback(async (userData) => {
+    // Single call — backend creates user + fleet record
+    const response = await authService.signup({ ...userData, role: 'fleet_owner' });
+    return response;
+  }, []);
+
+  const completeFleetOwnerRegistration = useCallback(async (fleetData) => {
+    const response = await authService.registerFleetOwnerComplete(fleetData);
+    if (response.data?.fleet) {
+      setMyFleets([response.data.fleet]);
+    }
+    if (user) {
+      const updatedUser = { ...user, registration_step: 'add_vehicles' };
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+    return response;
+  }, [user]);
+
+  // ── OTP ────────────────────────────────────────────────────
   const verifyOtp = useCallback(async (phone, otp) => {
     const response = await authService.verifyOtp(phone, otp);
-    if (response.token) {
-      await persistAuth(response.token, response.user);
-    }
+    // Note: verification doesn't return a token in this flow.
+    // The user still needs to log in after verifying.
     return response;
   }, []);
 
@@ -160,15 +210,17 @@ export function AuthProvider({ children }) {
     return authService.resendOtp(phone);
   }, []);
 
+  // ── Logout ─────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
       await authService.logout();
-    } catch (err) {
-      // logout locally regardless
+    } catch (_) {
+      // Logout locally regardless of server error
     }
     await clearAuth();
   }, []);
 
+  // ── Profile ────────────────────────────────────────────────
   const updateProfile = useCallback(async (profileData) => {
     const updated = await authService.updateProfile(profileData);
     const newUser = { ...user, ...updated };
@@ -180,29 +232,74 @@ export function AuthProvider({ children }) {
   const refreshToken = useCallback(async () => {
     try {
       const response = await authService.refreshToken(token);
-      await persistAuth(response.token, response.user || user);
-      return response.token;
+      const newToken = response.data?.token || response.token;
+      await AsyncStorage.setItem(TOKEN_KEY, newToken);
+      setToken(newToken);
+      return newToken;
     } catch (err) {
       await clearAuth();
       throw err;
     }
-  }, [token, user]);
+  }, [token]);
+
+  // ── Fleet management ───────────────────────────────────────
+  const loadFleets = useCallback(async () => {
+    if (!isAuthenticated || user?.role !== 'fleet_owner') return;
+    setFleetsLoading(true);
+    try {
+      const response = await fleetService.getMyFleets();
+      setMyFleets(response.data?.fleets || []);
+    } catch (err) {
+      console.warn('[AuthContext] Failed to load fleets:', err.message);
+    } finally {
+      setFleetsLoading(false);
+    }
+  }, [isAuthenticated, user]);
+
+  const addFleet = useCallback(async (fleetData) => {
+    const response = await fleetService.createFleet(fleetData);
+    if (response.data?.fleet) {
+      setMyFleets((prev) => [...prev, response.data.fleet]);
+    }
+    return response;
+  }, []);
 
   return (
     <AuthContext.Provider
       value={{
+        // Auth state
         user,
         token,
         isLoading,
         isAuthenticated,
+
+        // Auth actions
         login,
-        register,
+        logout,
         verifyOtp,
         resendOtp,
-        logout,
-        updateProfile,
         refreshToken,
+        updateProfile,
         setUser,
+
+        // Role-specific registration
+        registerRider,
+        registerDriver,
+        completeDriverRegistration,
+        registerFleetOwner,
+        completeFleetOwnerRegistration,
+
+        // Legacy compat
+        register: registerRider,
+
+        // Fleet state
+        myFleets,
+        fleetsLoading,
+        loadFleets,
+        addFleet,
+        setMyFleets,
+
+        // Notifications
         lastNotification,
       }}
     >

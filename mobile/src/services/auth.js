@@ -1,18 +1,23 @@
 import api from './api';
 
 export const authService = {
+  // ── Core auth ──────────────────────────────────────────────
   async signup(userData) {
-    const response = await api.post('/auth/register', userData);
+    const response = await api.post('/auth/signup', userData);
     return response.data;
   },
 
   async login(identifier, password) {
-    const response = await api.post('/auth/login', { identifier, password });
+    const isPhone = !identifier.includes('@');
+    const body = isPhone
+      ? { phone: identifier, password }
+      : { email: identifier, password };
+    const response = await api.post('/auth/login', body);
     return response.data;
   },
 
-  async verifyOtp(phone, otp) {
-    const response = await api.post('/auth/verify-otp', { phone, otp });
+  async verifyOtp(phone, otp_code) {
+    const response = await api.post('/auth/verify', { phone, otp_code });
     return response.data;
   },
 
@@ -22,7 +27,9 @@ export const authService = {
   },
 
   async refreshToken(token) {
-    const response = await api.post('/auth/refresh', { token });
+    const response = await api.post('/auth/refresh-token', {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     return response.data;
   },
 
@@ -31,16 +38,47 @@ export const authService = {
     return response.data;
   },
 
-  async forgotPassword(identifier) {
-    const response = await api.post('/auth/forgot-password', { identifier });
+  // ── Role-specific registration ─────────────────────────────
+  /**
+   * Register a rider — single step.
+   * Sends: full_name, phone, email?, password, role:'rider', language, country
+   */
+  async registerRider(data) {
+    const response = await api.post('/auth/signup', { ...data, role: 'rider' });
     return response.data;
   },
 
-  async resetPassword(token, newPassword) {
-    const response = await api.post('/auth/reset-password', { token, newPassword });
+  /**
+   * Register a driver — two steps.
+   * Step 1: /auth/signup with role:'driver' (creates user + initial driver record)
+   * Step 2: /auth/register-driver (completes driver + vehicle details)
+   */
+  async registerDriverSignup(data) {
+    const response = await api.post('/auth/signup', { ...data, role: 'driver' });
     return response.data;
   },
 
+  async registerDriverComplete(driverData) {
+    const response = await api.post('/auth/register-driver', driverData);
+    return response.data;
+  },
+
+  /**
+   * Register a fleet owner — two steps.
+   * Step 1: /auth/signup with role:'fleet_owner'
+   * Step 2: /auth/register-fleet-owner (creates fleet)
+   */
+  async registerFleetOwnerSignup(data) {
+    const response = await api.post('/auth/signup', { ...data, role: 'fleet_owner' });
+    return response.data;
+  },
+
+  async registerFleetOwnerComplete(fleetData) {
+    const response = await api.post('/auth/register-fleet-owner', fleetData);
+    return response.data;
+  },
+
+  // ── Profile ────────────────────────────────────────────────
   async updateProfile(profileData) {
     const response = await api.put('/users/profile', profileData);
     return response.data;
@@ -58,6 +96,16 @@ export const authService = {
 
   async deleteAccount() {
     const response = await api.delete('/users/account');
+    return response.data;
+  },
+
+  async forgotPassword(identifier) {
+    const response = await api.post('/auth/forgot-password', { identifier });
+    return response.data;
+  },
+
+  async resetPassword(token, newPassword) {
+    const response = await api.post('/auth/reset-password', { token, newPassword });
     return response.data;
   },
 };

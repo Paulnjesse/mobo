@@ -48,6 +48,8 @@ const proxyOptions = (target, pathRewrite) => ({
 // POST /api/auth/verify
 // POST /api/auth/resend-otp
 // POST /api/auth/logout
+// POST /api/auth/register-driver (protected - handled by user service)
+// POST /api/auth/register-fleet-owner (protected - handled by user service)
 // ============================================================
 router.use(
   '/auth',
@@ -71,6 +73,25 @@ router.use(
   '/users',
   verifyToken,
   createProxyMiddleware(proxyOptions(USER_SERVICE, { '^/api/users': '/users' }))
+);
+
+// ============================================================
+// FLEET ROUTES (protected — fleet owners and admins)
+// POST   /api/fleet
+// GET    /api/fleet
+// GET    /api/fleet/:id
+// POST   /api/fleet/:id/vehicles
+// PUT    /api/fleet/:id/vehicles/:vehicleId
+// DELETE /api/fleet/:id/vehicles/:vehicleId
+// PUT    /api/fleet/:id/vehicles/:vehicleId/driver
+// DELETE /api/fleet/:id/vehicles/:vehicleId/driver
+// GET    /api/fleet/:id/earnings
+// GET    /api/fleet/:id/vehicles
+// ============================================================
+router.use(
+  '/fleet',
+  verifyToken,
+  createProxyMiddleware(proxyOptions(USER_SERVICE, { '^/api/fleet': '/fleet' }))
 );
 
 // ============================================================
