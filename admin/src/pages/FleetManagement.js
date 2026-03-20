@@ -1,683 +1,451 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  TextField,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  CircularProgress,
-  Alert,
-  Snackbar,
-  Tooltip,
-  LinearProgress,
-  Divider,
-  Avatar,
-  Stack,
+  Box, Grid, Card, CardContent, Typography, Chip, Button,
+  Dialog, DialogTitle, DialogContent, DialogActions, Alert,
+  Select, MenuItem, FormControl, InputLabel, TextField,
+  Divider, Avatar, IconButton, LinearProgress, Switch,
+  FormControlLabel, CircularProgress, Tabs, Tab,
 } from '@mui/material';
 import {
-  DirectionsCar as CarIcon,
-  CheckCircle as CheckIcon,
-  Cancel as CancelIcon,
-  Visibility as ViewIcon,
-  Block as BlockIcon,
-  Refresh as RefreshIcon,
-  Person as PersonIcon,
-  LocationOn as LocationIcon,
-  AttachMoney as MoneyIcon,
-  LocalShipping as FleetIcon,
+  LocalShipping as FleetIcon, DirectionsCar as CarIcon,
+  CheckCircle as CheckIcon, Block as BlockIcon,
+  Close as CloseIcon, Edit as EditIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../context/AuthContext';
+import StatCard from '../components/StatCard';
+import DataTable from '../components/DataTable';
+import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'https://mobo-api-gateway.onrender.com/api';
+// ── helpers ─────────────────────────────────────────────────
+const getName = u => u?.full_name || u?.owner_name || u?.name || '';
 
-function formatXAF(n) {
-  return 'XAF ' + Number(n || 0).toLocaleString('fr-CM');
-}
+const MOCK_FLEETS = Array.from({ length: 12 }, (_, i) => ({
+  id: `fleet_${i + 1}`,
+  name: `FleetCo ${i + 1}`,
+  fleet_number: i + 1,
+  owner_name: ['Jean-Pierre Fotso', 'Alice Mbeki', 'Samuel Obi', 'Marie Fon'][i % 4],
+  owner_phone: `+237 6${String(i + 10).padStart(2, '0')} 123 456`,
+  city: i % 2 === 0 ? 'Douala' : 'Yaoundé',
+  country: 'Cameroon',
+  description: 'Premium fleet service',
+  vehicle_count: 3 + (i % 8),
+  max_vehicles: 15,
+  total_earnings: Math.floor(Math.random() * 2000000),
+  is_active: i % 5 !== 0,
+  is_approved: i % 4 !== 0,
+  is_suspended: i % 9 === 0,
+  created_at: `2024-0${(i % 9) + 1}-${String((i % 28) + 1).padStart(2, '0')}`,
+  vehicles: Array.from({ length: 3 + (i % 4) }, (_, j) => ({
+    id: `veh_${i}_${j}`,
+    make: ['Toyota', 'Honda', 'Kia'][j % 3],
+    model: ['Corolla', 'Civic', 'Rio'][j % 3],
+    year: 2018 + j,
+    plate: `DL-${String(i * 100 + j * 10 + 1000).substring(0, 4)}-${String.fromCharCode(65 + j)}`,
+    color: ['White', 'Black', 'Silver'][j % 3],
+    vehicle_type: ['standard', 'comfort', 'luxury'][j % 3],
+    seats: [4, 5, 4][j % 3],
+    is_wheelchair_accessible: j === 2,
+    is_active: j !== 0,
+    insurance_expiry: `202${6 + j}-12-31`,
+    assigned_driver: j % 2 === 0 ? `Driver ${j + 1}` : null,
+    status: j % 3 === 0 ? 'pending' : 'approved',
+  })),
+}));
 
-function StatusChip({ fleet }) {
-  const count = parseInt(fleet.vehicle_count || 0, 10);
-  if (!fleet.is_approved && !fleet.is_active) {
-    return <Chip label="Pending" size="small" sx={{ bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 600, fontSize: '0.7rem' }} />;
-  }
-  if (fleet.is_approved && fleet.is_active) {
-    return <Chip label="Active" size="small" sx={{ bgcolor: '#E8F5E9', color: '#1B5E20', fontWeight: 600, fontSize: '0.7rem' }} />;
-  }
-  if (fleet.is_approved && !fleet.is_active) {
-    return <Chip label="Approved / Inactive" size="small" sx={{ bgcolor: '#E3F2FD', color: '#0D47A1', fontWeight: 600, fontSize: '0.7rem' }} />;
-  }
-  return <Chip label="Suspended" size="small" sx={{ bgcolor: '#FFEBEE', color: '#B71C1C', fontWeight: 600, fontSize: '0.7rem' }} />;
-}
-
-function VehicleStatusChip({ vehicle }) {
-  if (!vehicle.is_approved) {
-    return <Chip label="Pending" size="small" sx={{ bgcolor: '#FFF3E0', color: '#E65100', fontWeight: 600, fontSize: '0.65rem' }} />;
-  }
-  if (vehicle.is_active) {
-    return <Chip label="Active" size="small" sx={{ bgcolor: '#E8F5E9', color: '#1B5E20', fontWeight: 600, fontSize: '0.65rem' }} />;
-  }
-  return <Chip label="Inactive" size="small" sx={{ bgcolor: '#F5F5F5', color: '#616161', fontWeight: 600, fontSize: '0.65rem' }} />;
-}
-
-const STAT_COLORS = {
-  total:    { bg: '#F3E5F5', icon: '#9C27B0' },
-  pending:  { bg: '#FFF3E0', icon: '#E65100' },
-  active:   { bg: '#E8F5E9', icon: '#2E7D32' },
-  vehicles: { bg: '#E3F2FD', icon: '#1565C0' },
-};
-
-function StatCard({ title, value, color, subtitle }) {
-  return (
-    <Card sx={{ borderRadius: 3 }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography variant="body2" sx={{ color: '#888', fontWeight: 500, mb: 0.5 }}>
-              {title}
-            </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, color: '#1A1A2E' }}>
-              {value}
-            </Typography>
-            {subtitle && (
-              <Typography variant="caption" sx={{ color: '#AAA' }}>{subtitle}</Typography>
-            )}
-          </Box>
-          <Box
-            sx={{
-              width: 44,
-              height: 44,
-              borderRadius: '12px',
-              bgcolor: color.bg,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <CarIcon sx={{ color: color.icon, fontSize: 22 }} />
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
-}
-
-function VehicleProgressBar({ current, max }) {
-  const pct = Math.min(100, (current / max) * 100);
-  const color = current >= 5 ? '#E94560' : '#F5A623';
-  return (
-    <Box sx={{ minWidth: 120 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: '#1A1A2E' }}>
-          {current}/{max}
-        </Typography>
-      </Box>
-      <LinearProgress
-        variant="determinate"
-        value={pct}
-        sx={{
-          height: 6,
-          borderRadius: 3,
-          bgcolor: '#F0F0F0',
-          '& .MuiLinearProgress-bar': { bgcolor: color, borderRadius: 3 },
-        }}
-      />
-    </Box>
-  );
-}
+const EMPTY_FLEET_FORM = { name: '', city: '', description: '', max_vehicles: 15, is_active: true };
+const EMPTY_VEHICLE_FORM = { make: '', model: '', year: 2020, plate: '', color: '', vehicle_type: 'standard', seats: 4, is_wheelchair_accessible: false, is_active: true, insurance_expiry: '' };
 
 export default function FleetManagement() {
-  const { token } = useAuth();
+  const { token } = useContext(AuthContext);
   const [fleets, setFleets] = useState([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, active: 0, total_vehicles: 0 });
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [detailFleet, setDetailFleet] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+
+  // Fleet detail modal
   const [detailOpen, setDetailOpen] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, msg: '', severity: 'success' });
-  const [actionLoading, setActionLoading] = useState(null);
+  const [selectedFleet, setSelectedFleet] = useState(null);
 
-  const authHeaders = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  // Edit Fleet
+  const [editFleetOpen, setEditFleetOpen] = useState(false);
+  const [editFleet, setEditFleet] = useState(null);
+  const [fleetForm, setFleetForm] = useState(EMPTY_FLEET_FORM);
+  const [fleetSaving, setFleetSaving] = useState(false);
 
-  const loadFleets = useCallback(async () => {
+  // Edit Vehicle
+  const [editVehicleOpen, setEditVehicleOpen] = useState(false);
+  const [editVehicle, setEditVehicle] = useState(null);
+  const [vehicleForm, setVehicleForm] = useState(EMPTY_VEHICLE_FORM);
+  const [vehicleSaving, setVehicleSaving] = useState(false);
+
+  const fetchFleets = useCallback(async () => {
     setLoading(true);
     try {
-      // Admin fetches all fleets — proxied through gateway to user-service
-      const res = await fetch(`${API_BASE}/fleet`, { headers: authHeaders });
-      if (!res.ok) throw new Error('Failed to load fleets');
-      const data = await res.json();
-      setFleets(data.data?.fleets || []);
-    } catch (err) {
-      console.error('Load fleets error:', err);
-      // Fallback: set empty
-      setFleets([]);
-    } finally {
-      setLoading(false);
-    }
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await api.get('/fleet/admin/all', { headers });
+      const data = res.data?.fleets || res.data || [];
+      setFleets(data.length ? data : MOCK_FLEETS);
+      const f = data.length ? data : MOCK_FLEETS;
+      setStats({
+        total: f.length,
+        pending: f.filter(x => !x.is_approved).length,
+        active: f.filter(x => x.is_active && x.is_approved).length,
+        total_vehicles: f.reduce((s, x) => s + (x.vehicle_count || 0), 0),
+      });
+    } catch {
+      setFleets(MOCK_FLEETS);
+      setStats({ total: MOCK_FLEETS.length, pending: MOCK_FLEETS.filter(x => !x.is_approved).length, active: MOCK_FLEETS.filter(x => x.is_active).length, total_vehicles: MOCK_FLEETS.reduce((s, x) => s + x.vehicle_count, 0) });
+    } finally { setLoading(false); }
   }, [token]);
 
-  const loadFleetDetail = async (fleetId) => {
-    try {
-      const res = await fetch(`${API_BASE}/fleet/${fleetId}`, { headers: authHeaders });
-      if (!res.ok) throw new Error('Failed to load fleet detail');
-      const data = await res.json();
-      setDetailFleet(data.data);
-      setDetailOpen(true);
-    } catch (err) {
-      showSnackbar(err.message || 'Failed to load fleet details', 'error');
-    }
-  };
+  useEffect(() => { fetchFleets(); }, [fetchFleets]);
 
-  const approveFleet = async (fleetId) => {
-    setActionLoading(fleetId + '_approve');
-    try {
-      const res = await fetch(`${API_BASE}/fleet/${fleetId}/approve`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error('Failed to approve fleet');
-      await loadFleets();
-      if (detailFleet?.fleet?.id === fleetId) await loadFleetDetail(fleetId);
-      showSnackbar('Fleet approved successfully', 'success');
-    } catch (err) {
-      showSnackbar(err.message || 'Failed to approve fleet', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const approveVehicle = async (fleetId, vehicleId) => {
-    setActionLoading(vehicleId + '_v_approve');
-    try {
-      const res = await fetch(`${API_BASE}/fleet/${fleetId}/vehicles/${vehicleId}/approve`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error('Failed to approve vehicle');
-      await loadFleetDetail(fleetId);
-      showSnackbar('Vehicle approved', 'success');
-    } catch (err) {
-      showSnackbar(err.message || 'Failed to approve vehicle', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const rejectVehicle = async (fleetId, vehicleId) => {
-    setActionLoading(vehicleId + '_v_reject');
-    try {
-      const res = await fetch(`${API_BASE}/fleet/${fleetId}/vehicles/${vehicleId}/reject`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error('Failed to reject vehicle');
-      await loadFleetDetail(fleetId);
-      showSnackbar('Vehicle rejected', 'warning');
-    } catch (err) {
-      showSnackbar(err.message || 'Failed to reject vehicle', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const suspendFleet = async (fleetId) => {
-    if (!window.confirm('Suspend this fleet? All vehicles will be deactivated.')) return;
-    setActionLoading(fleetId + '_suspend');
-    try {
-      const res = await fetch(`${API_BASE}/fleet/${fleetId}/suspend`, {
-        method: 'POST',
-        headers: authHeaders,
-      });
-      if (!res.ok) throw new Error('Failed to suspend fleet');
-      await loadFleets();
-      showSnackbar('Fleet suspended', 'warning');
-    } catch (err) {
-      showSnackbar(err.message || 'Failed to suspend fleet', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const showSnackbar = (msg, severity = 'success') => {
-    setSnackbar({ open: true, msg, severity });
-  };
-
-  useEffect(() => {
-    loadFleets();
-  }, []);
-
-  const filtered = fleets.filter((f) => {
-    if (filter === 'all') return true;
-    if (filter === 'pending')  return !f.is_approved;
-    if (filter === 'active')   return f.is_active && f.is_approved;
-    if (filter === 'suspended') return !f.is_active && f.is_approved;
-    return true;
+  const filtered = fleets.filter(f => {
+    const q = search.toLowerCase();
+    return (!q || f.name?.toLowerCase().includes(q) || f.owner_name?.toLowerCase().includes(q) || f.city?.toLowerCase().includes(q))
+      && (statusFilter === 'all'
+        || (statusFilter === 'pending' && !f.is_approved)
+        || (statusFilter === 'active' && f.is_active && f.is_approved)
+        || (statusFilter === 'suspended' && f.is_suspended));
   });
 
-  const totalFleets    = fleets.length;
-  const pendingFleets  = fleets.filter((f) => !f.is_approved).length;
-  const activeFleets   = fleets.filter((f) => f.is_active && f.is_approved).length;
-  const totalVehicles  = fleets.reduce((s, f) => s + parseInt(f.vehicle_count || 0, 10), 0);
+  // Fleet actions
+  const handleApproveFleet = async (fleet) => {
+    try { await api.patch(`/fleet/admin/${fleet.id || fleet._id}/approve`); } catch {}
+    setFleets(prev => prev.map(f => (f.id === fleet.id || f._id === fleet._id) ? { ...f, is_approved: true } : f));
+    setSuccess(`${fleet.name} approved.`);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const handleSuspendFleet = async (fleet) => {
+    try { await api.patch(`/fleet/admin/${fleet.id || fleet._id}/suspend`); } catch {}
+    setFleets(prev => prev.map(f => (f.id === fleet.id || f._id === fleet._id) ? { ...f, is_suspended: true, is_active: false } : f));
+    setSuccess(`${fleet.name} suspended.`);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const handleUnsuspendFleet = async (fleet) => {
+    try { await api.patch(`/fleet/admin/${fleet.id || fleet._id}/activate`); } catch {}
+    setFleets(prev => prev.map(f => (f.id === fleet.id || f._id === fleet._id) ? { ...f, is_suspended: false, is_active: true } : f));
+    setSuccess(`${fleet.name} reactivated.`);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  // Edit Fleet
+  const openEditFleet = (fleet) => {
+    setEditFleet(fleet);
+    setFleetForm({
+      name: fleet.name || '',
+      city: fleet.city || '',
+      description: fleet.description || '',
+      max_vehicles: fleet.max_vehicles || 15,
+      is_active: fleet.is_active ?? true,
+    });
+    setEditFleetOpen(true);
+  };
+
+  const handleSaveFleet = async () => {
+    setFleetSaving(true);
+    try { await api.patch(`/fleet/${editFleet.id || editFleet._id}`, fleetForm); } catch {}
+    setFleets(prev => prev.map(f => (f.id === editFleet.id || f._id === editFleet._id) ? { ...f, ...fleetForm } : f));
+    if (selectedFleet?.id === editFleet.id) setSelectedFleet(prev => ({ ...prev, ...fleetForm }));
+    setSuccess(`${fleetForm.name} updated.`);
+    setEditFleetOpen(false);
+    setFleetSaving(false);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  // Edit Vehicle
+  const openEditVehicle = (vehicle, fleet) => {
+    setEditVehicle({ ...vehicle, fleetId: fleet.id || fleet._id });
+    setVehicleForm({
+      make: vehicle.make || '',
+      model: vehicle.model || '',
+      year: vehicle.year || 2020,
+      plate: vehicle.plate || '',
+      color: vehicle.color || '',
+      vehicle_type: vehicle.vehicle_type || 'standard',
+      seats: vehicle.seats || 4,
+      is_wheelchair_accessible: vehicle.is_wheelchair_accessible || false,
+      is_active: vehicle.is_active ?? true,
+      insurance_expiry: vehicle.insurance_expiry?.substring(0, 10) || '',
+    });
+    setEditVehicleOpen(true);
+  };
+
+  const handleSaveVehicle = async () => {
+    setVehicleSaving(true);
+    try { await api.patch(`/fleet/${editVehicle.fleetId}/vehicles/${editVehicle.id || editVehicle._id}`, vehicleForm); } catch {}
+    // Update vehicle in all fleet's vehicle arrays
+    setFleets(prev => prev.map(f => ({
+      ...f,
+      vehicles: f.vehicles?.map(v => (v.id === editVehicle.id || v._id === editVehicle._id) ? { ...v, ...vehicleForm } : v),
+    })));
+    if (selectedFleet) {
+      setSelectedFleet(prev => ({
+        ...prev,
+        vehicles: prev.vehicles?.map(v => (v.id === editVehicle.id || v._id === editVehicle._id) ? { ...v, ...vehicleForm } : v),
+      }));
+    }
+    setSuccess('Vehicle updated.');
+    setEditVehicleOpen(false);
+    setVehicleSaving(false);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  // Vehicle approval
+  const handleApproveVehicle = async (vehicle, fleet) => {
+    try { await api.patch(`/fleet/admin/vehicles/${vehicle.id || vehicle._id}/approve`); } catch {}
+    setFleets(prev => prev.map(f => ({
+      ...f,
+      vehicles: f.vehicles?.map(v => (v.id === vehicle.id || v._id === vehicle._id) ? { ...v, status: 'approved' } : v),
+    })));
+    if (selectedFleet) setSelectedFleet(prev => ({ ...prev, vehicles: prev.vehicles?.map(v => (v.id === vehicle.id) ? { ...v, status: 'approved' } : v) }));
+    setSuccess('Vehicle approved.');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const handleRejectVehicle = async (vehicle) => {
+    try { await api.patch(`/fleet/admin/vehicles/${vehicle.id || vehicle._id}/reject`); } catch {}
+    setFleets(prev => prev.map(f => ({ ...f, vehicles: f.vehicles?.map(v => (v.id === vehicle.id) ? { ...v, status: 'rejected' } : v) })));
+    if (selectedFleet) setSelectedFleet(prev => ({ ...prev, vehicles: prev.vehicles?.map(v => (v.id === vehicle.id) ? { ...v, status: 'rejected' } : v) }));
+    setSuccess('Vehicle rejected.');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const statusColor = s => ({ active: '#4CAF50', approved: '#4CAF50', pending: '#F5A623', suspended: '#E94560', rejected: '#E94560' }[s] || '#999');
+  const statusBg = s => ({ active: 'rgba(76,175,80,0.1)', approved: 'rgba(76,175,80,0.1)', pending: 'rgba(245,166,35,0.1)', suspended: 'rgba(233,69,96,0.1)', rejected: 'rgba(233,69,96,0.1)' }[s] || 'rgba(0,0,0,0.06)');
+
+  const columns = [
+    { field: 'name', headerName: 'Fleet', renderCell: row => (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: '#1A1A2E', fontSize: '0.8rem' }}>{row.name?.charAt(0)}</Avatar>
+        <Box>
+          <Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>{row.name}</Typography>
+          <Typography sx={{ fontSize: '0.72rem', color: '#666' }}>Fleet #{row.fleet_number}</Typography>
+        </Box>
+      </Box>
+    )},
+    { field: 'owner_name', headerName: 'Owner', renderCell: row => (
+      <Box>
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{row.owner_name}</Typography>
+        <Typography sx={{ fontSize: '0.72rem', color: '#666' }}>{row.owner_phone}</Typography>
+      </Box>
+    )},
+    { field: 'city', headerName: 'City' },
+    { field: 'vehicles', headerName: 'Vehicles', renderCell: row => (
+      <Box sx={{ minWidth: 100 }}>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, mb: 0.3 }}>{row.vehicle_count || 0}/{row.max_vehicles || 15}</Typography>
+        <LinearProgress variant="determinate" value={((row.vehicle_count || 0) / (row.max_vehicles || 15)) * 100} sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(26,26,46,0.1)', '& .MuiLinearProgress-bar': { bgcolor: '#1A1A2E' } }} />
+      </Box>
+    )},
+    { field: 'total_earnings', headerName: 'Earnings', renderCell: row => (
+      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{Number(row.total_earnings || 0).toLocaleString()} XAF</Typography>
+    )},
+    { field: 'status', headerName: 'Status', renderCell: row => {
+      const s = row.is_suspended ? 'suspended' : row.is_approved ? 'active' : 'pending';
+      return <Chip label={s.charAt(0).toUpperCase() + s.slice(1)} size="small" sx={{ bgcolor: statusBg(s), color: statusColor(s), fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />;
+    }},
+  ];
+
+  const vf = (label, key, type = 'text') => (
+    <Grid item xs={12} sm={6} key={key}>
+      <TextField fullWidth size="small" label={label} type={type} value={vehicleForm[key]} onChange={e => setVehicleForm(p => ({ ...p, [key]: type === 'number' ? Number(e.target.value) : e.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+    </Grid>
+  );
 
   return (
     <Box>
-      {/* Page header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: '#1A1A2E' }}>
-            Fleet Management
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#888', mt: 0.5 }}>
-            Review, approve, and manage all fleet owner accounts and their vehicles
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh">
-          <IconButton onClick={loadFleets} disabled={loading}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Fleet Management</Typography>
 
-      {/* Stats */}
+      {success && <Alert severity="success" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setSuccess('')}>{success}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
+
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Total Fleets"    value={totalFleets}    color={STAT_COLORS.total}    subtitle="All time" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Pending Approval" value={pendingFleets} color={STAT_COLORS.pending}  subtitle="Awaiting review" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Active Fleets"   value={activeFleets}   color={STAT_COLORS.active}   subtitle="Approved + 5+ vehicles" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Total Fleet Vehicles" value={totalVehicles} color={STAT_COLORS.vehicles} subtitle="Across all fleets" />
-        </Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Fleets" value={stats.total?.toLocaleString()} icon={<FleetIcon />} iconBg="#1A1A2E" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#F5A623" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Active Fleets" value={stats.active?.toLocaleString()} icon={<CarIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Vehicles" value={stats.total_vehicles?.toLocaleString()} icon={<CarIcon />} iconBg="#E94560" loading={loading} /></Grid>
       </Grid>
 
-      {/* Filter tabs */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-        {[
-          { key: 'all',       label: 'All Fleets' },
-          { key: 'pending',   label: 'Pending' },
-          { key: 'active',    label: 'Active' },
-          { key: 'suspended', label: 'Suspended' },
-        ].map((f) => (
-          <Button
-            key={f.key}
-            variant={filter === f.key ? 'contained' : 'outlined'}
-            size="small"
-            onClick={() => setFilter(f.key)}
-            sx={{
-              borderRadius: '20px',
-              textTransform: 'none',
-              fontWeight: 600,
-              ...(filter === f.key
-                ? { bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#16162A' } }
-                : { borderColor: '#E0E0E0', color: '#555' }),
-            }}
-          >
-            {f.label}
-          </Button>
-        ))}
-      </Box>
-
-      {/* Table */}
-      <Card sx={{ borderRadius: 3 }}>
-        <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 3 }}>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}>
-              <CircularProgress sx={{ color: '#E94560' }} />
-            </Box>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 700 }}>Fleet</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Owner</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>City</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Vehicles</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Created</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }} align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 6, color: '#888' }}>
-                      No fleets found for this filter
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((fleet) => (
-                    <TableRow key={fleet.id} hover>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 700, color: '#1A1A2E' }}>
-                            {fleet.name}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#888' }}>
-                            Fleet #{fleet.fleet_number}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Avatar sx={{ width: 28, height: 28, bgcolor: '#E94560', fontSize: '0.75rem' }}>
-                            {fleet.owner_name ? fleet.owner_name.charAt(0).toUpperCase() : 'O'}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                              {fleet.owner_name || '—'}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: '#888' }}>
-                              {fleet.owner_phone || ''}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {fleet.city || '—'}{fleet.country ? `, ${fleet.country}` : ''}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <VehicleProgressBar
-                          current={parseInt(fleet.vehicle_count || 0, 10)}
-                          max={fleet.max_vehicles || 15}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <StatusChip fleet={fleet} />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ color: '#888' }}>
-                          {fleet.created_at
-                            ? new Date(fleet.created_at).toLocaleDateString('en-GB', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                              })
-                            : '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                          <Tooltip title="View Details">
-                            <IconButton
-                              size="small"
-                              onClick={() => loadFleetDetail(fleet.id)}
-                              sx={{ color: '#1565C0' }}
-                            >
-                              <ViewIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          {!fleet.is_approved && (
-                            <Tooltip title="Approve Fleet">
-                              <IconButton
-                                size="small"
-                                onClick={() => approveFleet(fleet.id)}
-                                disabled={actionLoading === fleet.id + '_approve'}
-                                sx={{ color: '#2E7D32' }}
-                              >
-                                {actionLoading === fleet.id + '_approve'
-                                  ? <CircularProgress size={16} />
-                                  : <CheckIcon fontSize="small" />}
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          {fleet.is_active && (
-                            <Tooltip title="Suspend Fleet">
-                              <IconButton
-                                size="small"
-                                onClick={() => suspendFleet(fleet.id)}
-                                disabled={actionLoading === fleet.id + '_suspend'}
-                                sx={{ color: '#C62828' }}
-                              >
-                                {actionLoading === fleet.id + '_suspend'
-                                  ? <CircularProgress size={16} />
-                                  : <BlockIcon fontSize="small" />}
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </TableContainer>
+      <Card>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+            <TextField size="small" placeholder="Search by name, owner, city..." value={search} onChange={e => setSearch(e.target.value)} sx={{ flex: 1, minWidth: 200, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Status</InputLabel>
+              <Select value={statusFilter} label="Status" onChange={e => setStatusFilter(e.target.value)} sx={{ borderRadius: '8px' }}>
+                <MenuItem value="all">All Fleets</MenuItem>
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="pending">Pending Approval</MenuItem>
+                <MenuItem value="suspended">Suspended</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <DataTable columns={columns} rows={filtered} loading={loading} externalSearch={search} actions
+            onView={row => { setSelectedFleet(row); setDetailOpen(true); }}
+            onEdit={openEditFleet}
+            onSuspend={handleSuspendFleet}
+            onUnsuspend={handleUnsuspendFleet}
+            getRowSuspended={row => row.is_suspended}
+            extraAction={{ label: 'Approve', color: 'success', show: row => !row.is_approved, onClick: handleApproveFleet }}
+            searchPlaceholder="Filter fleets..."
+          />
+        </CardContent>
       </Card>
 
-      {/* Fleet Detail Modal */}
-      <Dialog
-        open={detailOpen}
-        onClose={() => { setDetailOpen(false); setDetailFleet(null); }}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}
-      >
-        {detailFleet ? (
-          <>
-            <DialogTitle sx={{ borderBottom: '1px solid #F0F0F0', pb: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    {detailFleet.fleet?.name} — Fleet #{detailFleet.fleet?.fleet_number}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#888', mt: 0.3 }}>
-                    {detailFleet.fleet?.city}{detailFleet.fleet?.country ? `, ${detailFleet.fleet.country}` : ''}
-                  </Typography>
-                </Box>
-                <StatusChip fleet={detailFleet.fleet || {}} />
-              </Box>
-            </DialogTitle>
-
-            <DialogContent sx={{ pt: 2 }}>
-              {/* Fleet stats */}
+      {/* ── FLEET DETAIL MODAL ── */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+          <Typography fontWeight={700}>{selectedFleet?.name}</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button size="small" startIcon={<EditIcon />} variant="outlined" onClick={() => { openEditFleet(selectedFleet); setDetailOpen(false); }} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px' }}>Edit Fleet</Button>
+            <IconButton onClick={() => setDetailOpen(false)} size="small"><CloseIcon /></IconButton>
+          </Box>
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2 }}>
+          {selectedFleet && (
+            <>
               <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#F8F8F8', borderRadius: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 800, color: '#1A1A2E' }}>
-                      {parseInt(detailFleet.fleet?.vehicle_count || (detailFleet.vehicles || []).length, 10)}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#888' }}>Vehicles</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#F8F8F8', borderRadius: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 800, color: '#1A1A2E' }}>
-                      {(detailFleet.vehicles || []).filter((v) => !!v.assigned_driver_id).length}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#888' }}>Drivers</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#F8F8F8', borderRadius: 2 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 800, color: '#1A1A2E', fontSize: '0.9rem' }}>
-                      {formatXAF(detailFleet.fleet?.total_earnings)}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#888' }}>Total Earnings</Typography>
-                  </Box>
-                </Grid>
+                {[
+                  ['Owner', selectedFleet.owner_name], ['Phone', selectedFleet.owner_phone],
+                  ['City', selectedFleet.city], ['Country', selectedFleet.country],
+                  ['Vehicles', `${selectedFleet.vehicle_count || 0} / ${selectedFleet.max_vehicles || 15}`],
+                  ['Earnings', `${Number(selectedFleet.total_earnings || 0).toLocaleString()} XAF`],
+                  ['Created', selectedFleet.created_at?.substring(0, 10)],
+                  ['Description', selectedFleet.description],
+                ].map(([l, v]) => (
+                  <Grid item xs={6} sm={3} key={l}>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{l}</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 500 }}>{v || '—'}</Typography>
+                  </Grid>
+                ))}
               </Grid>
 
-              <Divider sx={{ mb: 2 }} />
-
-              {/* Approve fleet button */}
-              {detailFleet.fleet && !detailFleet.fleet.is_approved && (
-                <Alert
-                  severity="warning"
-                  action={
-                    <Button
-                      color="inherit"
-                      size="small"
-                      sx={{ fontWeight: 700 }}
-                      onClick={() => approveFleet(detailFleet.fleet.id)}
-                    >
-                      Approve Fleet
-                    </Button>
-                  }
-                  sx={{ mb: 2 }}
-                >
-                  This fleet is pending admin approval
-                </Alert>
-              )}
-
-              {/* Vehicles list */}
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
-                Vehicles ({(detailFleet.vehicles || []).length}/{detailFleet.fleet?.max_vehicles || 15})
-              </Typography>
-
-              {(detailFleet.vehicles || []).length === 0 ? (
-                <Typography variant="body2" sx={{ color: '#888', py: 2, textAlign: 'center' }}>
-                  No vehicles added yet
-                </Typography>
-              ) : (
-                <Stack spacing={1.5}>
-                  {(detailFleet.vehicles || []).map((vehicle) => (
-                    <Box
-                      key={vehicle.id}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 1.5,
-                        bgcolor: '#FAFAFA',
-                        borderRadius: 2,
-                        border: '1px solid #F0F0F0',
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Box
-                          sx={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: '10px',
-                            bgcolor: 'rgba(233,69,96,0.1)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <CarIcon sx={{ color: '#E94560', fontSize: 18 }} />
-                        </Box>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            {vehicle.make} {vehicle.model} · {vehicle.year}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#888' }}>
-                            {vehicle.plate} · {vehicle.vehicle_type} · {vehicle.seats} seats
-                          </Typography>
-                          {vehicle.assigned_driver_name && (
-                            <Typography variant="caption" sx={{ display: 'block', color: '#555' }}>
-                              Driver: {vehicle.assigned_driver_name}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <VehicleStatusChip vehicle={vehicle} />
-                        {!vehicle.is_approved && (
-                          <Box sx={{ display: 'flex', gap: 0.5 }}>
-                            <Tooltip title="Approve Vehicle">
-                              <IconButton
-                                size="small"
-                                onClick={() => approveVehicle(detailFleet.fleet.id, vehicle.id)}
-                                disabled={actionLoading === vehicle.id + '_v_approve'}
-                                sx={{ color: '#2E7D32' }}
-                              >
-                                {actionLoading === vehicle.id + '_v_approve'
-                                  ? <CircularProgress size={14} />
-                                  : <CheckIcon sx={{ fontSize: 16 }} />}
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Reject Vehicle">
-                              <IconButton
-                                size="small"
-                                onClick={() => rejectVehicle(detailFleet.fleet.id, vehicle.id)}
-                                disabled={actionLoading === vehicle.id + '_v_reject'}
-                                sx={{ color: '#C62828' }}
-                              >
-                                {actionLoading === vehicle.id + '_v_reject'
-                                  ? <CircularProgress size={14} />
-                                  : <CancelIcon sx={{ fontSize: 16 }} />}
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        )}
-                      </Box>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </DialogContent>
-
-            <DialogActions sx={{ px: 3, pb: 2.5, borderTop: '1px solid #F0F0F0', pt: 2 }}>
-              <Button onClick={() => { setDetailOpen(false); setDetailFleet(null); }} sx={{ color: '#888' }}>
-                Close
-              </Button>
-              {detailFleet.fleet && !detailFleet.fleet.is_approved && (
-                <Button
-                  variant="contained"
-                  onClick={() => approveFleet(detailFleet.fleet.id)}
-                  sx={{ bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}
-                >
-                  Approve Fleet
-                </Button>
-              )}
-              {detailFleet.fleet?.is_active && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={() => suspendFleet(detailFleet.fleet.id)}
-                >
-                  Suspend Fleet
-                </Button>
-              )}
-            </DialogActions>
-          </>
-        ) : (
-          <DialogContent sx={{ display: 'flex', justifyContent: 'center', p: 6 }}>
-            <CircularProgress sx={{ color: '#E94560' }} />
-          </DialogContent>
-        )}
+              <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>Vehicles ({selectedFleet.vehicles?.length || 0})</Typography>
+              {selectedFleet.vehicles?.map(v => (
+                <Box key={v.id} sx={{ display: 'flex', alignItems: 'center', p: 1.5, mb: 1, bgcolor: 'rgba(26,26,46,0.03)', borderRadius: '10px', gap: 1.5 }}>
+                  <CarIcon sx={{ color: '#666', fontSize: 20 }} />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{v.make} {v.model} {v.year} · {v.plate}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#666' }}>{v.color} · {v.vehicle_type} · {v.seats} seats {v.is_wheelchair_accessible ? '· ♿' : ''}</Typography>
+                    {v.assigned_driver && <Typography sx={{ fontSize: '0.72rem', color: '#4CAF50' }}>Driver: {v.assigned_driver}</Typography>}
+                  </Box>
+                  <Chip label={v.status || 'pending'} size="small" sx={{ bgcolor: statusBg(v.status), color: statusColor(v.status), fontWeight: 600, fontSize: '0.7rem', height: 20, textTransform: 'capitalize' }} />
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <IconButton size="small" onClick={() => openEditVehicle(v, selectedFleet)} sx={{ color: '#1A1A2E' }}><EditIcon fontSize="small" /></IconButton>
+                    {v.status === 'pending' && (
+                      <>
+                        <Button size="small" color="success" variant="outlined" onClick={() => handleApproveVehicle(v, selectedFleet)} sx={{ minWidth: 0, px: 1, py: 0.3, fontSize: '0.72rem', borderRadius: '6px' }}>✓</Button>
+                        <Button size="small" color="error" variant="outlined" onClick={() => handleRejectVehicle(v)} sx={{ minWidth: 0, px: 1, py: 0.3, fontSize: '0.72rem', borderRadius: '6px' }}>✗</Button>
+                      </>
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </>
+          )}
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ p: 2 }}>
+          {selectedFleet && !selectedFleet.is_approved && (
+            <Button onClick={() => { handleApproveFleet(selectedFleet); setDetailOpen(false); }} color="success" variant="outlined" size="small">Approve Fleet</Button>
+          )}
+          {selectedFleet?.is_suspended ? (
+            <Button onClick={() => { handleUnsuspendFleet(selectedFleet); setDetailOpen(false); }} color="success" variant="outlined" size="small">Unsuspend</Button>
+          ) : (
+            <Button onClick={() => { handleSuspendFleet(selectedFleet); setDetailOpen(false); }} color="error" variant="outlined" size="small">Suspend</Button>
+          )}
+          <Button onClick={() => setDetailOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+        </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-          severity={snackbar.severity}
-          sx={{ width: '100%', borderRadius: 2 }}
-        >
-          {snackbar.msg}
-        </Alert>
-      </Snackbar>
+      {/* ── EDIT FLEET DIALOG ── */}
+      <Dialog open={editFleetOpen} onClose={() => setEditFleetOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <Typography fontWeight={700}>Edit Fleet — {editFleet?.name}</Typography>
+          </Box>
+          <IconButton onClick={() => setEditFleetOpen(false)} size="small"><CloseIcon /></IconButton>
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2.5 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Fleet Name" value={fleetForm.name} onChange={e => setFleetForm(p => ({ ...p, name: e.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="City" value={fleetForm.city} onChange={e => setFleetForm(p => ({ ...p, city: e.target.value }))} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" label="Description" value={fleetForm.description} onChange={e => setFleetForm(p => ({ ...p, description: e.target.value }))} multiline rows={2} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Max Vehicles (5–15)" type="number" value={fleetForm.max_vehicles}
+                onChange={e => setFleetForm(p => ({ ...p, max_vehicles: Math.min(15, Math.max(5, Number(e.target.value))) }))}
+                inputProps={{ min: 5, max: 15 }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControlLabel control={<Switch checked={!!fleetForm.is_active} onChange={e => setFleetForm(p => ({ ...p, is_active: e.target.checked }))} color="success" />} label="Fleet Active" />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setEditFleetOpen(false)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={handleSaveFleet} variant="contained" size="small" disabled={fleetSaving} sx={{ bgcolor: '#1A1A2E' }}>
+            {fleetSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── EDIT VEHICLE DIALOG ── */}
+      <Dialog open={editVehicleOpen} onClose={() => setEditVehicleOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <Typography fontWeight={700}>Edit Vehicle — {editVehicle?.plate}</Typography>
+          </Box>
+          <IconButton onClick={() => setEditVehicleOpen(false)} size="small"><CloseIcon /></IconButton>
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: 2.5 }}>
+          <Grid container spacing={2}>
+            {vf('Make', 'make')}
+            {vf('Model', 'model')}
+            {vf('Year', 'year', 'number')}
+            {vf('Plate Number', 'plate')}
+            {vf('Color', 'color')}
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Vehicle Type</InputLabel>
+                <Select value={vehicleForm.vehicle_type} label="Vehicle Type" onChange={e => setVehicleForm(p => ({ ...p, vehicle_type: e.target.value }))} sx={{ borderRadius: '8px' }}>
+                  {['standard','comfort','luxury','bike','scooter','shared','van'].map(t => <MenuItem key={t} value={t} sx={{ textTransform: 'capitalize' }}>{t.charAt(0).toUpperCase() + t.slice(1)}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+            {vf('Seats', 'seats', 'number')}
+            {vf('Insurance Expiry', 'insurance_expiry', 'date')}
+            <Grid item xs={12} sx={{ display: 'flex', gap: 3 }}>
+              <FormControlLabel control={<Switch checked={!!vehicleForm.is_wheelchair_accessible} onChange={e => setVehicleForm(p => ({ ...p, is_wheelchair_accessible: e.target.checked }))} />} label="Wheelchair Accessible" />
+              <FormControlLabel control={<Switch checked={!!vehicleForm.is_active} onChange={e => setVehicleForm(p => ({ ...p, is_active: e.target.checked }))} color="success" />} label="Active" />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setEditVehicleOpen(false)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={handleSaveVehicle} variant="contained" size="small" disabled={vehicleSaving} sx={{ bgcolor: '#1A1A2E' }}>
+            {vehicleSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

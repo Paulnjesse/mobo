@@ -55,6 +55,7 @@ export const dashboardAPI = {
 export const usersAPI = {
   getAll: (params) => api.get('/admin/users', { params }),
   getById: (id) => api.get(`/admin/users/${id}`),
+  update: (id, data) => api.put(`/users/${id}`, data),
   suspend: (id) => api.patch(`/admin/users/${id}/suspend`),
   unsuspend: (id) => api.patch(`/admin/users/${id}/unsuspend`),
   delete: (id) => api.delete(`/admin/users/${id}`),
@@ -65,10 +66,12 @@ export const usersAPI = {
 export const driversAPI = {
   getAll: (params) => api.get('/admin/drivers', { params }),
   getById: (id) => api.get(`/admin/drivers/${id}`),
+  update: (id, data) => api.put(`/users/drivers/${id}`, data),
   approve: (id) => api.patch(`/admin/drivers/${id}/approve`),
   suspend: (id) => api.patch(`/admin/drivers/${id}/suspend`),
   unsuspend: (id) => api.patch(`/admin/drivers/${id}/unsuspend`),
-  getStats: () => api.get('/admin/drivers/stats'),
+  delete: (id) => api.delete(`/users/drivers/${id}`),
+  getStats: () => api.get('/users/drivers/stats'),
 };
 
 // Rides
