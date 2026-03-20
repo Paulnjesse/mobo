@@ -675,29 +675,74 @@ const updateDriverStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'is_online is required' });
     }
 
+    // When going online, check fatigue limits before allowing status change
+    if (Boolean(is_online)) {
+      const driverCheck = await db.query(
+        'SELECT id, is_approved, online_since, total_trips_today FROM drivers WHERE user_id = $1',
+        [userId]
+      );
+
+      if (driverCheck.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Driver profile not found' });
+      }
+
+      const drv = driverCheck.rows[0];
+
+      if (!drv.is_approved) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your driver account is pending approval. You cannot go online yet.'
+        });
+      }
+
+      const hoursOnline = drv.online_since
+        ? (Date.now() - new Date(drv.online_since).getTime()) / (1000 * 60 * 60)
+        : 0;
+
+      if (hoursOnline >= 8 || (drv.total_trips_today || 0) >= 6) {
+        return res.status(403).json({
+          success: false,
+          code: 'FATIGUE_BREAK_REQUIRED',
+          message: hoursOnline >= 8
+            ? `You've been driving for ${Math.floor(hoursOnline)} hours. Take a 15-minute break before going back online.`
+            : `You've completed ${drv.total_trips_today} trips. Take a 15-minute break before continuing.`,
+          hours_online: Math.round(hoursOnline * 10) / 10,
+          trips_today: drv.total_trips_today || 0
+        });
+      }
+
+      // Set online_since only if not already set (first time going online this session)
+      const result = await db.query(
+        `UPDATE drivers
+         SET is_online = true,
+             online_since = CASE WHEN online_since IS NULL THEN NOW() ELSE online_since END
+         WHERE user_id = $1
+         RETURNING id, is_online`,
+        [userId]
+      );
+
+      return res.json({
+        success: true,
+        message: 'You are now online',
+        data: { is_online: result.rows[0].is_online }
+      });
+    }
+
+    // Going offline: clear online_since
     const result = await db.query(
-      `UPDATE drivers SET is_online = $1 WHERE user_id = $2
+      `UPDATE drivers SET is_online = false, online_since = NULL WHERE user_id = $1
        RETURNING id, is_online, is_approved`,
-      [Boolean(is_online), userId]
+      [userId]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Driver profile not found' });
     }
 
-    const driver = result.rows[0];
-
-    if (!driver.is_approved && is_online) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your driver account is pending approval. You cannot go online yet.'
-      });
-    }
-
     res.json({
       success: true,
-      message: `You are now ${is_online ? 'online' : 'offline'}`,
-      data: { is_online: driver.is_online }
+      message: 'You are now offline',
+      data: { is_online: result.rows[0].is_online }
     });
   } catch (err) {
     console.error('[UpdateDriverStatus Error]', err);

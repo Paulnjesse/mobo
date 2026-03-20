@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, disconnectSockets, rideSocket, locationSocket } from '../services/socket';
+import api from '../services/api';
 
 const COUNTDOWN_SECONDS = 15;
 
@@ -156,7 +157,7 @@ export default function DriverHomeScreen({ navigation }) {
   // -------------------------------------------------------------------------
   // Online / offline toggle
   // -------------------------------------------------------------------------
-  const handleToggleOnline = () => {
+  const handleToggleOnline = async () => {
     if (isOnline) {
       Alert.alert('Go Offline', 'Stop receiving ride requests?', [
         { text: 'Cancel', style: 'cancel' },
@@ -174,6 +175,22 @@ export default function DriverHomeScreen({ navigation }) {
         },
       ]);
     } else {
+      // Check fatigue before going online
+      try {
+        const fatigueRes = await api.get('/safety/fatigue-check');
+        if (fatigueRes.data?.should_break) {
+          navigation.navigate('FatigueBreak', {
+            reason: fatigueRes.data.reason || 'hours',
+            hours_online: fatigueRes.data.hours_online || 0,
+            trips_today: fatigueRes.data.trips_today || 0,
+          });
+          return; // Don't go online yet
+        }
+      } catch (fatigueErr) {
+        // If fatigue check fails, allow going online (fail open)
+        console.warn('[Fatigue Check]', fatigueErr.message);
+      }
+
       setIsOnline(true);
       // Emit driver_online via location socket
       if (locationSocket?.connected) {

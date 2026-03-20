@@ -459,21 +459,61 @@ const updateRideStatus = async (req, res) => {
       const rideId = ride.id;
       const riderId = ride.rider_id;
 
-      // Auto-notify trusted contacts when ride starts
+      // Auto-notify trusted contacts with SMS + share link
       try {
         const contactsResult = await pool.query(
           'SELECT name, phone, email FROM trusted_contacts WHERE user_id = $1 AND notify_on_trip_start = true',
           [riderId]
         );
+
         if (contactsResult.rows.length > 0) {
+          // Generate share token automatically
+          const crypto = require('crypto');
+          const shareToken = crypto.randomBytes(16).toString('hex');
+          const shareExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          await pool.query(
+            'UPDATE rides SET share_token = $1, share_token_expires = $2 WHERE id = $3',
+            [shareToken, shareExpires, ride.id]
+          );
+
+          const shareUrl = `${process.env.APP_BASE_URL || 'https://mobo.app'}/track/${shareToken}`;
+
+          // Get driver + vehicle info for the message
+          const driverInfo = await pool.query(
+            `SELECT u.full_name, v.plate, v.color, v.make
+             FROM drivers d
+             JOIN users u ON u.id = d.user_id
+             LEFT JOIN vehicles v ON v.id = d.vehicle_id
+             WHERE d.id = $1`,
+            [ride.driver_id]
+          );
+
+          const drv = driverInfo.rows[0];
+          if (drv) {
+            const nameParts = (drv.full_name || '').split(' ');
+            const driverName = nameParts[0] + (nameParts[1] ? ' ' + nameParts[1][0] + '.' : '');
+
+            const { sendTripStartSMS } = require('../utils/notifyContacts');
+            await sendTripStartSMS({
+              contacts: contactsResult.rows,
+              driverName,
+              plate:        drv.plate  || 'N/A',
+              vehicleColor: drv.color  || '',
+              vehicleMake:  drv.make   || '',
+              shareUrl,
+              eta: null  // ETA can be added when routing is integrated
+            });
+          }
+
+          // Also insert in-app notifications for contacts who have accounts
           for (const contact of contactsResult.rows) {
             await pool.query(
               `INSERT INTO notifications (user_id, type, title, body, data)
-               SELECT id, 'trip_share', 'Trip Started', $1, $2
+               SELECT id, 'trip_share', 'Ride Started', $1, $2
                FROM users WHERE phone = $3 AND is_active = true`,
               [
-                `Your contact's ride has started. Driver is on the way.`,
-                JSON.stringify({ ride_id: rideId, contact_name: contact.name }),
+                `Your contact's ride has started. Driver: ${drv?.full_name || 'Unknown'}`,
+                JSON.stringify({ share_url: shareUrl }),
                 contact.phone
               ]
             );
@@ -503,6 +543,11 @@ const updateRideStatus = async (req, res) => {
       await pool.query(
         `UPDATE drivers SET total_earnings = total_earnings + $1 WHERE id = $2`,
         [driverEarning, ride.driver_id]
+      );
+      // Increment driver's trip counter for fatigue tracking
+      await pool.query(
+        'UPDATE drivers SET total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $1',
+        [ride.driver_id]
       );
     }
 

@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 
 const rideRoutes = require('./src/routes/rides');
 const { initRideSocket } = require('./src/socket/rideSocket');
+const { startEscalationJob } = require('./src/jobs/escalationJob');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -89,6 +90,7 @@ app.set('io', io);
 httpServer.listen(PORT, () => {
   console.log(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`);
   console.log(`[MOBO Ride Service] Socket.IO namespace: /rides`);
+  startEscalationJob();
 });
 
 module.exports = app;

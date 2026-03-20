@@ -5,6 +5,9 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
+const db = require('./src/config/database');
+const { startExpiryAlertJob } = require('./src/jobs/expiryAlertJob');
+
 const authRoutes = require('./src/routes/auth');
 const profileRoutes = require('./src/routes/profile');
 const fleetRoutes = require('./src/routes/fleet');
@@ -78,6 +81,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`[MOBO User Service] Running on port ${PORT}`);
+  startExpiryAlertJob(db);
 });
 
 module.exports = app;

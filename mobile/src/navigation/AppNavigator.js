@@ -61,6 +61,7 @@ import DriverRideScreen     from '../screens/DriverRideScreen';
 import DriverBonusScreen    from '../screens/DriverBonusScreen';
 import ExpressPayScreen     from '../screens/ExpressPayScreen';
 import DestinationModeScreen  from '../screens/DestinationModeScreen';
+import FatigueBreakScreen   from '../screens/FatigueBreakScreen';
 import HomeLocationScreen    from '../screens/HomeLocationScreen';
 import DriverRealIDScreen    from '../screens/DriverRealIDScreen';
 
@@ -197,6 +198,7 @@ function DriverStack() {
       <Stack.Screen name="DriverRealID"     component={DriverRealIDScreen}    options={{ presentation: 'modal' }} />
       <Stack.Screen name="Dispute"          component={DisputeScreen}         options={{ presentation: 'modal' }} />
       <Stack.Screen name="TrustedContacts"  component={TrustedContactsScreen} />
+      <Stack.Screen name="FatigueBreak"     component={FatigueBreakScreen}    options={{ gestureEnabled: false, headerShown: false }} />
     </Stack.Navigator>
   );
 }

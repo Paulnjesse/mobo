@@ -143,14 +143,15 @@ const checkRouteDeviation = async (req, res) => {
 /**
  * GET /safety/fatigue-check
  * Driver only. Returns whether the driver should take a break.
+ * Checks both hours online (>= 8h) and total trips today (>= 6).
  */
 const checkFatigue = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Get driver record
+    // Get driver record including trip count
     const driverResult = await db.query(
-      'SELECT id, online_since FROM drivers WHERE user_id = $1',
+      'SELECT id, online_since, total_trips_today FROM drivers WHERE user_id = $1',
       [userId]
     );
 
@@ -159,33 +160,75 @@ const checkFatigue = async (req, res) => {
     }
 
     const driver = driverResult.rows[0];
+    const tripsToday = driver.total_trips_today || 0;
 
-    if (!driver.online_since) {
-      return res.json({ success: true, should_break: false });
-    }
+    const hoursOnline = driver.online_since
+      ? (Date.now() - new Date(driver.online_since).getTime()) / (1000 * 60 * 60)
+      : 0;
 
-    const now = new Date();
-    const onlineSince = new Date(driver.online_since);
-    const hoursOnline = (now - onlineSince) / (1000 * 60 * 60);
-
-    if (hoursOnline > FATIGUE_HOURS_THRESHOLD) {
+    // Check hours threshold
+    if (hoursOnline >= FATIGUE_HOURS_THRESHOLD) {
       const hoursRounded = Math.floor(hoursOnline);
+      const breakUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       return res.json({
         success: true,
         should_break: true,
+        reason: 'hours',
         hours_online: hoursRounded,
+        trips_today: tripsToday,
+        break_until: breakUntil,
         message: `You've been driving for ${hoursRounded} hours. Please take a 15-minute break.`
+      });
+    }
+
+    // Check consecutive trip limit
+    if (tripsToday >= 6) {
+      const breakUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      return res.json({
+        success: true,
+        should_break: true,
+        reason: 'trips',
+        hours_online: Math.round(hoursOnline * 10) / 10,
+        trips_today: tripsToday,
+        break_until: breakUntil,
+        message: `You've completed ${tripsToday} trips today. Please take a 15-minute break before continuing.`
       });
     }
 
     return res.json({
       success: true,
       should_break: false,
-      hours_online: parseFloat(hoursOnline.toFixed(2))
+      hours_online: parseFloat(hoursOnline.toFixed(2)),
+      trips_today: tripsToday
     });
   } catch (err) {
     console.error('[Safety] checkFatigue error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * POST /safety/fatigue-break
+ * Driver only. Called after a break is completed.
+ * Resets online_since and total_trips_today so the driver can go back online.
+ */
+const enforceFatigueBreak = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const result = await db.query(
+      `UPDATE drivers
+       SET online_since = NULL, total_trips_today = 0, last_break_prompted_at = NOW()
+       WHERE user_id = $1
+       RETURNING id`,
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+    res.json({ success: true, message: 'Break recorded. You can go online again.' });
+  } catch (err) {
+    console.error('[EnforceFatigueBreak]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -281,6 +324,7 @@ module.exports = {
   recordSpeedAlert,
   checkRouteDeviation,
   checkFatigue,
+  enforceFatigueBreak,
   driverRealIDSubmit,
   getRealIDChecks
 };
