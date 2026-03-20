@@ -191,11 +191,28 @@ CREATE TABLE IF NOT EXISTS express_pay_transactions (
 );
 
 -- ============================================================
--- GENERATE REFERRAL CODES FOR EXISTING USERS
+-- GENERATE REFERRAL CODES FOR EXISTING USERS (collision-safe)
 -- ============================================================
-UPDATE users
-SET referral_code = UPPER(SUBSTRING(REPLACE(id::text, '-', ''), 1, 8))
-WHERE referral_code IS NULL;
+DO $$
+DECLARE
+  u RECORD;
+  new_code TEXT;
+  done BOOLEAN;
+BEGIN
+  FOR u IN SELECT id FROM users WHERE referral_code IS NULL LOOP
+    done := FALSE;
+    WHILE NOT done LOOP
+      new_code := UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', ''), 1, 8));
+      BEGIN
+        UPDATE users SET referral_code = new_code WHERE id = u.id;
+        done := TRUE;
+      EXCEPTION WHEN unique_violation THEN
+        -- retry with a new random code
+      END;
+    END LOOP;
+  END LOOP;
+END;
+$$;
 
 -- ============================================================
 -- INDEXES
