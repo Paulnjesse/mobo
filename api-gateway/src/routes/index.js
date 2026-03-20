@@ -15,27 +15,32 @@ const proxyOptions = (target) => ({
   }
 });
 
-module.exports = (app) => {
-  // User & Auth
-  app.use('/api/auth', createProxyMiddleware(proxyOptions(USER_SERVICE)));
-  app.use('/api/users', createProxyMiddleware(proxyOptions(USER_SERVICE)));
-  app.use('/api/fleet', createProxyMiddleware(proxyOptions(USER_SERVICE)));
-  app.use('/api/social', createProxyMiddleware(proxyOptions(USER_SERVICE)));
+const proxy = (target, prefix) => createProxyMiddleware({
+  target,
+  changeOrigin: true,
+  pathRewrite: (path) => `/${prefix}${path}`,
+  on: {
+    error: (err, req, res) => {
+      res.status(502).json({ error: 'Service unavailable', details: err.message });
+    }
+  }
+});
 
-  // Rides (includes preferred-drivers, lost-and-found, concierge, checkins)
-  app.use('/api/rides', createProxyMiddleware(proxyOptions(RIDE_SERVICE)));
-  app.use('/api/fare', createProxyMiddleware({
-    ...proxyOptions(RIDE_SERVICE),
-    pathRewrite: { '^/api/fare': '/rides/fare' }
-  }));
+module.exports = (app) => {
+  // User & Auth — strip /api/X, prepend service route
+  app.use('/api/auth',   proxy(USER_SERVICE,     'auth'));
+  app.use('/api/users',  proxy(USER_SERVICE,     'users'));
+  app.use('/api/fleet',  proxy(USER_SERVICE,     'fleet'));
+  app.use('/api/social', proxy(USER_SERVICE,     'social'));
+
+  // Rides
+  app.use('/api/rides',  proxy(RIDE_SERVICE,     'rides'));
+  app.use('/api/fare',   proxy(RIDE_SERVICE,     'rides/fare'));
 
   // Payments
-  app.use('/api/payments', createProxyMiddleware(proxyOptions(PAYMENT_SERVICE)));
+  app.use('/api/payments', proxy(PAYMENT_SERVICE, 'payments'));
 
-  // Location (includes destination-mode, bonuses, express-pay)
-  app.use('/api/location', createProxyMiddleware(proxyOptions(LOCATION_SERVICE)));
-  app.use('/api/drivers', createProxyMiddleware({
-    ...proxyOptions(LOCATION_SERVICE),
-    pathRewrite: { '^/api/drivers': '/location/drivers' }
-  }));
+  // Location
+  app.use('/api/location', proxy(LOCATION_SERVICE, 'location'));
+  app.use('/api/drivers',  proxy(LOCATION_SERVICE, 'location/drivers'));
 };
