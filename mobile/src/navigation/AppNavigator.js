@@ -50,14 +50,19 @@ import FamilyAccountScreen  from '../screens/FamilyAccountScreen';
 import LostAndFoundScreen   from '../screens/LostAndFoundScreen';
 import WomenConnectScreen   from '../screens/WomenConnectScreen';
 import PreferredDriversScreen from '../screens/PreferredDriversScreen';
+import TrustedContactsScreen from '../screens/TrustedContactsScreen';
+import ShareTripScreen       from '../screens/ShareTripScreen';
+import DisputeScreen         from '../screens/DisputeScreen';
+import DriverMatchScreen     from '../screens/DriverMatchScreen';
 
 // ── Driver Screens ─────────────────────────────────────────────────────────────
 import DriverHomeScreen     from '../screens/DriverHomeScreen';
 import DriverRideScreen     from '../screens/DriverRideScreen';
 import DriverBonusScreen    from '../screens/DriverBonusScreen';
 import ExpressPayScreen     from '../screens/ExpressPayScreen';
-import DestinationModeScreen from '../screens/DestinationModeScreen';
-import HomeLocationScreen   from '../screens/HomeLocationScreen';
+import DestinationModeScreen  from '../screens/DestinationModeScreen';
+import HomeLocationScreen    from '../screens/HomeLocationScreen';
+import DriverRealIDScreen    from '../screens/DriverRealIDScreen';
 
 // ── Fleet Owner Screens ────────────────────────────────────────────────────────
 import FleetDashboardScreen   from '../screens/fleet/FleetDashboardScreen';
@@ -155,6 +160,10 @@ function RiderStack() {
       <Stack.Screen name="LostAndFound"       component={LostAndFoundScreen} />
       <Stack.Screen name="WomenConnect"       component={WomenConnectScreen} />
       <Stack.Screen name="PreferredDrivers"   component={PreferredDriversScreen} />
+      <Stack.Screen name="TrustedContacts"    component={TrustedContactsScreen} />
+      <Stack.Screen name="ShareTrip"          component={ShareTripScreen}         options={{ presentation: 'modal' }} />
+      <Stack.Screen name="Dispute"            component={DisputeScreen}           options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DriverMatch"        component={DriverMatchScreen}       options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
@@ -185,6 +194,9 @@ function DriverStack() {
         component={HomeLocationScreen}
         initialParams={{ isOnboarding: true }}
       />
+      <Stack.Screen name="DriverRealID"     component={DriverRealIDScreen}    options={{ presentation: 'modal' }} />
+      <Stack.Screen name="Dispute"          component={DisputeScreen}         options={{ presentation: 'modal' }} />
+      <Stack.Screen name="TrustedContacts"  component={TrustedContactsScreen} />
     </Stack.Navigator>
   );
 }

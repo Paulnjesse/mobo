@@ -454,6 +454,36 @@ const updateRideStatus = async (req, res) => {
       [status, id]
     );
 
+    if (status === 'in_progress' && result.rows[0]) {
+      const ride = result.rows[0];
+      const rideId = ride.id;
+      const riderId = ride.rider_id;
+
+      // Auto-notify trusted contacts when ride starts
+      try {
+        const contactsResult = await pool.query(
+          'SELECT name, phone, email FROM trusted_contacts WHERE user_id = $1 AND notify_on_trip_start = true',
+          [riderId]
+        );
+        if (contactsResult.rows.length > 0) {
+          for (const contact of contactsResult.rows) {
+            await pool.query(
+              `INSERT INTO notifications (user_id, type, title, body, data)
+               SELECT id, 'trip_share', 'Trip Started', $1, $2
+               FROM users WHERE phone = $3 AND is_active = true`,
+              [
+                `Your contact's ride has started. Driver is on the way.`,
+                JSON.stringify({ ride_id: rideId, contact_name: contact.name }),
+                contact.phone
+              ]
+            );
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('[TrustedContact Notify]', notifyErr.message);
+      }
+    }
+
     if (status === 'completed' && result.rows[0]) {
       const ride = result.rows[0];
       const finalFare = ride.estimated_fare || 0;

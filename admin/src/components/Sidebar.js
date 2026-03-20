@@ -25,6 +25,8 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   LocalShipping as FleetIcon,
+  Gavel as GavelIcon,
+  WarningAmber as WarningAmberIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,7 +40,9 @@ const NAV_ITEMS = [
   { label: 'Live Map',     path: '/map',           icon: <MapIcon /> },
   { label: 'Surge Pricing', path: '/surge',        icon: <BoltIcon /> },
   { label: 'Promotions',   path: '/promotions',    icon: <LocalOfferIcon /> },
-  { label: 'Safety',       path: '/safety',        icon: <ShieldIcon /> },
+  { label: 'Safety',        path: '/safety',       icon: <ShieldIcon /> },
+  { label: 'Disputes',      path: '/disputes',     icon: <GavelIcon /> },
+  { label: 'Doc Expiry',    path: '/doc-expiry',   icon: <WarningAmberIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];

@@ -19,6 +19,7 @@ const {
   getSubscription,
   updateExpoPushToken
 } = require('../controllers/profileController');
+const tcCtrl = require('../controllers/trustedContactController');
 
 // All profile routes require authentication
 router.use(authenticate);
@@ -50,5 +51,11 @@ router.get('/subscription', getSubscription);
 
 // Push notification token
 router.put('/push-token', updateExpoPushToken);
+
+// Trusted contacts
+router.get('/users/me/trusted-contacts', authenticate, tcCtrl.getTrustedContacts);
+router.post('/users/me/trusted-contacts', authenticate, tcCtrl.addTrustedContact);
+router.patch('/users/me/trusted-contacts/:id', authenticate, tcCtrl.updateTrustedContact);
+router.delete('/users/me/trusted-contacts/:id', authenticate, tcCtrl.removeTrustedContact);
 
 module.exports = router;

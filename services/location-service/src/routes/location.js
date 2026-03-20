@@ -12,6 +12,7 @@ const {
   updateDriverStatus
 } = require('../controllers/locationController');
 const driverCtrl = require('../controllers/driverDestinationController');
+const safetyCtrl = require('../controllers/safetyController');
 
 // Update location (driver or rider)
 router.post('/location/update', authenticate, updateLocation);
@@ -49,5 +50,12 @@ router.post('/bonuses/challenges', authenticate, driverCtrl.createBonusChallenge
 router.post('/express-pay/setup', authenticate, driverCtrl.setupExpressPay);
 router.post('/express-pay/payout', authenticate, driverCtrl.requestExpressPayout);
 router.get('/express-pay/history', authenticate, driverCtrl.getExpressPayHistory);
+
+// Safety features
+router.post('/safety/speed-alert', authenticate, safetyCtrl.recordSpeedAlert);
+router.post('/safety/route-deviation', authenticate, safetyCtrl.checkRouteDeviation);
+router.get('/safety/fatigue-check', authenticate, requireDriver, safetyCtrl.checkFatigue);
+router.post('/safety/realid', authenticate, requireDriver, safetyCtrl.driverRealIDSubmit);
+router.get('/safety/realid/pending', authenticate, safetyCtrl.getRealIDChecks);
 
 module.exports = router;

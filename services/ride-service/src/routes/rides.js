@@ -2,6 +2,18 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const ctrl = require('../controllers/rideController');
+const disputeCtrl = require('../controllers/disputeController');
+const shareCtrl   = require('../controllers/shareTripController');
+
+// ── Share trip (PUBLIC track route MUST come before /:id to avoid param conflict)
+router.get('/track/:token', shareCtrl.getSharedTrip);  // PUBLIC - no auth
+
+// ── Disputes (mine route MUST come before /:id to avoid param conflict)
+router.post('/disputes', authenticate, disputeCtrl.fileDispute);
+router.get('/disputes/mine', authenticate, disputeCtrl.getMyDisputes);
+router.get('/disputes', authenticate, disputeCtrl.getAllDisputes);
+router.get('/disputes/:id', authenticate, disputeCtrl.getDisputeById);
+router.patch('/disputes/:id/resolve', authenticate, disputeCtrl.resolveDispute);
 
 // Fare & pricing
 router.post('/fare', authenticate, ctrl.getFare);
@@ -33,6 +45,7 @@ router.get('/:id', authenticate, ctrl.getRide);
 
 // Ride actions
 router.post('/:id/accept', authenticate, ctrl.acceptRide);
+router.post('/:id/share', authenticate, shareCtrl.generateShareToken);
 router.patch('/:id/status', authenticate, ctrl.updateRideStatus);
 router.post('/:id/cancel', authenticate, ctrl.cancelRide);
 router.post('/:id/rate', authenticate, ctrl.rateRide);

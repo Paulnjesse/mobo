@@ -17,6 +17,8 @@ import Notifications from './pages/Notifications';
 import SafetyReports from './pages/SafetyReports';
 import Settings from './pages/Settings';
 import FleetManagement from './pages/FleetManagement';
+import Disputes from './pages/Disputes';
+import DocumentExpiry from './pages/DocumentExpiry';
 
 const theme = createTheme({
   palette: {
@@ -133,6 +135,8 @@ function App() {
               <Route path="/promotions"   element={<Promotions />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/safety"       element={<SafetyReports />} />
+              <Route path="/disputes"     element={<Disputes />} />
+              <Route path="/doc-expiry"   element={<DocumentExpiry />} />
               <Route path="/settings"     element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

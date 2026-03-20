@@ -69,6 +69,10 @@ export default function SettingsScreen({ navigation }) {
           onPress: () => navigation.navigate('HomeLocation', { isOnboarding: false }),
         }] : []),
         {
+          icon: 'people-circle-outline', label: 'Trusted Contacts', color: '#10B981',
+          onPress: () => navigation.navigate('TrustedContacts'),
+        },
+        {
           icon: 'female-outline', label: 'Women+ Connect', color: colors.primary,
           onPress: () => navigation.navigate('WomenConnect'),
         },
