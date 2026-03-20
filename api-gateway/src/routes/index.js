@@ -5,42 +5,20 @@ const RIDE_SERVICE = process.env.RIDE_SERVICE_URL || 'http://ride-service:3002';
 const PAYMENT_SERVICE = process.env.PAYMENT_SERVICE_URL || 'http://payment-service:3003';
 const LOCATION_SERVICE = process.env.LOCATION_SERVICE_URL || 'http://location-service:3004';
 
-const proxyOptions = (target) => ({
-  target,
-  changeOrigin: true,
-  on: {
-    error: (err, req, res) => {
-      res.status(502).json({ error: 'Service unavailable', details: err.message });
-    }
-  }
-});
+const onError = (err, req, res) => {
+  res.status(502).json({ error: 'Service unavailable', details: err.message });
+};
 
-const proxy = (target, prefix) => createProxyMiddleware({
-  target,
-  changeOrigin: true,
-  pathRewrite: (path) => `/${prefix}${path}`,
-  on: {
-    error: (err, req, res) => {
-      res.status(502).json({ error: 'Service unavailable', details: err.message });
-    }
-  }
-});
-
+// Pass context as first arg — Express does NOT strip the prefix,
+// so pathRewrite works on the full /api/xxx path
 module.exports = (app) => {
-  // User & Auth — strip /api/X, prepend service route
-  app.use('/api/auth',   proxy(USER_SERVICE,     'auth'));
-  app.use('/api/users',  proxy(USER_SERVICE,     'users'));
-  app.use('/api/fleet',  proxy(USER_SERVICE,     'fleet'));
-  app.use('/api/social', proxy(USER_SERVICE,     'social'));
-
-  // Rides
-  app.use('/api/rides',  proxy(RIDE_SERVICE,     'rides'));
-  app.use('/api/fare',   proxy(RIDE_SERVICE,     'rides/fare'));
-
-  // Payments
-  app.use('/api/payments', proxy(PAYMENT_SERVICE, 'payments'));
-
-  // Location
-  app.use('/api/location', proxy(LOCATION_SERVICE, 'location'));
-  app.use('/api/drivers',  proxy(LOCATION_SERVICE, 'location/drivers'));
+  app.use(createProxyMiddleware('/api/auth',     { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/auth':     '/auth'     }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/users',    { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/users':    '/users'    }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/fleet',    { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/fleet':    '/fleet'    }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/social',   { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/social':   '/social'   }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/rides',    { target: RIDE_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/rides':    '/rides'    }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/fare',     { target: RIDE_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/fare':     '/rides/fare'}, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/payments', { target: PAYMENT_SERVICE,  changeOrigin: true, pathRewrite: { '^/api/payments': '/payments' }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/location', { target: LOCATION_SERVICE, changeOrigin: true, pathRewrite: { '^/api/location': '/location' }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/drivers',  { target: LOCATION_SERVICE, changeOrigin: true, pathRewrite: { '^/api/drivers':  '/location/drivers' }, on: { error: onError } }));
 };
