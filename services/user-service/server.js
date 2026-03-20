@@ -43,12 +43,21 @@ app.use('/fleet', fleetRoutes);
 app.use('/social', socialRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  let dbStatus = 'unknown';
+  try {
+    const db = require('./src/config/database');
+    await db.query('SELECT 1');
+    dbStatus = 'connected';
+  } catch (e) {
+    dbStatus = 'error: ' + e.message.substring(0, 80);
+  }
   res.json({
     success: true,
     service: 'mobo-user-service',
     version: '1.0.0',
     status: 'healthy',
+    db: dbStatus,
     timestamp: new Date().toISOString()
   });
 });
