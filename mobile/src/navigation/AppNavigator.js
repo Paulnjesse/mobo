@@ -57,6 +57,7 @@ import DriverRideScreen     from '../screens/DriverRideScreen';
 import DriverBonusScreen    from '../screens/DriverBonusScreen';
 import ExpressPayScreen     from '../screens/ExpressPayScreen';
 import DestinationModeScreen from '../screens/DestinationModeScreen';
+import HomeLocationScreen   from '../screens/HomeLocationScreen';
 
 // ── Fleet Owner Screens ────────────────────────────────────────────────────────
 import FleetDashboardScreen   from '../screens/fleet/FleetDashboardScreen';
@@ -82,6 +83,8 @@ function AuthStack() {
       <Stack.Screen name="DriverRegister"   component={DriverRegisterScreen} />
       <Stack.Screen name="FleetOwnerRegister" component={FleetOwnerRegisterScreen} />
       <Stack.Screen name="Verification"     component={VerificationScreen} />
+      {/* Driver onboarding: set home location right after registration */}
+      <Stack.Screen name="HomeLocation"     component={HomeLocationScreen} />
     </Stack.Navigator>
   );
 }
@@ -158,8 +161,16 @@ function RiderStack() {
 
 // ── Driver Stack ───────────────────────────────────────────────────────────────
 function DriverStack() {
+  const { user } = useAuth();
+  // Show HomeLocation onboarding if driver has never set their home
+  const needsHomeSetup = !user?.driver?.home_latitude && !user?.home_latitude;
+  const initialRoute = needsHomeSetup ? 'HomeLocation' : 'DriverHome';
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={initialRoute}
+    >
       <Stack.Screen name="DriverHome"       component={DriverHomeScreen} />
       <Stack.Screen name="DriverRide"       component={DriverRideScreen} />
       <Stack.Screen name="Settings"         component={SettingsScreen} />
@@ -169,6 +180,11 @@ function DriverStack() {
       <Stack.Screen name="DriverBonus"      component={DriverBonusScreen} />
       <Stack.Screen name="ExpressPay"       component={ExpressPayScreen} />
       <Stack.Screen name="DestinationMode"  component={DestinationModeScreen} />
+      <Stack.Screen
+        name="HomeLocation"
+        component={HomeLocationScreen}
+        initialParams={{ isOnboarding: true }}
+      />
     </Stack.Navigator>
   );
 }

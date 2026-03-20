@@ -63,6 +63,11 @@ export default function SettingsScreen({ navigation }) {
     {
       title: 'Features',
       items: [
+        ...(user?.role === 'driver' ? [{
+          icon: 'home', label: 'My Home Location', color: '#3B82F6',
+          value: user?.driver?.home_address ? 'Set' : 'Not set',
+          onPress: () => navigation.navigate('HomeLocation', { isOnboarding: false }),
+        }] : []),
         {
           icon: 'female-outline', label: 'Women+ Connect', color: colors.primary,
           onPress: () => navigation.navigate('WomenConnect'),

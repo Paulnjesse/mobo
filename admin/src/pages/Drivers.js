@@ -126,6 +126,9 @@ export default function Drivers() {
       is_online: driver.is_online ?? false,
       acceptance_rate: driver.acceptance_rate || 100,
       cancellation_rate: driver.cancellation_rate || 0,
+      home_address: driver.home_address || '',
+      home_latitude: driver.home_latitude || '',
+      home_longitude: driver.home_longitude || '',
     });
     setVehicleForm({
       make: driver.vehicle?.make || driver.make || '',
@@ -312,6 +315,30 @@ export default function Drivers() {
               {tf('Cancellation Rate (%)', 'cancellation_rate', driverForm, setDriverForm, 'number')}
               {sw('Approved', 'is_approved', driverForm, setDriverForm)}
               {sw('Currently Online', 'is_online', driverForm, setDriverForm)}
+              <Grid item xs={12}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Home Location (GPS — set by driver on phone)
+                </Typography>
+              </Grid>
+              {tf('Home Address', 'home_address', driverForm, setDriverForm)}
+              <Grid item xs={6}>
+                <TextField
+                  label="Home Latitude" size="small" fullWidth
+                  value={driverForm.home_latitude || ''}
+                  InputProps={{ readOnly: true }}
+                  helperText="Read-only — set via driver app"
+                  sx={{ '& .MuiInputBase-root': { bgcolor: '#F9FAFB' } }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  label="Home Longitude" size="small" fullWidth
+                  value={driverForm.home_longitude || ''}
+                  InputProps={{ readOnly: true }}
+                  helperText="Read-only — set via driver app"
+                  sx={{ '& .MuiInputBase-root': { bgcolor: '#F9FAFB' } }}
+                />
+              </Grid>
             </Grid>
           )}
           {editTab === 1 && (

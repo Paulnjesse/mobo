@@ -328,7 +328,8 @@ const registerDriver = async (req, res) => {
       national_id, national_id_doc_url,
       vehicle_make, vehicle_model, vehicle_year, vehicle_plate,
       vehicle_color, vehicle_type, seats, is_wheelchair_accessible,
-      insurance_doc_url, insurance_expiry, photos
+      insurance_doc_url, insurance_expiry, photos,
+      home_latitude, home_longitude, home_address
     } = req.body;
 
     if (!license_number || !license_expiry) {
@@ -357,6 +358,12 @@ const registerDriver = async (req, res) => {
       [userId]
     );
 
+    // Build home_location geometry if coords provided
+    const hasHome = home_latitude != null && home_longitude != null;
+    const homeGeom = hasHome
+      ? `ST_SetSRID(ST_MakePoint(${parseFloat(home_longitude)}, ${parseFloat(home_latitude)}), 4326)`
+      : null;
+
     let driverRecord;
     if (existingDriver.rows.length > 0) {
       // Update existing driver record
@@ -364,20 +371,25 @@ const registerDriver = async (req, res) => {
         `UPDATE drivers SET
            license_number = $1, license_expiry = $2, license_doc_url = $3,
            national_id = $4, national_id_doc_url = $5
+           ${hasHome ? `, home_latitude = ${parseFloat(home_latitude)}, home_longitude = ${parseFloat(home_longitude)}, home_address = $7, home_location = ${homeGeom}` : ''}
          WHERE user_id = $6
-         RETURNING id, license_number, license_expiry, is_approved`,
-        [license_number, license_expiry, license_doc_url || null,
-         national_id || null, national_id_doc_url || null, userId]
+         RETURNING id, license_number, license_expiry, is_approved, home_latitude, home_longitude, home_address`,
+        hasHome
+          ? [license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, userId, home_address || null]
+          : [license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, userId]
       );
       driverRecord = updateResult.rows[0];
     } else {
       // Create new driver record
       const driverResult = await db.query(
-        `INSERT INTO drivers (user_id, license_number, license_expiry, license_doc_url, national_id, national_id_doc_url, is_approved, is_online)
-         VALUES ($1, $2, $3, $4, $5, $6, false, false)
-         RETURNING id, license_number, license_expiry, is_approved`,
-        [userId, license_number, license_expiry, license_doc_url || null,
-         national_id || null, national_id_doc_url || null]
+        `INSERT INTO drivers (user_id, license_number, license_expiry, license_doc_url, national_id, national_id_doc_url, is_approved, is_online
+           ${hasHome ? ', home_latitude, home_longitude, home_address, home_location' : ''})
+         VALUES ($1, $2, $3, $4, $5, $6, false, false
+           ${hasHome ? `, ${parseFloat(home_latitude)}, ${parseFloat(home_longitude)}, $7, ${homeGeom}` : ''})
+         RETURNING id, license_number, license_expiry, is_approved, home_latitude, home_longitude, home_address`,
+        hasHome
+          ? [userId, license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, home_address || null]
+          : [userId, license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null]
       );
       driverRecord = driverResult.rows[0];
     }
@@ -832,4 +844,53 @@ const refreshToken = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner };
+/**
+ * POST /auth/driver/home-location
+ * Set or update a driver's home location (GPS coordinates + reverse-geocoded address).
+ * Called from the post-registration onboarding screen — optional, can be skipped.
+ */
+const setHomeLocation = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const { latitude, longitude, address } = req.body;
+    if (latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: 'latitude and longitude are required' });
+    }
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ success: false, message: 'Invalid coordinates' });
+    }
+
+    const result = await db.query(
+      `UPDATE drivers
+       SET home_latitude  = $1,
+           home_longitude = $2,
+           home_address   = $3,
+           home_location  = ST_SetSRID(ST_MakePoint($2, $1), 4326)
+       WHERE user_id = $4
+       RETURNING id, home_latitude, home_longitude, home_address`,
+      [lat, lng, address || null, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Home location saved',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('[SetHomeLocation Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to save home location' });
+  }
+};
+
+module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner, setHomeLocation };

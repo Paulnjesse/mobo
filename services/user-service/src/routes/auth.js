@@ -9,7 +9,8 @@ const {
   logout,
   refreshToken,
   registerDriver,
-  registerFleetOwner
+  registerFleetOwner,
+  setHomeLocation
 } = require('../controllers/authController');
 
 // Public routes
@@ -23,5 +24,6 @@ router.post('/logout', logout);
 router.post('/refresh-token', authenticate, refreshToken);
 router.post('/register-driver', authenticate, registerDriver);
 router.post('/register-fleet-owner', authenticate, registerFleetOwner);
+router.post('/driver/home-location', authenticate, setHomeLocation);
 
 module.exports = router;
