@@ -554,7 +554,7 @@ const listRides = async (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
     const { limit = 20, offset = 0, status } = req.query;
-    let whereClause = 'WHERE (r.rider_id = $1 OR du.user_id = $1)';
+    let whereClause = 'WHERE (r.rider_id = $1 OR d.user_id = $1)';
     const params = [userId, limit, offset];
     if (status) { whereClause += ` AND r.status = $4`; params.push(status); }
 

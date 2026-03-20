@@ -14,25 +14,25 @@ const {
 const driverCtrl = require('../controllers/driverDestinationController');
 
 // Update location (driver or rider)
-router.post('/location', authenticate, updateLocation);
+router.post('/location/update', authenticate, updateLocation);
 
-// Get location for a user
-router.get('/location/:userId', authenticate, getLocation);
-
-// Get location history for self
+// Get location history for self (must come BEFORE /:userId)
 router.get('/location/history', authenticate, getLocationHistory);
-
-// Nearby drivers (public-ish, authenticated)
-router.get('/drivers/nearby', authenticate, getNearbyDrivers);
-
-// Driver online/offline status
-router.post('/location/driver/status', authenticate, requireDriver, updateDriverStatus);
 
 // Surge zone check
 router.get('/location/surge', authenticate, checkSurgeZone);
 
 // Route estimate between two points
 router.get('/location/route/estimate', authenticate, getRouteEstimate);
+
+// Driver online/offline status
+router.post('/location/driver/status', authenticate, requireDriver, updateDriverStatus);
+
+// Get location for a specific user (parameterized — comes LAST)
+router.get('/location/:userId', authenticate, getLocation);
+
+// Nearby drivers
+router.get('/drivers/nearby', authenticate, getNearbyDrivers);
 
 // Ride route (active ride tracking)
 router.get('/rides/:id/route', authenticate, getRideRoute);
