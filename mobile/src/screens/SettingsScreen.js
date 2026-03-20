@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
+import api from '../services/api';
 
 export default function SettingsScreen({ navigation }) {
   const { logout, user } = useAuth();
@@ -23,6 +24,18 @@ export default function SettingsScreen({ navigation }) {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [locationAlways, setLocationAlways] = useState(false);
+  const [businessProfile, setBusinessProfile] = useState(user?.business_profile_enabled || false);
+
+  const handleBusinessProfileToggle = async (value) => {
+    setBusinessProfile(value);
+    try {
+      await api.put('/users/profile', { business_profile_enabled: value });
+    } catch (err) {
+      // Revert on failure
+      setBusinessProfile(!value);
+      Alert.alert('Error', 'Could not update Business Profile. Please try again.');
+    }
+  };
 
   const SECTIONS = [
     {
@@ -40,6 +53,35 @@ export default function SettingsScreen({ navigation }) {
           icon: 'language-outline', label: 'Language', color: colors.primary,
           value: language?.toUpperCase() || 'EN',
           onPress: () => navigation.navigate('Language'),
+        },
+        {
+          icon: 'briefcase-outline', label: 'Business Profile', color: colors.text,
+          toggle: true, value: businessProfile, onToggle: handleBusinessProfileToggle,
+        },
+      ],
+    },
+    {
+      title: 'Features',
+      items: [
+        {
+          icon: 'female-outline', label: 'Women+ Connect', color: colors.primary,
+          onPress: () => navigation.navigate('WomenConnect'),
+        },
+        {
+          icon: 'people-outline', label: 'Preferred Drivers', color: colors.text,
+          onPress: () => navigation.navigate('PreferredDrivers'),
+        },
+        {
+          icon: 'home-outline', label: 'Family Account', color: colors.text,
+          onPress: () => navigation.navigate('FamilyAccount'),
+        },
+        {
+          icon: 'gift-outline', label: 'Refer a Friend', color: colors.success,
+          onPress: () => navigation.navigate('Referral'),
+        },
+        {
+          icon: 'search-outline', label: 'Lost & Found', color: colors.warning,
+          onPress: () => navigation.navigate('LostAndFound'),
         },
       ],
     },

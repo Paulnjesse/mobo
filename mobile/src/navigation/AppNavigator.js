@@ -45,10 +45,18 @@ import PromoCodeScreen      from '../screens/PromoCodeScreen';
 import SafetyScreen         from '../screens/SafetyScreen';
 import HelpScreen           from '../screens/HelpScreen';
 import CorporateScreen      from '../screens/CorporateScreen';
+import ReferralScreen       from '../screens/ReferralScreen';
+import FamilyAccountScreen  from '../screens/FamilyAccountScreen';
+import LostAndFoundScreen   from '../screens/LostAndFoundScreen';
+import WomenConnectScreen   from '../screens/WomenConnectScreen';
+import PreferredDriversScreen from '../screens/PreferredDriversScreen';
 
 // ── Driver Screens ─────────────────────────────────────────────────────────────
-import DriverHomeScreen from '../screens/DriverHomeScreen';
-import DriverRideScreen from '../screens/DriverRideScreen';
+import DriverHomeScreen     from '../screens/DriverHomeScreen';
+import DriverRideScreen     from '../screens/DriverRideScreen';
+import DriverBonusScreen    from '../screens/DriverBonusScreen';
+import ExpressPayScreen     from '../screens/ExpressPayScreen';
+import DestinationModeScreen from '../screens/DestinationModeScreen';
 
 // ── Fleet Owner Screens ────────────────────────────────────────────────────────
 import FleetDashboardScreen   from '../screens/fleet/FleetDashboardScreen';
@@ -117,28 +125,33 @@ function RiderTabs() {
 function RiderStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="RiderTabs"       component={RiderTabs} />
-      <Stack.Screen name="BookRide"        component={BookRideScreen}        options={{ presentation: 'modal' }} />
-      <Stack.Screen name="FareEstimate"    component={FareEstimateScreen}    options={{ presentation: 'modal' }} />
-      <Stack.Screen name="RideTracking"    component={RideTrackingScreen} />
-      <Stack.Screen name="Payment"         component={PaymentScreen}         options={{ presentation: 'modal' }} />
-      <Stack.Screen name="PaymentMethods"  component={PaymentMethodsScreen} />
-      <Stack.Screen name="Loyalty"         component={LoyaltyScreen} />
-      <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
-      <Stack.Screen name="Messages"        component={MessagesScreen} />
-      <Stack.Screen name="Notifications"   component={NotificationsScreen} />
-      <Stack.Screen name="Settings"        component={SettingsScreen} />
-      <Stack.Screen name="SOS"             component={SOSScreen}             options={{ presentation: 'modal' }} />
-      <Stack.Screen name="TeenAccounts"    component={TeenAccountScreen} />
-      <Stack.Screen name="Language"        component={LanguageScreen} />
-      <Stack.Screen name="ScheduledRide"   component={ScheduledRideScreen} />
-      <Stack.Screen name="SharedRide"      component={SharedRideScreen} />
-      <Stack.Screen name="RideReceipt"     component={RideReceiptScreen} />
-      <Stack.Screen name="SearchLocation"  component={SearchLocationScreen}  options={{ presentation: 'modal' }} />
-      <Stack.Screen name="PromoCode"       component={PromoCodeScreen} />
-      <Stack.Screen name="Safety"          component={SafetyScreen} />
-      <Stack.Screen name="Help"            component={HelpScreen} />
-      <Stack.Screen name="Corporate"       component={CorporateScreen} />
+      <Stack.Screen name="RiderTabs"          component={RiderTabs} />
+      <Stack.Screen name="BookRide"           component={BookRideScreen}          options={{ presentation: 'modal' }} />
+      <Stack.Screen name="FareEstimate"       component={FareEstimateScreen}      options={{ presentation: 'modal' }} />
+      <Stack.Screen name="RideTracking"       component={RideTrackingScreen} />
+      <Stack.Screen name="Payment"            component={PaymentScreen}           options={{ presentation: 'modal' }} />
+      <Stack.Screen name="PaymentMethods"     component={PaymentMethodsScreen} />
+      <Stack.Screen name="Loyalty"            component={LoyaltyScreen} />
+      <Stack.Screen name="Subscription"       component={SubscriptionScreen} />
+      <Stack.Screen name="Messages"           component={MessagesScreen} />
+      <Stack.Screen name="Notifications"      component={NotificationsScreen} />
+      <Stack.Screen name="Settings"           component={SettingsScreen} />
+      <Stack.Screen name="SOS"                component={SOSScreen}               options={{ presentation: 'modal' }} />
+      <Stack.Screen name="TeenAccounts"       component={TeenAccountScreen} />
+      <Stack.Screen name="Language"           component={LanguageScreen} />
+      <Stack.Screen name="ScheduledRide"      component={ScheduledRideScreen} />
+      <Stack.Screen name="SharedRide"         component={SharedRideScreen} />
+      <Stack.Screen name="RideReceipt"        component={RideReceiptScreen} />
+      <Stack.Screen name="SearchLocation"     component={SearchLocationScreen}    options={{ presentation: 'modal' }} />
+      <Stack.Screen name="PromoCode"          component={PromoCodeScreen} />
+      <Stack.Screen name="Safety"             component={SafetyScreen} />
+      <Stack.Screen name="Help"               component={HelpScreen} />
+      <Stack.Screen name="Corporate"          component={CorporateScreen} />
+      <Stack.Screen name="Referral"           component={ReferralScreen} />
+      <Stack.Screen name="FamilyAccount"      component={FamilyAccountScreen} />
+      <Stack.Screen name="LostAndFound"       component={LostAndFoundScreen} />
+      <Stack.Screen name="WomenConnect"       component={WomenConnectScreen} />
+      <Stack.Screen name="PreferredDrivers"   component={PreferredDriversScreen} />
     </Stack.Navigator>
   );
 }
@@ -147,12 +160,15 @@ function RiderStack() {
 function DriverStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="DriverHome"    component={DriverHomeScreen} />
-      <Stack.Screen name="DriverRide"    component={DriverRideScreen} />
-      <Stack.Screen name="Settings"      component={SettingsScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Messages"      component={MessagesScreen} />
-      <Stack.Screen name="SOS"           component={SOSScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DriverHome"       component={DriverHomeScreen} />
+      <Stack.Screen name="DriverRide"       component={DriverRideScreen} />
+      <Stack.Screen name="Settings"         component={SettingsScreen} />
+      <Stack.Screen name="Notifications"    component={NotificationsScreen} />
+      <Stack.Screen name="Messages"         component={MessagesScreen} />
+      <Stack.Screen name="SOS"              component={SOSScreen}             options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DriverBonus"      component={DriverBonusScreen} />
+      <Stack.Screen name="ExpressPay"       component={ExpressPayScreen} />
+      <Stack.Screen name="DestinationMode"  component={DestinationModeScreen} />
     </Stack.Navigator>
   );
 }

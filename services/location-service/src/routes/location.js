@@ -11,6 +11,7 @@ const {
   getLocationHistory,
   updateDriverStatus
 } = require('../controllers/locationController');
+const driverCtrl = require('../controllers/driverDestinationController');
 
 // Update location (driver or rider)
 router.post('/location', authenticate, updateLocation);
@@ -35,5 +36,18 @@ router.get('/location/route/estimate', authenticate, getRouteEstimate);
 
 // Ride route (active ride tracking)
 router.get('/rides/:id/route', authenticate, getRideRoute);
+
+// Destination mode
+router.get('/destination-mode', authenticate, driverCtrl.getDestinationMode);
+router.post('/destination-mode', authenticate, driverCtrl.setDestinationMode);
+
+// Driver bonuses & streaks
+router.get('/bonuses', authenticate, driverCtrl.getDriverBonuses);
+router.post('/bonuses/challenges', authenticate, driverCtrl.createBonusChallenge);
+
+// Express Pay
+router.post('/express-pay/setup', authenticate, driverCtrl.setupExpressPay);
+router.post('/express-pay/payout', authenticate, driverCtrl.requestExpressPayout);
+router.get('/express-pay/history', authenticate, driverCtrl.getExpressPayHistory);
 
 module.exports = router;

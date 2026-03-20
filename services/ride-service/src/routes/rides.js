@@ -1,74 +1,52 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, requireDriver } = require('../middleware/auth');
-const {
-  requestRide,
-  getFare,
-  acceptRide,
-  updateRideStatus,
-  cancelRide,
-  getRide,
-  listRides,
-  rateRide,
-  addTip,
-  roundUpFare,
-  getSurgePricing,
-  getNearbyDrivers,
-  applyPromoCode,
-  getActivePromos,
-  getMessages,
-  sendMessage
-} = require('../controllers/rideController');
+const { authenticate } = require('../middleware/auth');
+const ctrl = require('../controllers/rideController');
 
-// Promo codes — must be before /:id routes to avoid conflicts
-router.post('/promo/apply', authenticate, applyPromoCode);
-router.get('/promos', authenticate, getActivePromos);
+// Fare & pricing
+router.post('/fare', authenticate, ctrl.getFare);
+router.post('/fare/lock', authenticate, ctrl.lockPrice);
+router.get('/surge', authenticate, ctrl.getSurgePricing);
 
-// Fare estimation (public or authenticated)
-router.get('/estimate', (req, res, next) => {
-  // Allow unauthenticated fare estimates
-  const authHeader = req.headers.authorization;
-  if (authHeader) {
-    return authenticate(req, res, next);
-  }
-  next();
-}, getFare);
+// Promo codes
+router.post('/promo/apply', authenticate, ctrl.applyPromoCode);
+router.get('/promo/active', authenticate, ctrl.getActivePromos);
 
-// Surge check (public)
-router.get('/surge', getSurgePricing);
+// Preferred drivers
+router.get('/preferred-drivers', authenticate, ctrl.getPreferredDrivers);
+router.post('/preferred-drivers', authenticate, ctrl.addPreferredDriver);
+router.delete('/preferred-drivers/:driver_id', authenticate, ctrl.removePreferredDriver);
 
-// Nearby drivers
-router.get('/drivers/nearby', authenticate, getNearbyDrivers);
+// Concierge
+router.post('/concierge', authenticate, ctrl.createConciergeBooking);
+router.get('/concierge', authenticate, ctrl.getConciergeBookings);
 
-// Ride list
-router.get('/', authenticate, listRides);
+// Lost & Found
+router.post('/lost-and-found', authenticate, ctrl.reportLostItem);
+router.get('/lost-and-found', authenticate, ctrl.getLostAndFound);
+router.patch('/lost-and-found/:id', authenticate, ctrl.updateLostAndFoundStatus);
 
-// Request a ride
-router.post('/request', authenticate, requestRide);
+// Ride CRUD
+router.post('/', authenticate, ctrl.requestRide);
+router.get('/', authenticate, ctrl.listRides);
+router.get('/:id', authenticate, ctrl.getRide);
 
-// Get single ride
-router.get('/:id', authenticate, getRide);
+// Ride actions
+router.post('/:id/accept', authenticate, ctrl.acceptRide);
+router.patch('/:id/status', authenticate, ctrl.updateRideStatus);
+router.post('/:id/cancel', authenticate, ctrl.cancelRide);
+router.post('/:id/rate', authenticate, ctrl.rateRide);
+router.post('/:id/tip', authenticate, ctrl.addTip);
+router.post('/:id/round-up', authenticate, ctrl.roundUpFare);
+router.patch('/:id/stops', authenticate, ctrl.updateRideStops);
 
-// Driver accepts ride
-router.patch('/:id/accept', authenticate, requireDriver, acceptRide);
+// Check-ins
+router.post('/checkins', authenticate, ctrl.triggerCheckin);
+router.patch('/checkins/:id/respond', authenticate, ctrl.respondToCheckin);
+router.get('/:ride_id/checkins', authenticate, ctrl.getCheckins);
 
-// Update ride status
-router.patch('/:id/status', authenticate, requireDriver, updateRideStatus);
-
-// Cancel ride (rider or driver)
-router.post('/:id/cancel', authenticate, cancelRide);
-
-// Rate ride
-router.post('/:id/rate', authenticate, rateRide);
-
-// Add tip
-router.post('/:id/tip', authenticate, addTip);
-
-// Round up fare
-router.post('/:id/round-up', authenticate, roundUpFare);
-
-// Messages for a ride
-router.get('/:id/messages', authenticate, getMessages);
-router.post('/:id/messages', authenticate, sendMessage);
+// Messages
+router.get('/:id/messages', authenticate, ctrl.getMessages);
+router.post('/:id/messages', authenticate, ctrl.sendMessage);
 
 module.exports = router;

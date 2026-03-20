@@ -8,6 +8,7 @@ import {
   StatusBar,
   Animated,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -18,6 +19,27 @@ import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, disconnectSockets, rideSocket, locationSocket } from '../services/socket';
 
 const COUNTDOWN_SECONDS = 15;
+
+const QUICK_ACTIONS = [
+  {
+    icon: 'navigate-circle-outline',
+    label: 'Destination\nMode',
+    screen: 'DestinationMode',
+    color: colors.primary,
+  },
+  {
+    icon: 'trophy-outline',
+    label: 'Bonuses',
+    screen: 'DriverBonus',
+    color: colors.warning,
+  },
+  {
+    icon: 'flash-outline',
+    label: 'Express\nPay',
+    screen: 'ExpressPay',
+    color: colors.success,
+  },
+];
 
 export default function DriverHomeScreen({ navigation }) {
   const { user } = useAuth();
@@ -260,6 +282,23 @@ export default function DriverHomeScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Quick action buttons */}
+        <View style={styles.quickActionsRow}>
+          {QUICK_ACTIONS.map((action) => (
+            <TouchableOpacity
+              key={action.screen}
+              style={styles.quickActionBtn}
+              onPress={() => navigation.navigate(action.screen)}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: action.color + '18' }]}>
+                <Ionicons name={action.icon} size={24} color={action.color} />
+              </View>
+              <Text style={styles.quickActionLabel}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Go Online / Offline button */}
         <TouchableOpacity
           style={[styles.toggleBtn, isOnline ? styles.toggleBtnOnline : styles.toggleBtnOffline]}
@@ -347,7 +386,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg, shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.1, shadowRadius: 20, elevation: 16,
   },
-  greetRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  greetRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   driverAvatar: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
@@ -363,6 +402,19 @@ const styles = StyleSheet.create({
   },
   earningsLabel: { fontSize: 10, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   earningsValue: { fontSize: 16, fontWeight: '800', color: colors.primary },
+  quickActionsRow: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    marginBottom: spacing.md, paddingHorizontal: spacing.xs,
+  },
+  quickActionBtn: { alignItems: 'center', flex: 1 },
+  quickActionIcon: {
+    width: 56, height: 56, borderRadius: radius.lg,
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs,
+  },
+  quickActionLabel: {
+    fontSize: 11, fontWeight: '600', color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 14,
+  },
   toggleBtn: {
     borderRadius: radius.pill, height: 56, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: spacing.sm,
