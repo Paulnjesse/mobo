@@ -72,6 +72,7 @@ import DriverRealIDScreen    from '../screens/DriverRealIDScreen';
 
 // ── Fleet Owner Screens ────────────────────────────────────────────────────────
 import FleetDashboardScreen   from '../screens/fleet/FleetDashboardScreen';
+import FleetEarningsScreen    from '../screens/fleet/FleetEarningsScreen';
 import FleetManagementScreen  from '../screens/fleet/FleetManagementScreen';
 import AddVehicleScreen       from '../screens/fleet/AddVehicleScreen';
 import VehicleDetailScreen    from '../screens/fleet/VehicleDetailScreen';
@@ -243,7 +244,7 @@ function FleetOwnerTabs() {
       })}
     >
       <Tab.Screen name="FleetTab"    component={FleetDashboardScreen} options={{ tabBarLabel: 'My Fleets' }} />
-      <Tab.Screen name="EarningsTab" component={FleetDashboardScreen} options={{ tabBarLabel: 'Earnings' }} />
+      <Tab.Screen name="EarningsTab" component={FleetEarningsScreen}  options={{ tabBarLabel: 'Earnings' }} />
       <Tab.Screen name="AccountTab"  component={ProfileScreen}        options={{ tabBarLabel: 'Account' }} />
     </Tab.Navigator>
   );
@@ -255,6 +256,7 @@ function FleetOwnerStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="FleetOwnerTabs"   component={FleetOwnerTabs} />
       <Stack.Screen name="FleetDashboard"   component={FleetDashboardScreen} />
+      <Stack.Screen name="FleetEarnings"    component={FleetEarningsScreen} />
       <Stack.Screen name="FleetManagement"  component={FleetManagementScreen} />
       <Stack.Screen name="AddVehicle"       component={AddVehicleScreen} />
       <Stack.Screen name="VehicleDetail"    component={VehicleDetailScreen} />
