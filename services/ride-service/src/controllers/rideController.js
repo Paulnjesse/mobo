@@ -111,8 +111,11 @@ const respondToCheckin = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Check-in not found' });
 
     if (response === 'need_help') {
-      // Escalate — mark as escalated, notify admin
-      await pool.query('UPDATE ride_checkins SET escalated = true WHERE id = $1', [id]);
+      // Escalate — mark as escalated with timestamp so job doesn't double-process
+      await pool.query(
+        'UPDATE ride_checkins SET escalated = true, escalated_at = NOW() WHERE id = $1',
+        [id]
+      );
     }
 
     res.json({ success: true, checkin: result.rows[0] });
