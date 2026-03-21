@@ -6,6 +6,7 @@ const disputeCtrl   = require('../controllers/disputeController');
 const shareCtrl     = require('../controllers/shareTripController');
 const recordingCtrl = require('../controllers/recordingController');
 const deliveryCtrl  = require('../controllers/deliveryController');
+const sosCtrl       = require('../controllers/sosController');
 
 // ── Delivery routes (all before /:id to avoid param conflicts)
 router.get('/deliveries/estimate',          authenticate, deliveryCtrl.estimateDeliveryFare);
@@ -75,6 +76,9 @@ router.get('/:ride_id/checkins', authenticate, ctrl.getCheckins);
 // Messages
 router.get('/:id/messages', authenticate, ctrl.getMessages);
 router.post('/:id/messages', authenticate, ctrl.sendMessage);
+
+// SOS
+router.post('/:id/sos', authenticate, sosCtrl.triggerSOS);
 
 // Ride audio recordings
 router.post('/:id/recording',  authenticate, recordingCtrl.saveRecording);

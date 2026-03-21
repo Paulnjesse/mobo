@@ -35,4 +35,30 @@ const sendTripStartSMS = async ({ contacts, driverName, plate, vehicleColor, veh
   return { sent, total: contacts.length };
 };
 
-module.exports = { sendTripStartSMS };
+const sendSOSSMS = async ({ contacts, triggeredBy, rideId, pickupAddress }) => {
+  const sid   = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from  = process.env.TWILIO_FROM_NUMBER;
+
+  const message = `🆘 MOBO SOS ALERT: ${triggeredBy} has triggered an emergency SOS on ride #${rideId}. Last known location: ${pickupAddress}. Please check on them immediately or call emergency services (117).`;
+
+  if (!sid || !token || !from || !twilio) {
+    console.log('[NotifyContacts] Twilio not configured — SOS SMS would be sent to:', contacts.map(c => c.phone));
+    console.log('[NotifyContacts] SOS Message:', message);
+    return { sent: 0, simulated: contacts.length };
+  }
+
+  const client = twilio(sid, token);
+  let sent = 0;
+  for (const contact of contacts) {
+    try {
+      await client.messages.create({ body: message, from, to: contact.phone });
+      sent++;
+    } catch (err) {
+      console.warn(`[NotifyContacts] SOS SMS failed for ${contact.phone}:`, err.message);
+    }
+  }
+  return { sent, total: contacts.length };
+};
+
+module.exports = { sendTripStartSMS, sendSOSSMS };

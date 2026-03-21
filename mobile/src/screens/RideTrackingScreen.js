@@ -424,7 +424,7 @@ export default function RideTrackingScreen({ navigation, route }) {
       )}
 
       {/* SOS button */}
-      <SOSButton onPress={() => navigation.navigate('SOS')} style={{ bottom: insets.bottom + 280 }} />
+      <SOSButton onPress={() => navigation.navigate('SOS', { rideId })} style={{ bottom: insets.bottom + 280 }} />
 
       {/* Bottom card */}
       <View style={[styles.bottomCard, { paddingBottom: insets.bottom + spacing.md }]}>

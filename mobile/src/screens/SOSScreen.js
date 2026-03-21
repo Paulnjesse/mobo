@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
+import api from '../services/api';
 
 const EMERGENCY_ACTIONS = [
   {
@@ -49,8 +50,9 @@ const EMERGENCY_ACTIONS = [
   },
 ];
 
-export default function SOSScreen({ navigation }) {
+export default function SOSScreen({ navigation, route }) {
   const { t } = useLanguage();
+  const rideId = route?.params?.rideId || null;
   const [sharing, setSharing] = useState(false);
   const [shared, setShared] = useState(false);
 
@@ -65,7 +67,14 @@ export default function SOSScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             setSharing(true);
-            await new Promise((r) => setTimeout(r, 1500));
+            try {
+              if (rideId) {
+                await api.post(`/rides/${rideId}/sos`);
+              }
+            } catch (err) {
+              console.warn('[SOSScreen] SOS API call failed:', err.message);
+              // Don't block the UI — emergency call still proceeds
+            }
             setSharing(false);
             setShared(true);
             Alert.alert('SOS Sent', 'Help is on the way. MOBO safety team has been notified and your location is being shared.');
@@ -85,7 +94,13 @@ export default function SOSScreen({ navigation }) {
 
   const handleShareLocation = async () => {
     setSharing(true);
-    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      if (rideId) {
+        await api.post(`/rides/${rideId}/share`);
+      }
+    } catch (err) {
+      console.warn('[SOSScreen] Share location failed:', err.message);
+    }
     setSharing(false);
     setShared(true);
     Alert.alert('Location Shared', 'Your current location has been shared with your emergency contact.');

@@ -269,7 +269,7 @@ export default function DriverRideScreen({ navigation, route }) {
       )}
 
       {/* SOS */}
-      <SOSButton onPress={() => navigation.navigate('SOS')} style={{ bottom: insets.bottom + 300 }} />
+      <SOSButton onPress={() => navigation.navigate('SOS', { rideId })} style={{ bottom: insets.bottom + 300 }} />
 
       {/* Bottom card */}
       <View style={[styles.bottomCard, { paddingBottom: insets.bottom + spacing.md }]}>
