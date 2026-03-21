@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ExpoLocation from 'expo-location';
 import { useLanguage } from '../context/LanguageContext';
 import SOSButton from '../components/SOSButton';
+import AudioRecordingToggle from '../components/AudioRecordingToggle';
 import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, rideSocket } from '../services/socket';
 
@@ -50,6 +51,8 @@ export default function DriverRideScreen({ navigation, route }) {
 
   // GPS emit interval handle
   const locationIntervalRef = useRef(null);
+  // Stable ref for AudioRecordingToggle save callback
+  const recordingCompleteRef = useRef(() => {});
 
   const currentStep = RIDE_STEPS[stepIndex];
   const ride = rideRequest || {};
@@ -179,6 +182,9 @@ export default function DriverRideScreen({ navigation, route }) {
       emitStatusChange(next);
     } else if (currentStep.key === 'completed') {
       stopGPSBroadcast();
+      if (recordingCompleteRef.current.currentSave) {
+        recordingCompleteRef.current.currentSave().catch(() => {});
+      }
       navigation.goBack();
     } else {
       const next = stepIndex + 1;
@@ -315,6 +321,15 @@ export default function DriverRideScreen({ navigation, route }) {
               />
             </View>
           </View>
+        )}
+
+        {/* Safety recording — available while ride is in progress */}
+        {currentStep.key === 'inprogress' && (
+          <AudioRecordingToggle
+            rideId={rideId}
+            role="driver"
+            onRecordingComplete={recordingCompleteRef.current}
+          />
         )}
 
         {/* Action buttons */}

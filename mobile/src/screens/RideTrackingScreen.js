@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import SOSButton from '../components/SOSButton';
+import AudioRecordingToggle from '../components/AudioRecordingToggle';
 import { getDirections } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, onDriverLocation, onRideStatus, onMessage } from '../services/socket';
@@ -79,6 +80,8 @@ export default function RideTrackingScreen({ navigation, route }) {
 
   const mapRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Stable function object — AudioRecordingToggle attaches .currentSave onto it
+  const recordingCompleteRef = useRef(() => {});
 
   // Real-time driver position received via WebSocket
   const [driverLocation, setDriverLocation] = useState(null);
@@ -136,6 +139,10 @@ export default function RideTrackingScreen({ navigation, route }) {
       unsubStatus = onRideStatus(rideId, (data) => {
         setLiveStatus(data.status);
         if (data.status === 'completed') {
+          // Save any active recording before navigating away
+          if (recordingCompleteRef.current.currentSave) {
+            recordingCompleteRef.current.currentSave().catch(() => {});
+          }
           // Give the rider a moment to see the "completed" state before navigating
           setTimeout(() => {
             navigation.replace('RideComplete', { rideId });
@@ -457,6 +464,16 @@ export default function RideTrackingScreen({ navigation, route }) {
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.findingText}>Finding your driver...</Text>
           </View>
+        )}
+
+        {/* Safety recording — available while ride is in progress */}
+        {liveStatus === 'in_progress' && (
+          <AudioRecordingToggle
+            rideId={rideId}
+            role="rider"
+            onRecordingComplete={recordingCompleteRef.current}
+          />
+
         )}
 
         {/* Action buttons: Message + Call */}

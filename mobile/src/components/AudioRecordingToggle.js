@@ -68,7 +68,7 @@ function PulsingDot() {
  *   rideId              {string}    — current ride ID
  *   onRecordingComplete {function}  — called when ride ends externally; triggers save
  */
-export default function AudioRecordingToggle({ rideId, onRecordingComplete }) {
+export default function AudioRecordingToggle({ rideId, role = 'rider', onRecordingComplete }) {
   const [enabled, setEnabled] = useState(false);
   const [phase, setPhase] = useState('idle'); // idle | recording | saving | saved | error
   const [duration, setDuration] = useState(0);     // seconds elapsed
@@ -96,7 +96,7 @@ export default function AudioRecordingToggle({ rideId, onRecordingComplete }) {
           await api.post(`/rides/${rideId}/recording`, {
             storage_url: uri,
             duration_sec: elapsed,
-            role: 'rider',
+            role,
           });
         }
         setPhase('saved');
