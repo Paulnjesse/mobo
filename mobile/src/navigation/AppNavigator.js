@@ -51,11 +51,16 @@ import LostAndFoundScreen   from '../screens/LostAndFoundScreen';
 import WomenConnectScreen   from '../screens/WomenConnectScreen';
 import PreferredDriversScreen from '../screens/PreferredDriversScreen';
 import TrustedContactsScreen from '../screens/TrustedContactsScreen';
-import ShareTripScreen       from '../screens/ShareTripScreen';
-import DisputeScreen         from '../screens/DisputeScreen';
-import DriverMatchScreen     from '../screens/DriverMatchScreen';
+import ShareTripScreen          from '../screens/ShareTripScreen';
+import DisputeScreen            from '../screens/DisputeScreen';
+import DriverMatchScreen        from '../screens/DriverMatchScreen';
+import DeliveryBookingScreen    from '../screens/DeliveryBookingScreen';
+import DeliveryTrackingScreen   from '../screens/DeliveryTrackingScreen';
+import DeliveryHistoryScreen    from '../screens/DeliveryHistoryScreen';
 
 // ── Driver Screens ─────────────────────────────────────────────────────────────
+import DriverDeliveryScreen        from '../screens/DriverDeliveryScreen';
+import DriverDeliveryRequestScreen from '../screens/DriverDeliveryRequestScreen';
 import DriverHomeScreen     from '../screens/DriverHomeScreen';
 import DriverRideScreen     from '../screens/DriverRideScreen';
 import DriverBonusScreen    from '../screens/DriverBonusScreen';
@@ -165,6 +170,9 @@ function RiderStack() {
       <Stack.Screen name="ShareTrip"          component={ShareTripScreen}         options={{ presentation: 'modal' }} />
       <Stack.Screen name="Dispute"            component={DisputeScreen}           options={{ presentation: 'modal' }} />
       <Stack.Screen name="DriverMatch"        component={DriverMatchScreen}       options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DeliveryBooking"    component={DeliveryBookingScreen}   options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DeliveryTracking"   component={DeliveryTrackingScreen} />
+      <Stack.Screen name="DeliveryHistory"    component={DeliveryHistoryScreen} />
     </Stack.Navigator>
   );
 }
@@ -199,6 +207,9 @@ function DriverStack() {
       <Stack.Screen name="Dispute"          component={DisputeScreen}         options={{ presentation: 'modal' }} />
       <Stack.Screen name="TrustedContacts"  component={TrustedContactsScreen} />
       <Stack.Screen name="FatigueBreak"     component={FatigueBreakScreen}    options={{ gestureEnabled: false, headerShown: false }} />
+      <Stack.Screen name="DriverDelivery"   component={DriverDeliveryScreen} />
+      <Stack.Screen name="DriverDeliveryRequest" component={DriverDeliveryRequestScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="DeliveryTracking" component={DeliveryTrackingScreen} />
     </Stack.Navigator>
   );
 }

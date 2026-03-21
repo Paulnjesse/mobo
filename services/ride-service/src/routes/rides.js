@@ -5,6 +5,19 @@ const ctrl          = require('../controllers/rideController');
 const disputeCtrl   = require('../controllers/disputeController');
 const shareCtrl     = require('../controllers/shareTripController');
 const recordingCtrl = require('../controllers/recordingController');
+const deliveryCtrl  = require('../controllers/deliveryController');
+
+// ── Delivery routes (all before /:id to avoid param conflicts)
+router.get('/deliveries/estimate',          authenticate, deliveryCtrl.estimateDeliveryFare);
+router.get('/deliveries/mine',              authenticate, deliveryCtrl.getMyDeliveries);
+router.get('/deliveries/nearby',            authenticate, deliveryCtrl.getNearbyDeliveries);
+router.get('/deliveries/stats',             authenticate, deliveryCtrl.getDeliveryStats);
+router.post('/deliveries',                  authenticate, deliveryCtrl.createDelivery);
+router.get('/deliveries/:id',               authenticate, deliveryCtrl.getDeliveryById);
+router.post('/deliveries/:id/accept',       authenticate, deliveryCtrl.acceptDelivery);
+router.patch('/deliveries/:id/status',      authenticate, deliveryCtrl.updateDeliveryStatus);
+router.post('/deliveries/:id/verify-otp',   authenticate, deliveryCtrl.verifyRecipientOTP);
+router.post('/deliveries/:id/cancel',       authenticate, deliveryCtrl.cancelDelivery);
 
 // ── Share trip (PUBLIC track route MUST come before /:id to avoid param conflict)
 router.get('/track/:token', shareCtrl.getSharedTrip);  // PUBLIC - no auth

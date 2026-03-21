@@ -99,6 +99,14 @@ export default function HomeScreen({ navigation }) {
     setSearchQuery(place.description);
     setSearchResults([]);
     setSearchFocused(false);
+
+    // Delivery ride type goes straight to DeliveryBookingScreen
+    if (selectedType === 'delivery') {
+      navigation.navigate('DeliveryBooking');
+      setSearchQuery('');
+      return;
+    }
+
     // Navigate to BookRide with the selected destination
     const details = await getPlaceDetails(place.placeId);
     navigation.navigate('BookRide', {
@@ -113,10 +121,18 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleBookRide = () => {
+    if (selectedType === 'delivery') {
+      navigation.navigate('DeliveryBooking');
+      return;
+    }
     navigation.navigate('BookRide', { initialRideType: selectedType });
   };
 
   const handleDestinationPress = (dest) => {
+    if (selectedType === 'delivery') {
+      navigation.navigate('DeliveryBooking');
+      return;
+    }
     navigation.navigate('BookRide', { initialRideType: selectedType, dropoff: dest });
   };
 

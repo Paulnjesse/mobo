@@ -22,6 +22,7 @@ import DocumentExpiry from './pages/DocumentExpiry';
 import TwoFactorSetup from './pages/TwoFactorSetup';
 import BackgroundChecks from './pages/BackgroundChecks';
 import SafetyZones from './pages/SafetyZones';
+import Deliveries from './pages/Deliveries';
 
 const theme = createTheme({
   palette: {
@@ -143,6 +144,7 @@ function App() {
               <Route path="/bg-checks"         element={<BackgroundChecks />} />
               <Route path="/safety-zones-mgr"  element={<SafetyZones />} />
               <Route path="/2fa-setup"         element={<TwoFactorSetup />} />
+              <Route path="/deliveries-mgmt"   element={<Deliveries />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

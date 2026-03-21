@@ -31,6 +31,7 @@ import {
   PersonSearch as PersonSearchIcon,
   LocationOn as LocationOnIcon,
   Security as SecurityIcon,
+  DeliveryDining as DeliveryDiningIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
   { label: 'BG Checks',      path: '/bg-checks',      icon: <PersonSearchIcon /> },
   { label: 'Safety Zones',   path: '/safety-zones-mgr', icon: <LocationOnIcon /> },
   { label: '2FA Security',   path: '/2fa-setup',      icon: <SecurityIcon /> },
+  { label: 'Deliveries',     path: '/deliveries-mgmt', icon: <DeliveryDiningIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];

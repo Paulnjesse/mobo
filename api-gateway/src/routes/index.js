@@ -19,6 +19,7 @@ module.exports = (app) => {
   app.use(createProxyMiddleware('/api/users',    { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/users':    '/users'    }, on: { error: onError } }));
   app.use(createProxyMiddleware('/api/fleet',    { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/fleet':    '/fleet'    }, on: { error: onError } }));
   app.use(createProxyMiddleware('/api/social',   { target: USER_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/social':   '/social'   }, on: { error: onError } }));
+  app.use(createProxyMiddleware('/api/deliveries', { target: RIDE_SERVICE, changeOrigin: true, pathRewrite: { '^/api/deliveries': '/rides/deliveries' }, on: { error: onError } }));
   app.use(createProxyMiddleware('/api/rides',    { target: RIDE_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/rides':    '/rides'    }, on: { error: onError } }));
   app.use(createProxyMiddleware('/api/fare',     { target: RIDE_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/fare':     '/rides/fare'}, on: { error: onError } }));
   app.use(createProxyMiddleware('/api/disputes', { target: RIDE_SERVICE,     changeOrigin: true, pathRewrite: { '^/api/disputes': '/rides/disputes' }, on: { error: onError } }));

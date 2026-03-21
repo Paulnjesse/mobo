@@ -9,10 +9,13 @@ import {
   Animated,
   Platform,
   ScrollView,
+  FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import * as ExpoLocation from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
@@ -53,6 +56,12 @@ export default function DriverHomeScreen({ navigation }) {
   const countdownRef = useRef(null);
   const ringAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(300)).current;
+
+  // Nearby deliveries bottom sheet state
+  const [showDeliverySheet, setShowDeliverySheet] = useState(false);
+  const [nearbyDeliveries, setNearbyDeliveries] = useState([]);
+  const [loadingDeliveries, setLoadingDeliveries] = useState(false);
+  const deliverySheetAnim = useRef(new Animated.Value(400)).current;
 
   // Track whether sockets have been set up this session
   const socketsReady = useRef(false);
@@ -152,6 +161,59 @@ export default function DriverHomeScreen({ navigation }) {
     Animated.loop(
       Animated.timing(ringAnim, { toValue: 1, duration: COUNTDOWN_SECONDS * 1000, useNativeDriver: false })
     ).start();
+  };
+
+  // -------------------------------------------------------------------------
+  // Nearby deliveries
+  // -------------------------------------------------------------------------
+  const handleShowNearbyDeliveries = async () => {
+    setLoadingDeliveries(true);
+    setShowDeliverySheet(true);
+    Animated.spring(deliverySheetAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 9,
+    }).start();
+
+    try {
+      let lat = mapRegion.latitude;
+      let lng = mapRegion.longitude;
+
+      // Try to get actual device location
+      try {
+        const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced });
+          lat = loc.coords.latitude;
+          lng = loc.coords.longitude;
+        }
+      } catch (_) {}
+
+      const res = await api.get('/deliveries/nearby', {
+        params: { lat, lng, radius_km: 5 },
+      });
+      const data = res.data?.deliveries || res.data || [];
+      setNearbyDeliveries(Array.isArray(data) ? data : []);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Could not load nearby deliveries.');
+      setNearbyDeliveries([]);
+    } finally {
+      setLoadingDeliveries(false);
+    }
+  };
+
+  const handleCloseDeliverySheet = () => {
+    Animated.timing(deliverySheetAnim, {
+      toValue: 400,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setShowDeliverySheet(false));
+  };
+
+  const handleAcceptDelivery = (delivery) => {
+    handleCloseDeliverySheet();
+    navigation.navigate('DriverDeliveryRequest', { delivery });
   };
 
   // -------------------------------------------------------------------------
@@ -316,6 +378,19 @@ export default function DriverHomeScreen({ navigation }) {
           ))}
         </View>
 
+        {/* Nearby deliveries chip */}
+        <TouchableOpacity
+          style={styles.deliveriesChip}
+          onPress={handleShowNearbyDeliveries}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="cube-outline" size={17} color={colors.white} />
+          <Text style={styles.deliveriesChipText}>📦 Deliveries nearby</Text>
+          <View style={styles.deliveriesChipArrow}>
+            <Ionicons name="chevron-up" size={14} color={colors.white} />
+          </View>
+        </TouchableOpacity>
+
         {/* Go Online / Offline button */}
         <TouchableOpacity
           style={[styles.toggleBtn, isOnline ? styles.toggleBtnOnline : styles.toggleBtnOffline]}
@@ -326,6 +401,70 @@ export default function DriverHomeScreen({ navigation }) {
           <Text style={styles.toggleBtnText}>{isOnline ? 'GO OFFLINE' : 'GO ONLINE'}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Nearby Deliveries Bottom Sheet */}
+      {showDeliverySheet && (
+        <Animated.View
+          style={[
+            styles.deliverySheet,
+            { transform: [{ translateY: deliverySheetAnim }], paddingBottom: insets.bottom + spacing.md },
+          ]}
+        >
+          <View style={styles.deliverySheetHeader}>
+            <Text style={styles.deliverySheetTitle}>Nearby Deliveries</Text>
+            <TouchableOpacity onPress={handleCloseDeliverySheet} activeOpacity={0.7}>
+              <Ionicons name="close" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {loadingDeliveries ? (
+            <View style={styles.deliverySheetLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.deliverySheetLoadingText}>Finding deliveries nearby...</Text>
+            </View>
+          ) : nearbyDeliveries.length === 0 ? (
+            <View style={styles.deliverySheetEmpty}>
+              <Ionicons name="cube-outline" size={36} color={colors.gray300} />
+              <Text style={styles.deliverySheetEmptyText}>No deliveries nearby right now</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={nearbyDeliveries}
+              keyExtractor={(item) => String(item._id || item.id)}
+              style={styles.deliverySheetList}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const fare = item.fare != null ? `${Number(item.fare).toLocaleString()} XAF` : '–';
+                return (
+                  <View style={styles.deliverySheetItem}>
+                    <View style={styles.deliverySheetItemInfo}>
+                      <View style={styles.deliverySheetItemBadge}>
+                        <Text style={styles.deliverySheetItemBadgeText}>
+                          {item.package_size ? item.package_size.replace('_', ' ') : 'Package'}
+                        </Text>
+                        {item.fragile && (
+                          <Text style={styles.deliverySheetItemFragile}>⚠️</Text>
+                        )}
+                      </View>
+                      <Text style={styles.deliverySheetItemAddress} numberOfLines={1}>
+                        {item.pickup_address || item.pickup?.address || 'Pickup'}
+                      </Text>
+                      <Text style={styles.deliverySheetItemFare}>{fare}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.deliverySheetAcceptBtn}
+                      onPress={() => handleAcceptDelivery(item)}
+                      activeOpacity={0.88}
+                    >
+                      <Text style={styles.deliverySheetAcceptBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </Animated.View>
+      )}
 
       {/* Ride Request Popup */}
       {rideRequest && (
@@ -477,4 +616,142 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
   acceptBtnText: { fontSize: 16, fontWeight: '800', color: colors.white },
+
+  // Nearby deliveries chip
+  deliveriesChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: '#3B82F6',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  deliveriesChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.white,
+    flex: 1,
+    textAlign: 'center',
+  },
+  deliveriesChipArrow: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Nearby deliveries bottom sheet
+  deliverySheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: spacing.lg,
+    maxHeight: '60%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 22,
+    zIndex: 18,
+  },
+  deliverySheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  deliverySheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  deliverySheetLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+  },
+  deliverySheetLoadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  deliverySheetEmpty: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+  },
+  deliverySheetEmptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  deliverySheetList: {
+    maxHeight: 300,
+  },
+  deliverySheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray200,
+  },
+  deliverySheetItemInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  deliverySheetItemBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  deliverySheetItemBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B82F6',
+    textTransform: 'capitalize',
+  },
+  deliverySheetItemFragile: {
+    fontSize: 13,
+  },
+  deliverySheetItemAddress: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  deliverySheetItemFare: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.success,
+  },
+  deliverySheetAcceptBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  deliverySheetAcceptBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.white,
+  },
 });
