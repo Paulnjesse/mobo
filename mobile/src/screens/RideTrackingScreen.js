@@ -18,9 +18,10 @@ import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import SOSButton from '../components/SOSButton';
 import AudioRecordingToggle from '../components/AudioRecordingToggle';
+import SpeedAlertOverlay from '../components/SpeedAlertOverlay';
 import { getDirections } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
-import { connectSockets, onDriverLocation, onRideStatus, onMessage } from '../services/socket';
+import { connectSockets, onDriverLocation, onRideStatus, onMessage, onSpeedAlert } from '../services/socket';
 
 // Decode a Google Maps encoded polyline string into an array of { latitude, longitude }
 function decodePolyline(encoded) {
@@ -88,6 +89,9 @@ export default function RideTrackingScreen({ navigation, route }) {
   // Toast notification for incoming messages
   const [messageToast, setMessageToast] = useState(null);
   const messageToastTimer = useRef(null);
+  // Speed alert overlay
+  const [speedAlertVisible, setSpeedAlertVisible] = useState(false);
+  const [alertSpeed, setAlertSpeed] = useState(0);
   // Google Maps polyline for drawing route on map
   const [routeCoords, setRouteCoords] = useState([]);
   // Smooth driver marker animation
@@ -116,6 +120,7 @@ export default function RideTrackingScreen({ navigation, route }) {
     let unsubLocation = () => {};
     let unsubStatus = () => {};
     let unsubMessage = () => {};
+    let unsubSpeed = () => {};
 
     const setup = async () => {
       await connectSockets();
@@ -154,6 +159,12 @@ export default function RideTrackingScreen({ navigation, route }) {
         }
       });
 
+      // Subscribe to speed alerts → show overlay banner
+      unsubSpeed = onSpeedAlert(rideId, (data) => {
+        setAlertSpeed(Math.round(data.speed));
+        setSpeedAlertVisible(true);
+      });
+
       // Subscribe to in-app messages → show toast notification
       unsubMessage = onMessage(rideId, (data) => {
         if (messageToastTimer.current) clearTimeout(messageToastTimer.current);
@@ -173,6 +184,7 @@ export default function RideTrackingScreen({ navigation, route }) {
     return () => {
       unsubLocation();
       unsubStatus();
+      unsubSpeed();
       unsubMessage();
       clearInterval(pollInterval);
       if (messageToastTimer.current) clearTimeout(messageToastTimer.current);
@@ -303,6 +315,13 @@ export default function RideTrackingScreen({ navigation, route }) {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+
+      {/* Speed alert overlay — slides in from top when driver exceeds 120 km/h */}
+      <SpeedAlertOverlay
+        visible={speedAlertVisible}
+        speed={alertSpeed}
+        onDismiss={() => setSpeedAlertVisible(false)}
+      />
 
       {/* Full-screen Google Maps with traffic layer */}
       <MapView

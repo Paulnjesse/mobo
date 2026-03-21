@@ -237,6 +237,30 @@ function onIncomingRide(callback) {
 }
 
 /**
+ * Subscribe to speed alert events for a specific ride.
+ * The backend emits this to the rider's room when the driver exceeds 120 km/h.
+ *
+ * @param {string}   rideId    The ride to monitor.
+ * @param {Function} callback  Called with { rideId, speed, timestamp }.
+ * @returns {Function} Unsubscribe function.
+ */
+function onSpeedAlert(rideId, callback) {
+  if (!rideSocket) {
+    console.warn('[Socket] onSpeedAlert called before connectSockets()');
+    return () => {};
+  }
+
+  const handler = (data) => {
+    if (data.rideId === rideId) callback(data);
+  };
+
+  rideSocket.on('speed_alert', handler);
+  return () => {
+    rideSocket?.off('speed_alert', handler);
+  };
+}
+
+/**
  * Subscribe to in-app chat messages for a specific ride.
  *
  * @param {string}   rideId    The ride conversation to monitor.
@@ -273,5 +297,6 @@ export {
   onDriverLocation,
   onRideStatus,
   onIncomingRide,
+  onSpeedAlert,
   onMessage,
 };
