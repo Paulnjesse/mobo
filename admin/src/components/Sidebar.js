@@ -27,6 +27,10 @@ import {
   LocalShipping as FleetIcon,
   Gavel as GavelIcon,
   WarningAmber as WarningAmberIcon,
+  VerifiedUser as VerifiedUserIcon,
+  PersonSearch as PersonSearchIcon,
+  LocationOn as LocationOnIcon,
+  Security as SecurityIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -41,8 +45,11 @@ const NAV_ITEMS = [
   { label: 'Surge Pricing', path: '/surge',        icon: <BoltIcon /> },
   { label: 'Promotions',   path: '/promotions',    icon: <LocalOfferIcon /> },
   { label: 'Safety',        path: '/safety',       icon: <ShieldIcon /> },
-  { label: 'Disputes',      path: '/disputes',     icon: <GavelIcon /> },
-  { label: 'Doc Expiry',    path: '/doc-expiry',   icon: <WarningAmberIcon /> },
+  { label: 'Disputes',        path: '/disputes',        icon: <GavelIcon /> },
+  { label: 'Doc Expiry',     path: '/doc-expiry',     icon: <WarningAmberIcon /> },
+  { label: 'BG Checks',      path: '/bg-checks',      icon: <PersonSearchIcon /> },
+  { label: 'Safety Zones',   path: '/safety-zones-mgr', icon: <LocationOnIcon /> },
+  { label: '2FA Security',   path: '/2fa-setup',      icon: <SecurityIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];

@@ -679,6 +679,58 @@ const rateRide = async (req, res) => {
       [parseFloat(avgResult.rows[0].avg).toFixed(2), ratedId]
     );
 
+    // Check for rating abuse (only when a rider gives a 1-star rating)
+    if (rating === 1 && r.rider_id === raterId) {
+      try {
+        // Count consecutive 1-star ratings this rider gave to different drivers
+        const recentRatings = await pool.query(
+          `SELECT rating FROM ride_ratings
+           WHERE rater_id = $1
+           ORDER BY created_at DESC
+           LIMIT 5`,
+          [raterId]  // the user_id of the rider who just rated
+        );
+
+        const allOneStar = recentRatings.rows.length >= 5 &&
+          recentRatings.rows.every(r => r.rating === 1);
+
+        if (allOneStar) {
+          // Flag the rider
+          await pool.query(
+            `UPDATE users
+             SET rating_abuse_flagged = true,
+                 rating_abuse_flagged_at = NOW(),
+                 consecutive_low_ratings = 5
+             WHERE id = $1`,
+            [raterId]
+          );
+
+          // Notify admins
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, body, data)
+             SELECT id, 'rating_abuse', '⚠️ Rating Abuse Detected',
+               'A rider has given 1-star to 5 consecutive drivers. Review account.',
+               $1::jsonb
+             FROM users WHERE role = 'admin' AND is_active = true`,
+            [JSON.stringify({ rider_id: raterId, consecutive_count: 5 })]
+          );
+
+          console.log('[RatingAbuse] Flagged rider:', raterId);
+        } else {
+          // Update consecutive counter (reset if they gave > 1 star)
+          const latestRating = recentRatings.rows[0]?.rating;
+          if (latestRating > 1) {
+            await pool.query(
+              'UPDATE users SET consecutive_low_ratings = 0 WHERE id = $1',
+              [raterId]
+            );
+          }
+        }
+      } catch (abuseErr) {
+        console.warn('[RatingAbuse]', abuseErr.message);
+      }
+    }
+
     // If rider gave 5 stars → add preferred driver prompt
     if (rating === 5 && r.rider_id === raterId) {
       res.json({ success: true, suggest_preferred: true, driver_id: r.driver_id });

@@ -19,10 +19,17 @@ const {
   getSubscription,
   updateExpoPushToken
 } = require('../controllers/profileController');
-const tcCtrl = require('../controllers/trustedContactController');
+const tcCtrl  = require('../controllers/trustedContactController');
+const bgCtrl  = require('../controllers/backgroundCheckController');
 
 // All profile routes require authentication
 router.use(authenticate);
+
+// ── Background check routes ──────────────────────────────────────────────────
+// IMPORTANT: /drivers/background-checks/expired MUST come before /drivers/:id
+// to prevent Express treating "background-checks" as an :id param value.
+router.get('/drivers/background-checks/expired', bgCtrl.getExpiredBackgroundChecks);
+router.patch('/drivers/:id/background-check',    bgCtrl.updateBackgroundCheck);
 
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);

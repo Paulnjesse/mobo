@@ -13,6 +13,7 @@ const {
 } = require('../controllers/locationController');
 const driverCtrl = require('../controllers/driverDestinationController');
 const safetyCtrl = require('../controllers/safetyController');
+const szCtrl     = require('../controllers/safetyZoneController');
 
 // Update location (driver or rider)
 router.post('/location/update', authenticate, updateLocation);
@@ -58,5 +59,13 @@ router.get('/safety/fatigue-check', authenticate, requireDriver, safetyCtrl.chec
 router.post('/safety/fatigue-break', authenticate, requireDriver, safetyCtrl.enforceFatigueBreak);
 router.post('/safety/realid', authenticate, requireDriver, safetyCtrl.driverRealIDSubmit);
 router.get('/safety/realid/pending', authenticate, safetyCtrl.getRealIDChecks);
+
+// ── Safety zones (incident alerts) ──────────────────────────────────────────
+// NOTE: /safety-zones/check MUST come before /safety-zones/:id to avoid param conflict
+router.get('/safety-zones',         authenticate, szCtrl.getSafetyZones);
+router.post('/safety-zones',        authenticate, szCtrl.createSafetyZone);
+router.post('/safety-zones/check',  authenticate, szCtrl.checkDriverInSafetyZone);
+router.patch('/safety-zones/:id',   authenticate, szCtrl.updateSafetyZone);
+router.delete('/safety-zones/:id',  authenticate, szCtrl.deleteSafetyZone);
 
 module.exports = router;

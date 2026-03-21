@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
-const ctrl = require('../controllers/rideController');
-const disputeCtrl = require('../controllers/disputeController');
-const shareCtrl   = require('../controllers/shareTripController');
+const ctrl          = require('../controllers/rideController');
+const disputeCtrl   = require('../controllers/disputeController');
+const shareCtrl     = require('../controllers/shareTripController');
+const recordingCtrl = require('../controllers/recordingController');
 
 // ── Share trip (PUBLIC track route MUST come before /:id to avoid param conflict)
 router.get('/track/:token', shareCtrl.getSharedTrip);  // PUBLIC - no auth
@@ -61,5 +62,9 @@ router.get('/:ride_id/checkins', authenticate, ctrl.getCheckins);
 // Messages
 router.get('/:id/messages', authenticate, ctrl.getMessages);
 router.post('/:id/messages', authenticate, ctrl.sendMessage);
+
+// Ride audio recordings
+router.post('/:id/recording',  authenticate, recordingCtrl.saveRecording);
+router.get('/:id/recordings',  authenticate, recordingCtrl.getRecordings);
 
 module.exports = router;

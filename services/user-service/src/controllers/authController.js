@@ -602,6 +602,19 @@ const login = async (req, res) => {
       full_name: user.full_name
     };
 
+    // Check if admin has 2FA enabled — if so, return a pre-auth challenge
+    // and do NOT issue the JWT yet. The token is issued by validate2FA after
+    // the user submits their TOTP or backup code.
+    const freshUser = await db.query('SELECT totp_enabled FROM users WHERE id = $1', [user.id]);
+    if (freshUser.rows[0]?.totp_enabled) {
+      return res.json({
+        success: true,
+        requires_2fa: true,
+        user_id: user.id,
+        message: 'Enter your 6-digit authenticator code to continue'
+      });
+    }
+
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.json({
