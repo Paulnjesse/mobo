@@ -6,11 +6,16 @@ import {
 import {
   Refresh as RefreshIcon,
   MyLocation as MyLocationIcon,
+  Wifi as WifiIcon,
+  WifiOff as WifiOffIcon,
 } from '@mui/icons-material';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { io } from 'socket.io-client';
 import { mapAPI } from '../services/api';
+
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || process.env.REACT_APP_API_URL?.replace('/api', '') || 'https://mobo-api-gateway.onrender.com';
 
 // Fix Leaflet default icon path
 delete L.Icon.Default.prototype._getIconUrl;
@@ -89,7 +94,9 @@ export default function LocationMap() {
   const [filter, setFilter] = useState('all');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [socketConnected, setSocketConnected] = useState(false);
   const intervalRef = useRef(null);
+  const socketRef = useRef(null);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -113,12 +120,54 @@ export default function LocationMap() {
     fetchMapData();
   }, [fetchMapData]);
 
+  // ── 30-second polling ──────────────────────────────────────────────────
   useEffect(() => {
     if (autoRefresh) {
       intervalRef.current = setInterval(fetchMapData, 30000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [autoRefresh, fetchMapData]);
+
+  // ── Socket.IO — real-time driver location updates ──────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem('mobo_admin_token');
+    const socket = io(`${SOCKET_URL}/rides`, {
+      auth: { token },
+      transports: ['websocket'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 3000,
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => setSocketConnected(true));
+    socket.on('disconnect', () => setSocketConnected(false));
+
+    // Move a driver marker in real-time
+    socket.on('driver_location_update', (payload) => {
+      const { driverId, latitude, longitude } = payload;
+      if (!driverId || latitude == null || longitude == null) return;
+      setDrivers((prev) =>
+        prev.map((d) =>
+          String(d.id) === String(driverId)
+            ? { ...d, lat: latitude, lng: longitude }
+            : d
+        )
+      );
+    });
+
+    // Keep ride list fresh on status change
+    socket.on('ride_status_change', () => {
+      mapAPI.getActiveRides().then((res) => {
+        const data = res.data || [];
+        if (data.length) setActiveRides(data);
+      }).catch(() => {});
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
 
   const filteredDrivers = drivers.filter((d) => {
     if (filter === 'all') return true;
@@ -142,6 +191,18 @@ export default function LocationMap() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>Live Driver Map</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {/* Socket status badge */}
+          <Chip
+            icon={socketConnected ? <WifiIcon sx={{ fontSize: '0.85rem !important' }} /> : <WifiOffIcon sx={{ fontSize: '0.85rem !important' }} />}
+            label={socketConnected ? 'Live' : 'Polling'}
+            size="small"
+            sx={{
+              bgcolor: socketConnected ? 'rgba(76,175,80,0.1)' : 'rgba(158,158,158,0.1)',
+              color: socketConnected ? '#4CAF50' : '#9E9E9E',
+              fontWeight: 700, fontSize: '0.7rem', height: 22,
+              border: `1px solid ${socketConnected ? '#4CAF50' : '#9E9E9E'}40`,
+            }}
+          />
           {lastUpdated && (
             <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>
               Updated: {lastUpdated.toLocaleTimeString()}

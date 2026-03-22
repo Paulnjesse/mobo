@@ -39,6 +39,20 @@ let rideSocket = null;
 let locationSocket = null;
 
 // ---------------------------------------------------------------------------
+// Feature 30 — Offline cache: last known driver location per ride
+// ---------------------------------------------------------------------------
+/**
+ * Stores the last received driver position so the app can display stale data
+ * with a "last updated X min ago" message when the socket disconnects.
+ * Shape: { [rideId]: { latitude, longitude, heading, speed, receivedAt: Date } }
+ */
+const lastKnownDriverLocation = {};
+
+export function getCachedDriverLocation(rideId) {
+  return lastKnownDriverLocation[rideId] ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -185,10 +199,17 @@ function onDriverLocation(rideId, callback) {
 
   // Join the ride room so the server routes updates here
   rideSocket.emit('join_ride', { rideId });
-  rideSocket.on('driver_location_update', callback);
+
+  const wrappedCallback = (data) => {
+    // Feature 30 — cache last known position for offline display
+    lastKnownDriverLocation[rideId] = { ...data, receivedAt: new Date() };
+    callback(data);
+  };
+
+  rideSocket.on('driver_location_update', wrappedCallback);
 
   return () => {
-    rideSocket?.off('driver_location_update', callback);
+    rideSocket?.off('driver_location_update', wrappedCallback);
   };
 }
 
@@ -299,4 +320,6 @@ export {
   onIncomingRide,
   onSpeedAlert,
   onMessage,
+  // Feature 30 — offline cache
+  getCachedDriverLocation,
 };

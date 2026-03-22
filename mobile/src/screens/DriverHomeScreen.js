@@ -43,6 +43,48 @@ const QUICK_ACTIONS = [
     screen: 'ExpressPay',
     color: colors.success,
   },
+  {
+    icon: 'bar-chart-outline',
+    label: 'Earnings',
+    screen: 'DriverEarnings',
+    color: '#6C63FF',
+  },
+  {
+    icon: 'airplane-outline',
+    label: 'Airport\nMode',
+    screen: 'AirportMode',
+    color: '#0077CC',
+  },
+  {
+    icon: 'map-outline',
+    label: 'Heat Map',
+    screen: 'DriverHeatMap',
+    color: '#CC0000',
+  },
+  {
+    icon: 'radar-outline',
+    label: 'Trip Radar',
+    screen: 'TripRadar',
+    color: '#00A651',
+  },
+  {
+    icon: 'diamond-outline',
+    label: 'My Tier',
+    screen: 'DriverTier',
+    color: '#0077CC',
+  },
+  {
+    icon: 'shield-outline',
+    label: 'Guarantee',
+    screen: 'EarningsGuarantee',
+    color: '#FF6B00',
+  },
+  {
+    icon: 'flash-outline',
+    label: 'Fuel Card',
+    screen: 'FuelCard',
+    color: '#FFD700',
+  },
 ];
 
 export default function DriverHomeScreen({ navigation }) {
@@ -324,7 +366,7 @@ export default function DriverHomeScreen({ navigation }) {
       {/* Top bar */}
       <SafeAreaView style={styles.topOverlay} edges={['top']}>
         <View style={styles.topBar}>
-          <TouchableOpacity style={styles.topIconBtn} onPress={() => navigation.navigate('Settings')}>
+          <TouchableOpacity style={styles.topIconBtn} onPress={() => navigation.openDrawer?.() || navigation.navigate('Settings')}>
             <Ionicons name="menu-outline" size={22} color={colors.text} />
           </TouchableOpacity>
 
@@ -360,6 +402,26 @@ export default function DriverHomeScreen({ navigation }) {
             <Text style={styles.earningsValue}>0 XAF</Text>
           </View>
         </View>
+
+        {/* Acceptance Rate badge */}
+        {(() => {
+          const ar = user?.acceptance_rate ?? user?.driver?.acceptance_rate;
+          if (ar == null) return null;
+          const arNum = Math.round(ar);
+          const isSuspended = user?.ar_suspended_until && new Date(user.ar_suspended_until) > new Date();
+          const badgeColor = isSuspended ? colors.danger : arNum < 70 ? colors.warning : colors.success;
+          const badgeIcon = isSuspended ? 'ban-outline' : arNum < 70 ? 'alert-circle-outline' : 'checkmark-circle-outline';
+          return (
+            <View style={[styles.arBadge, { backgroundColor: badgeColor + '18', borderColor: badgeColor }]}>
+              <Ionicons name={badgeIcon} size={14} color={badgeColor} />
+              <Text style={[styles.arBadgeText, { color: badgeColor }]}>
+                {isSuspended
+                  ? `Suspended until ${new Date(user.ar_suspended_until).toLocaleDateString()}`
+                  : `Acceptance Rate: ${arNum}%${arNum < 70 ? ' — improve to keep benefits' : ''}`}
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* Quick action buttons */}
         <View style={styles.quickActionsRow}>
@@ -558,6 +620,13 @@ const styles = StyleSheet.create({
   },
   earningsLabel: { fontSize: 10, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   earningsValue: { fontSize: 16, fontWeight: '800', color: colors.primary },
+  arBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 6,
+    marginBottom: spacing.sm,
+  },
+  arBadgeText: { fontSize: 12, fontWeight: '600', flex: 1 },
   quickActionsRow: {
     flexDirection: 'row', justifyContent: 'space-around',
     marginBottom: spacing.md, paddingHorizontal: spacing.xs,

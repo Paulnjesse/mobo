@@ -14,38 +14,121 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import Input from '../components/Input';
 import AdBanner from '../components/AdBanner';
 import { colors, spacing, radius, shadows } from '../theme';
 
+// Required by expo-auth-session for web OAuth redirect
+WebBrowser.maybeCompleteAuthSession();
+
+// Google OAuth discovery doc
+const GOOGLE_DISCOVERY = AuthSession.useAutoDiscovery('https://accounts.google.com');
+
 export default function LoginScreen({ navigation }) {
   const { t } = useLanguage();
-  const { login } = useAuth();
+  const { login, socialLogin } = useAuth();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState(null); // 'face' | 'fingerprint'
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  // Google OAuth setup (uses Expo Auth Proxy in dev, scheme redirect in prod)
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+  const [googleRequest, googleResponse, promptGoogleAsync] = AuthSession.useAuthRequest(
+    {
+      clientId:     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
+      scopes:       ['openid', 'profile', 'email'],
+      redirectUri,
+      responseType: AuthSession.ResponseType.IdToken,
+    },
+    GOOGLE_DISCOVERY
+  );
 
   useEffect(() => {
     (async () => {
+      // Biometric availability
       const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      const enrolled   = await LocalAuthentication.isEnrolledAsync();
       if (compatible && enrolled) {
         setBiometricAvailable(true);
         const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          setBiometricType('face');
-        } else {
-          setBiometricType('fingerprint');
-        }
+        setBiometricType(
+          types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+            ? 'face'
+            : 'fingerprint'
+        );
       }
+      // Apple Sign-In availability (iOS 13+)
+      const appleSupported = await AppleAuthentication.isAvailableAsync().catch(() => false);
+      setAppleAvailable(appleSupported);
     })();
   }, []);
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (googleResponse?.type === 'success') {
+      const { id_token } = googleResponse.params;
+      if (id_token) {
+        handleSocialLogin('google', id_token);
+      }
+    } else if (googleResponse?.type === 'error') {
+      Alert.alert('Google Sign-In Failed', googleResponse.error?.message || 'Please try again.');
+    }
+  }, [googleResponse]);
+
+  const handleGoogleLogin = async () => {
+    if (!process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID) {
+      Alert.alert('Not Configured', 'Google Sign-In is not configured yet. Please use phone/email login.');
+      return;
+    }
+    await promptGoogleAsync();
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      setSocialLoading(true);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      // credential.identityToken is the JWT we send to the backend
+      const name = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean).join(' ');
+      await handleSocialLogin('apple', credential.identityToken, {
+        email: credential.email,
+        name,
+      });
+    } catch (err) {
+      if (err.code !== 'ERR_CANCELED') {
+        Alert.alert('Apple Sign-In Failed', err.message || 'Please try again.');
+      }
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const handleSocialLogin = async (provider, token, extra = {}) => {
+    setSocialLoading(true);
+    try {
+      await socialLogin(provider, token, extra);
+    } catch (err) {
+      Alert.alert('Sign-In Failed', err.message || 'Social login failed. Please try again.');
+    } finally {
+      setSocialLoading(false);
+    }
+  };
 
   const handleBiometricLogin = async () => {
     try {
@@ -165,11 +248,33 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Google placeholder */}
-          <TouchableOpacity style={styles.googleBtn} activeOpacity={0.85}>
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.googleText}>{t('loginWithGoogle')}</Text>
+          {/* Google Sign-In */}
+          <TouchableOpacity
+            style={[styles.googleBtn, socialLoading && styles.loginBtnDisabled]}
+            onPress={handleGoogleLogin}
+            disabled={socialLoading}
+            activeOpacity={0.85}
+          >
+            {socialLoading ? (
+              <ActivityIndicator color={colors.text} size="small" />
+            ) : (
+              <>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleText}>{t('loginWithGoogle')}</Text>
+              </>
+            )}
           </TouchableOpacity>
+
+          {/* Apple Sign-In (iOS only) */}
+          {appleAvailable && Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={radius.pill}
+              style={{ width: '100%', height: 52, marginTop: spacing.sm }}
+              onPress={handleAppleLogin}
+            />
+          )}
 
           {/* Biometric login */}
           {biometricAvailable && (

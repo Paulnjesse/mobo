@@ -741,6 +741,23 @@ export default function BookRideScreen({ navigation, route }) {
 
           {/* Continue / Fare Estimate button */}
           <View style={styles.footer}>
+            {/* Pool ride shortcut */}
+            {pickup && dropoff && (
+              <TouchableOpacity
+                style={styles.poolBtn}
+                onPress={() => navigation.navigate('PoolRide', {
+                  pickup: { address: pickup },
+                  dropoff: { address: dropoff },
+                  pickupCoords,
+                  dropoffCoords,
+                })}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="people-outline" size={16} color={colors.primary} />
+                <Text style={styles.poolBtnText}>Pool ride (save up to 30%)</Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[
                 styles.continueBtn,
@@ -928,6 +945,24 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.gray200,
+  },
+  poolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(255,0,191,0.06)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,191,0.2)',
+  },
+  poolBtnText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
   },
   continueBtn: {
     backgroundColor: colors.primary,

@@ -873,6 +873,62 @@ const getSubscription = async (req, res) => {
 };
 
 /**
+ * POST /users/profile/photo
+ * body: multipart/form-data  field: photo  (image file)
+ *    OR application/json     field: image_base64, mime_type
+ *
+ * Stores the image as a base64 data-URI in profile_picture.
+ * In production swap storage to S3/Cloudinary and return an HTTPS URL.
+ */
+const uploadProfilePhoto = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let photoDataUri = null;
+
+    if (req.file) {
+      // multer uploaded file (multipart/form-data)
+      const mime = req.file.mimetype || 'image/jpeg';
+      const b64 = req.file.buffer.toString('base64');
+      photoDataUri = `data:${mime};base64,${b64}`;
+    } else if (req.body?.image_base64) {
+      // JSON body with pre-encoded base64
+      const mime = req.body.mime_type || 'image/jpeg';
+      const raw = req.body.image_base64.replace(/^data:[^;]+;base64,/, '');
+      photoDataUri = `data:${mime};base64,${raw}`;
+    } else {
+      return res.status(400).json({ success: false, message: 'No image provided. Send a file upload (field: photo) or image_base64 in JSON body.' });
+    }
+
+    // Rough size guard — base64 ≈ 4/3 × binary; limit to ~5 MB original
+    if (photoDataUri.length > 7 * 1024 * 1024) {
+      return res.status(413).json({ success: false, message: 'Image too large. Maximum 5 MB.' });
+    }
+
+    const result = await db.query(
+      `UPDATE users SET profile_picture = $1, updated_at = NOW()
+       WHERE id = $2 RETURNING id, profile_picture, updated_at`,
+      [photoDataUri, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile photo updated',
+      data: {
+        profile_picture: result.rows[0].profile_picture,
+        updated_at: result.rows[0].updated_at,
+      },
+    });
+  } catch (err) {
+    console.error('[UploadProfilePhoto Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to upload profile photo' });
+  }
+};
+
+/**
  * PUT /users/push-token
  * body: { expo_push_token }
  * Update the user's Expo push notification token.
@@ -919,6 +975,7 @@ const updateExpoPushToken = async (req, res) => {
 module.exports = {
   getProfile,
   updateProfile,
+  uploadProfilePhoto,
   createTeenAccount,
   getTeenAccounts,
   updateLanguage,
@@ -932,5 +989,5 @@ module.exports = {
   removeCorporateMember,
   getCorporateRides,
   getSubscription,
-  updateExpoPushToken
+  updateExpoPushToken,
 };

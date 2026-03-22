@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const {
   getProfile,
   updateProfile,
+  uploadProfilePhoto,
   createTeenAccount,
   getTeenAccounts,
   updateLanguage,
@@ -17,8 +19,20 @@ const {
   removeCorporateMember,
   getCorporateRides,
   getSubscription,
-  updateExpoPushToken
+  updateExpoPushToken,
 } = require('../controllers/profileController');
+
+// multer: memory storage, images only, max 5 MB
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    cb(null, true);
+  },
+});
 const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
 
@@ -33,6 +47,8 @@ router.patch('/drivers/:id/background-check',    bgCtrl.updateBackgroundCheck);
 
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+// Photo upload: accepts multipart/form-data (field: photo) OR JSON body (image_base64)
+router.post('/profile/photo', photoUpload.single('photo'), uploadProfilePhoto);
 
 router.post('/teen-account', createTeenAccount);
 router.get('/teen-accounts', getTeenAccounts);
@@ -64,5 +80,14 @@ router.get('/users/me/trusted-contacts', authenticate, tcCtrl.getTrustedContacts
 router.post('/users/me/trusted-contacts', authenticate, tcCtrl.addTrustedContact);
 router.patch('/users/me/trusted-contacts/:id', authenticate, tcCtrl.updateTrustedContact);
 router.delete('/users/me/trusted-contacts/:id', authenticate, tcCtrl.removeTrustedContact);
+
+// Saved places
+router.get('/users/me/saved-places', authenticate, require('../controllers/savedPlacesController').getSavedPlaces);
+router.post('/users/me/saved-places', authenticate, require('../controllers/savedPlacesController').createSavedPlace);
+router.delete('/users/me/saved-places/:id', authenticate, require('../controllers/savedPlacesController').deleteSavedPlace);
+
+// Biometric driver verification (Smile Identity)
+router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);
+router.get('/drivers/me/biometric-status',  require('../controllers/biometricController').getVerificationStatus);
 
 module.exports = router;

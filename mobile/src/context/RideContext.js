@@ -117,11 +117,11 @@ export function RideProvider({ children }) {
     }
   }, []);
 
-  const getFareEstimate = useCallback(async (pickup, dropoff, rideType) => {
+  const getFareEstimate = useCallback(async (pickup, dropoff, rideType, stops = []) => {
     setIsLoading(true);
     setError(null);
     try {
-      const estimate = await ridesService.getFareEstimate(pickup, dropoff, rideType);
+      const estimate = await ridesService.getFareEstimate(pickup, dropoff, rideType, stops);
       setFareEstimate(estimate);
       return estimate;
     } catch (err) {

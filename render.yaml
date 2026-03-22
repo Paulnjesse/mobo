@@ -1,3 +1,15 @@
+envVarGroups:
+  - name: mobo-shared-secrets
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+
 services:
   - type: web
     name: mobo-user-service
@@ -6,14 +18,11 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3001
-      - key: DATABASE_URL
-        sync: false
-      - key: JWT_SECRET
-        sync: false
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: TWILIO_ACCOUNT_SID
@@ -21,6 +30,10 @@ services:
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: DATABASE_READ_URL
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
 
   - type: web
@@ -30,17 +43,18 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3002
-      - key: DATABASE_URL
-        sync: false
-      - key: JWT_SECRET
-        sync: false
       - key: LOCATION_SERVICE_URL
         sync: false
       - key: PAYMENT_SERVICE_URL
+        sync: false
+      - key: DATABASE_READ_URL
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
 
   - type: web
@@ -50,17 +64,18 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3003
-      - key: DATABASE_URL
-        sync: false
-      - key: JWT_SECRET
-        sync: false
       - key: FLUTTERWAVE_SECRET_KEY
         sync: false
       - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: DATABASE_READ_URL
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
 
   - type: web
@@ -70,15 +85,16 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3004
-      - key: DATABASE_URL
-        sync: false
-      - key: JWT_SECRET
-        sync: false
       - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: DATABASE_READ_URL
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
 
   - type: web
@@ -88,12 +104,11 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     envVars:
+      - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
-      - key: JWT_SECRET
-        sync: false
       - key: USER_SERVICE_URL
         sync: false
       - key: RIDE_SERVICE_URL
@@ -101,6 +116,8 @@ services:
       - key: PAYMENT_SERVICE_URL
         sync: false
       - key: LOCATION_SERVICE_URL
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
 
   - type: web

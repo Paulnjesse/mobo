@@ -106,6 +106,50 @@ async function notifyRiderDriverAccepted(riderToken, driverDetails) {
 }
 
 /**
+ * notifyRiderDriverArrived(riderToken, details)
+ * Sent to the rider when the driver marks themselves as arrived at the pickup.
+ * Includes driver photo URL and plate number for safety verification.
+ *
+ * @param {string} riderToken
+ * @param {{
+ *   ride_id: string,
+ *   driver_name: string,
+ *   driver_photo_url?: string,
+ *   plate: string,
+ *   vehicle_color?: string,
+ *   vehicle_make?: string,
+ *   user_id?: string
+ * }} details
+ */
+async function notifyRiderDriverArrived(riderToken, details) {
+  const {
+    driver_name = 'Your driver',
+    plate = '',
+    vehicle_color = '',
+    vehicle_make = '',
+    driver_photo_url,
+  } = details;
+
+  const vehicleDesc = [vehicle_color, vehicle_make].filter(Boolean).join(' ');
+  const plateStr = plate ? ` · Plate: ${plate}` : '';
+  const body = `${driver_name} is waiting for you${plateStr}${vehicleDesc ? ` in a ${vehicleDesc}` : ''}. Please verify the plate before boarding.`;
+
+  return _send(
+    riderToken,
+    '🚗 Your driver has arrived!',
+    body,
+    {
+      type: 'driver_arrived',
+      driver_photo_url,   // Mobile app can display this in the notification or in-app banner
+      plate,
+      vehicle_color,
+      vehicle_make,
+      ...details,
+    }
+  );
+}
+
+/**
  * notifyRiderDriverArriving(riderToken, eta)
  * Sent to the rider when the driver is nearly at the pickup point.
  *
@@ -170,7 +214,8 @@ function vehicleStr(vehicle) {
 module.exports = {
   notifyDriverNewRide,
   notifyRiderDriverAccepted,
+  notifyRiderDriverArrived,
   notifyRiderDriverArriving,
   notifyRideCompleted,
-  notifyRideCancelled
+  notifyRideCancelled,
 };

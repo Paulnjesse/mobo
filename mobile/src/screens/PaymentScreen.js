@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useStripe } from '@stripe/stripe-react-native';
 import { useLanguage } from '../context/LanguageContext';
 import { paymentsService } from '../services/payments';
 import { colors, spacing, radius, shadows } from '../theme';
@@ -105,6 +106,7 @@ export default function PaymentScreen({ navigation, route }) {
   const grandTotal   = roundedFare + tipAmount;
 
   const isMobileMoney = MOBILE_MONEY_IDS.has(selectedMethod);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -170,6 +172,29 @@ export default function PaymentScreen({ navigation, route }) {
     setPending(false);
   }
 
+  // ── Stripe card payment sheet ─────────────────────────────────────────────
+  const handleCardPayment = async (rideId) => {
+    // Fetch PaymentIntent from backend
+    const piData = await paymentsService.createPaymentIntent(rideId, grandTotal);
+    const { client_secret, publishable_key } = piData?.data || piData;
+
+    if (!client_secret) throw new Error('Failed to initialize card payment.');
+
+    const { error: initError } = await initPaymentSheet({
+      paymentIntentClientSecret: client_secret,
+      merchantDisplayName: 'MOBO',
+      style: 'alwaysLight',
+    });
+    if (initError) throw new Error(initError.message);
+
+    const { error: presentError } = await presentPaymentSheet();
+    if (presentError) {
+      if (presentError.code === 'Canceled') return false; // user dismissed
+      throw new Error(presentError.message);
+    }
+    return true;
+  };
+
   // ── Main pay handler ──────────────────────────────────────────────────────
   const handlePay = async () => {
     if (isMobileMoney && !phone.trim()) {
@@ -215,14 +240,25 @@ export default function PaymentScreen({ navigation, route }) {
 
       if (!rideId) throw new Error('Could not create ride — check your location details.');
 
-      // ── Step 2: Charge payment ──────────────────────────────────────────
+      // ── Step 2: Card payments go through Stripe payment sheet ────────────
+      if (selectedMethod === 'card') {
+        setLoading(false);
+        const success = await handleCardPayment(rideId);
+        if (success) {
+          Alert.alert('Payment Successful', t('paymentSuccess'), [
+            { text: 'Done', onPress: () => navigation.navigate('Home') },
+          ]);
+        }
+        return;
+      }
+
+      // ── Step 3: Mobile money / wallet / cash ─────────────────────────────
       const result = await paymentsService.chargeRide(rideId, {
         method:  backendMethod,
         phone:   phone.trim() || undefined,
         tip:     tipAmount,
         roundUp,
         total:   grandTotal,
-        // Split payment breakdown
         split_payment:    splitPaymentParam || false,
         split_wallet_pct: walletPctParam || 100,
         split_momo_pct:   walletPctParam ? 100 - walletPctParam : 0,

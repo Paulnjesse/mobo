@@ -1,6 +1,16 @@
 import api from './api';
 
 export const authService = {
+  // ── Social login (Google / Apple) ──────────────────────────
+  async socialLogin(provider, token, extraData = {}) {
+    const response = await api.post('/auth/social', {
+      provider,
+      token,
+      ...extraData, // email, name, role
+    });
+    return response.data;
+  },
+
   // ── Core auth ──────────────────────────────────────────────
   async signup(userData) {
     const response = await api.post('/auth/signup', userData);
@@ -104,8 +114,17 @@ export const authService = {
     return response.data;
   },
 
-  async resetPassword(token, newPassword) {
-    const response = await api.post('/auth/reset-password', { token, newPassword });
+  /**
+   * @param {string} identifier  email or phone used in forgotPassword()
+   * @param {string} otpCode     6-digit code received via email/SMS
+   * @param {string} newPassword new password (min 6 chars)
+   */
+  async resetPassword(identifier, otpCode, newPassword) {
+    const response = await api.post('/auth/reset-password', {
+      identifier,
+      otp_code:     otpCode,
+      new_password: newPassword,
+    });
     return response.data;
   },
 };

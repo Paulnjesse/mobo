@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
+import { paymentsService } from '../services/payments';
 
 const HOW_TO_EARN = [
   { icon: 'car-outline', title: 'Complete a ride', points: '+10 pts', color: colors.primary },
@@ -28,33 +29,79 @@ export default function LoyaltyScreen({ navigation }) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const points = user?.loyaltyPoints || 0;
+  const [points, setPoints] = useState(user?.loyalty_points || user?.loyaltyPoints || 0);
   const tier = points >= 500 ? 'Gold' : points >= 200 ? 'Silver' : 'Bronze';
   const tierColor = tier === 'Gold' ? '#FFB800' : tier === 'Silver' ? '#9E9E9E' : '#CD7F32';
   const nextTierPoints = tier === 'Bronze' ? 200 : tier === 'Silver' ? 500 : 1000;
   const progress = Math.min(points / nextTierPoints, 1);
 
   useEffect(() => {
-    // Load loyalty history — stub for now
-    setTimeout(() => {
-      setHistory([
-        { id: '1', type: 'earn', description: 'Completed ride', points: 10, date: '2024-01-15' },
-        { id: '2', type: 'earn', description: 'Referred a friend', points: 100, date: '2024-01-10' },
-        { id: '3', type: 'redeem', description: 'Redeemed for discount', points: -50, date: '2024-01-05' },
-      ]);
-      setLoading(false);
-    }, 500);
+    (async () => {
+      try {
+        const [historyRes, pointsRes] = await Promise.allSettled([
+          paymentsService.getLoyaltyHistory(),
+          paymentsService.getLoyaltyPoints(),
+        ]);
+
+        if (historyRes.status === 'fulfilled') {
+          const raw = historyRes.value?.data?.history || historyRes.value?.history || [];
+          setHistory(raw.map((item) => ({
+            id: String(item.id),
+            type: item.points > 0 ? 'earn' : 'redeem',
+            description: item.description || item.action || 'Points transaction',
+            points: Number(item.points),
+            date: item.created_at
+              ? new Date(item.created_at).toISOString().split('T')[0]
+              : item.date || '',
+          })));
+        }
+
+        if (pointsRes.status === 'fulfilled') {
+          const total = pointsRes.value?.data?.points ?? pointsRes.value?.points;
+          if (typeof total === 'number') setPoints(total);
+        }
+      } catch (err) {
+        console.warn('[LoyaltyScreen] Failed to load loyalty data:', err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const handleRedeem = () => {
+  const handleRedeem = async () => {
     if (points < 100) {
       Alert.alert('Not enough points', 'You need at least 100 points to redeem.');
       return;
     }
-    Alert.alert('Redeem Points', `Redeem ${points} points for a ride discount?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Redeem', onPress: () => Alert.alert('Success', 'Points redeemed! Discount applied to your next ride.') },
-    ]);
+    Alert.alert(
+      'Redeem Points',
+      `Redeem 100 points for a 500 XAF ride discount?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Redeem',
+          onPress: async () => {
+            try {
+              await paymentsService.redeemPoints(100);
+              setPoints((p) => p - 100);
+              setHistory((h) => [
+                {
+                  id: Date.now().toString(),
+                  type: 'redeem',
+                  description: 'Redeemed for ride discount',
+                  points: -100,
+                  date: new Date().toISOString().split('T')[0],
+                },
+                ...h,
+              ]);
+              Alert.alert('Success', '100 points redeemed — discount applied to your next ride!');
+            } catch (err) {
+              Alert.alert('Failed', err.response?.data?.message || 'Could not redeem points. Try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderHistoryItem = ({ item }) => (

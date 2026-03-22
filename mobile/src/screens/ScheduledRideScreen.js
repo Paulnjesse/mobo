@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, shadows } from '../theme';
+import api from '../services/api';
 
 const RIDE_TYPES = [
   { type: 'Standard', icon: 'car-outline', price: 1500 },
@@ -94,24 +95,49 @@ export default function ScheduledRideScreen({ navigation }) {
       return;
     }
     setLoading(true);
-    const rideType = RIDE_TYPES.find((r) => r.type === selectedRideType);
-    const newRide = {
-      id: String(Date.now()),
-      pickup,
-      dropoff,
-      date: selectedDate,
-      time: `${selectedHour}:${selectedMinute}`,
-      rideType: selectedRideType,
-      fare: rideType?.price || 1500,
-      status: 'upcoming',
-    };
-    setTimeout(() => {
-      setScheduledRides((prev) => [newRide, ...prev]);
-      setLoading(false);
+    try {
+      // Build ISO scheduled_at from selected date label + time
+      const now = new Date();
+      let targetDate = new Date(now);
+      if (selectedDate === 'Tomorrow') targetDate.setDate(now.getDate() + 1);
+      else if (selectedDate !== 'Today') {
+        // selectedDate is a weekday label — find the next occurrence
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const targetDay = dayNames.indexOf(selectedDate.substring(0, 3));
+        if (targetDay >= 0) {
+          const diff = (targetDay - now.getDay() + 7) % 7 || 7;
+          targetDate.setDate(now.getDate() + diff);
+        }
+      }
+      targetDate.setHours(parseInt(selectedHour, 10), parseInt(selectedMinute, 10), 0, 0);
+
+      const res = await api.post('/rides', {
+        pickup_address: pickup,
+        dropoff_address: dropoff,
+        ride_type: selectedRideType.toLowerCase(),
+        scheduled_at: targetDate.toISOString(),
+        is_scheduled: true,
+      });
+
+      const created = res.data?.ride || res.data;
+      const rideType = RIDE_TYPES.find((r) => r.type === selectedRideType);
+      setScheduledRides((prev) => [{
+        id: created?.id || String(Date.now()),
+        pickup, dropoff,
+        date: selectedDate,
+        time: `${selectedHour}:${selectedMinute}`,
+        rideType: selectedRideType,
+        fare: created?.estimated_fare || rideType?.price || 1500,
+        status: 'upcoming',
+      }, ...prev]);
       setPickup('');
       setDropoff('');
-      Alert.alert('Ride Scheduled!', `Your ${selectedRideType} ride on ${selectedDate} at ${selectedHour}:${selectedMinute} has been scheduled.`);
-    }, 1200);
+      Alert.alert('Ride Scheduled!', `Your ${selectedRideType} ride on ${selectedDate} at ${selectedHour}:${selectedMinute} has been scheduled. You'll get a reminder 24h and 1h before.`);
+    } catch (err) {
+      Alert.alert('Error', err?.response?.data?.error || 'Could not schedule ride.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = (rideId) => {

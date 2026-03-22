@@ -1,4 +1,20 @@
+require('./src/tracing');
 require('dotenv').config();
+const Sentry = require('@sentry/node');
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  enabled: !!process.env.SENTRY_DSN,
+  beforeSend(event) {
+    // Strip sensitive headers from error reports
+    if (event.request?.headers) {
+      delete event.request.headers.authorization;
+      delete event.request.headers.cookie;
+    }
+    return event;
+  },
+});
 
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
@@ -21,9 +37,13 @@ const foodRoutes = require('./src/routes/food');
 const { initRideSocket } = require('./src/socket/rideSocket');
 const { startEscalationJob } = require('./src/jobs/escalationJob');
 const { startScheduledRideJob } = require('./src/jobs/scheduledRideJob');
+const requestId = require('./src/middleware/requestId');
 
 const app = express();
+app.use(requestId);
+app.use(Sentry.Handlers.requestHandler());
 const PORT = process.env.PORT || 3002;
+process.env.SERVICE_NAME = process.env.SERVICE_NAME || 'mobo-ride-service';
 
 // Allowed origins for CORS and Socket.IO
 const CORS_ORIGINS = process.env.SOCKET_CORS_ORIGIN
@@ -34,7 +54,11 @@ app.use(helmet());
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('combined'));
+const logger = require('./src/utils/logger');
+app.use(morgan('combined', {
+  stream: { write: (msg) => logger.http(msg.trim()) },
+  skip: (req) => req.path === '/health',
+}));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -51,6 +75,19 @@ app.use('/food',  foodRoutes);
 app.use('/rides', rideRoutes);
 app.use('/ride', rideRoutes);
 app.use('/fare', rideRoutes);
+
+// Prometheus metrics
+const promClient = require('prom-client');
+const promRegister = new promClient.Registry();
+promClient.collectDefaultMetrics({ register: promRegister });
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', promRegister.contentType);
+    res.end(await promRegister.metrics());
+  } catch (e) {
+    res.status(500).end(e.message);
+  }
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -69,13 +106,9 @@ app.use((req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
-  console.error('[RideService Error]', err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error'
-  });
-});
+app.use(Sentry.Handlers.errorHandler());
+const { errorHandler } = require('./src/utils/response');
+app.use(errorHandler);
 
 // Create underlying HTTP server so Socket.IO shares the same port
 const httpServer = http.createServer(app);
@@ -100,11 +133,22 @@ const ridesNamespace = initRideSocket(io);
 // Expose io on app so route handlers can emit socket events
 app.set('io', io);
 
-httpServer.listen(PORT, () => {
-  console.log(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`);
-  console.log(`[MOBO Ride Service] Socket.IO namespace: /rides`);
-  startEscalationJob();
-  startScheduledRideJob(io);  // Feature 29: scheduled ride reminders + auto-dispatch
-});
+if (process.env.NODE_ENV !== 'test') {
+  httpServer.listen(PORT, () => {
+    logger.info(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
+    startEscalationJob();
+    startScheduledRideJob(io);  // Feature 29: scheduled ride reminders + auto-dispatch
+  });
+  const _shutdown = (signal) => {
+    logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
+    httpServer.close(() => {
+      logger.info(`${process.env.SERVICE_NAME} HTTP server closed`);
+      process.exit(0);
+    });
+    setTimeout(() => { logger.error(`${process.env.SERVICE_NAME} forced shutdown`); process.exit(1); }, 30000).unref();
+  };
+  process.on('SIGTERM', () => _shutdown('SIGTERM'));
+  process.on('SIGINT',  () => _shutdown('SIGINT'));
+}
 
 module.exports = app;

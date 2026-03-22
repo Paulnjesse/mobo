@@ -220,6 +220,52 @@ async function sendWelcomeEmail(email, fullName, language = 'en') {
 }
 
 /**
+ * sendPasswordResetOtp(email, otp, fullName, language)
+ * Sends a 6-digit OTP code for password reset.
+ */
+async function sendPasswordResetOtp(email, otp, fullName, language = 'en') {
+  const subjects = {
+    en: 'Reset your MOBO password',
+    fr: 'Réinitialisez votre mot de passe MOBO',
+    sw: 'Weka upya nenosiri lako la MOBO',
+  };
+
+  const bodies = {
+    en: `<h1>Password Reset</h1>
+         <p>${greeting(fullName, language)}</p>
+         <p>We received a request to reset your MOBO password. Enter the code below in the app to continue. This code expires in <strong>10 minutes</strong>.</p>
+         <div class="otp-box">
+           <div class="otp-code">${otp}</div>
+           <div class="otp-note">Never share this code with anyone.</div>
+         </div>
+         <p>If you didn't request a password reset, you can safely ignore this email. Your password will not change.</p>`,
+    fr: `<h1>Réinitialisation du mot de passe</h1>
+         <p>${greeting(fullName, language)}</p>
+         <p>Nous avons reçu une demande de réinitialisation de votre mot de passe MOBO. Entrez le code ci-dessous dans l'application. Ce code expire dans <strong>10 minutes</strong>.</p>
+         <div class="otp-box">
+           <div class="otp-code">${otp}</div>
+           <div class="otp-note">Ne partagez jamais ce code avec quiconque.</div>
+         </div>
+         <p>Si vous n'avez pas demandé cela, vous pouvez ignorer cet email.</p>`,
+    sw: `<h1>Weka Upya Nenosiri</h1>
+         <p>${greeting(fullName, language)}</p>
+         <p>Tulipokea ombi la kuweka upya nenosiri lako la MOBO. Ingiza nambari hii kwenye programu. Itaisha baada ya <strong>dakika 10</strong>.</p>
+         <div class="otp-box">
+           <div class="otp-code">${otp}</div>
+           <div class="otp-note">Usishiriki nambari hii na mtu yeyote.</div>
+         </div>`,
+  };
+
+  const lang = subjects[language] ? language : 'en';
+  return _sendEmail({
+    to: email,
+    subject: subjects[lang],
+    html: wrapHtml(subjects[lang], bodies[lang]),
+    text: `Your MOBO password reset code is: ${otp}. Valid for 10 minutes. Do not share this code.`,
+  });
+}
+
+/**
  * sendPasswordResetEmail(email, resetLink, language)
  */
 async function sendPasswordResetEmail(email, resetLink, language = 'en') {
@@ -311,9 +357,44 @@ async function sendRideReceiptEmail(email, rideDetails) {
   });
 }
 
+/**
+ * sendPasswordChangedEmail(email, fullName, language)
+ * Confirmation email sent after a successful password reset.
+ */
+async function sendPasswordChangedEmail(email, fullName, language = 'en') {
+  const subjects = {
+    en: 'Your MOBO password was changed',
+    fr: 'Votre mot de passe MOBO a été modifié',
+    sw: 'Nenosiri lako la MOBO limebadilishwa',
+  };
+  const bodies = {
+    en: `<h1>Password Changed</h1>
+         <p>${greeting(fullName, 'en')}</p>
+         <p>Your MOBO password was successfully reset. You can now log in with your new password.</p>
+         <p>If you did not make this change, please contact our support team immediately.</p>`,
+    fr: `<h1>Mot de passe modifié</h1>
+         <p>${greeting(fullName, 'fr')}</p>
+         <p>Votre mot de passe MOBO a été réinitialisé avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</p>
+         <p>Si vous n'êtes pas à l'origine de ce changement, contactez notre support immédiatement.</p>`,
+    sw: `<h1>Nenosiri Limebadilishwa</h1>
+         <p>${greeting(fullName, 'sw')}</p>
+         <p>Nenosiri lako la MOBO limewekwa upya. Unaweza sasa kuingia na nenosiri lako jipya.</p>
+         <p>Ukijua hukufanya hivi, wasiliana na msaada wetu mara moja.</p>`,
+  };
+  const lang = subjects[language] ? language : 'en';
+  return _sendEmail({
+    to: email,
+    subject: subjects[lang],
+    html: wrapHtml(subjects[lang], bodies[lang]),
+    text: `Your MOBO password was successfully changed. If you did not do this, contact support.`,
+  });
+}
+
 module.exports = {
   sendVerificationEmail,
   sendWelcomeEmail,
+  sendPasswordResetOtp,
   sendPasswordResetEmail,
-  sendRideReceiptEmail
+  sendPasswordChangedEmail,
+  sendRideReceiptEmail,
 };

@@ -72,6 +72,7 @@ import SavedPlacesScreen        from '../screens/SavedPlacesScreen';
 import USSDBookingScreen        from '../screens/USSDBookingScreen';
 import RecurringRideScreen      from '../screens/RecurringRideScreen';
 import WhatsAppBookingScreen    from '../screens/WhatsAppBookingScreen';
+import PoolRideScreen           from '../screens/PoolRideScreen';
 
 import DriverEarningsScreen      from '../screens/DriverEarningsScreen';
 import AirportModeScreen         from '../screens/AirportModeScreen';
@@ -221,6 +222,7 @@ function RiderStack() {
       <Stack.Screen name="WatchCompanion"     component={WatchCompanionScreen} />
       <Stack.Screen name="CurrencyPicker"     component={CurrencyPickerScreen} />
       <Stack.Screen name="FoodDelivery"       component={FoodDeliveryScreen} />
+      <Stack.Screen name="PoolRide"            component={PoolRideScreen}          options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }

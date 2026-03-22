@@ -4,6 +4,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, useColorScheme } from 'react-native';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { LanguageProvider } from './src/context/LanguageContext';
@@ -29,6 +30,7 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
+      <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''}>
       <SafeAreaProvider>
         <ThemeProvider>
           <LanguageProvider>
@@ -46,6 +48,7 @@ export default function App() {
           </LanguageProvider>
         </ThemeProvider>
       </SafeAreaProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }

@@ -128,6 +128,24 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false);
   };
 
+  // ── Social login (Google / Apple) ──────────────────────────
+  const socialLogin = useCallback(async (provider, providerToken, extraData = {}) => {
+    const response = await authService.socialLogin(provider, providerToken, extraData);
+    const authToken = response.token || response.data?.token;
+    const authUser  = response.data?.user || response.user;
+
+    await persistAuth(authToken, authUser);
+
+    try {
+      const pushToken = await registerForPushNotifications();
+      if (pushToken) {
+        await authService.updateProfile({ expo_push_token: pushToken }).catch(() => {});
+      }
+    } catch (_) {}
+
+    return response;
+  }, []);
+
   // ── Login ──────────────────────────────────────────────────
   const login = useCallback(async (identifier, password) => {
     const response = await authService.login(identifier, password);
@@ -275,6 +293,7 @@ export function AuthProvider({ children }) {
 
         // Auth actions
         login,
+        socialLogin,
         logout,
         verifyOtp,
         resendOtp,

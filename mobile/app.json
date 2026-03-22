@@ -19,7 +19,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.mobo.mobile",
       "config": {
-        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
+        "googleMapsApiKey": ""
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "MOBO needs your location to find nearby drivers and show your position on the map.",
@@ -38,7 +38,7 @@
       "package": "com.mobo.mobile",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+          "apiKey": ""
         }
       },
       "permissions": [
@@ -81,7 +81,7 @@
     ],
     "extra": {
       "apiBaseUrl": "https://mobo-api-gateway.onrender.com/api",
-      "googleMapsKey": "YOUR_GOOGLE_MAPS_KEY_HERE"
+      "googleMapsKey": ""
     }
   }
 }

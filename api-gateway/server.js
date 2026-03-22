@@ -1,13 +1,44 @@
+require('./src/tracing');
 require('dotenv').config();
+const Sentry = require('@sentry/node');
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  enabled: !!process.env.SENTRY_DSN,
+  beforeSend(event) {
+    // Strip sensitive headers from error reports
+    if (event.request?.headers) {
+      delete event.request.headers.authorization;
+      delete event.request.headers.cookie;
+    }
+    return event;
+  },
+});
+
+// Guard: prevent production startup with default or missing JWT secret
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
+    console.error('[FATAL] JWT_SECRET must be set to a strong secret in production. Refusing to start.');
+    process.exit(1);
+  }
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { globalLimiter } = require('./src/middleware/rateLimit');
 const routes = require('./src/routes/index');
+const requestId = require('./src/middleware/requestId');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./src/swagger');
 
 const app = express();
+app.use(requestId);
+app.use(Sentry.Handlers.requestHandler());
 const PORT = process.env.PORT || 3000;
+process.env.SERVICE_NAME = process.env.SERVICE_NAME || 'mobo-api-gateway';
 
 // ============================================================
 // CORS Configuration
@@ -43,12 +74,29 @@ app.options('*', cors(corsOptions));
 app.use(helmet({
   contentSecurityPolicy: false // Disabled for API
 }));
-app.use(morgan('combined'));
+const logger = require('./src/utils/logger');
+app.use(morgan('combined', {
+  stream: { write: (msg) => logger.http(msg.trim()) },
+  skip: (req) => req.path === '/health',
+}));
 
 // ============================================================
 // Rate Limiting (global)
 // ============================================================
 app.use(globalLimiter);
+
+// Prometheus metrics
+const promClient = require('prom-client');
+const promRegister = new promClient.Registry();
+promClient.collectDefaultMetrics({ register: promRegister });
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', promRegister.contentType);
+    res.end(await promRegister.metrics());
+  } catch (e) {
+    res.status(500).end(e.message);
+  }
+});
 
 // ============================================================
 // Health Check (before proxy routes)
@@ -92,6 +140,14 @@ app.get('/', (req, res) => {
   });
 });
 
+// API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'MOBO API Docs',
+  customCss: '.swagger-ui .topbar { background-color: #FF00BF; }',
+  swaggerOptions: { persistAuthorization: true },
+}));
+app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
+
 // ============================================================
 // Proxy Routes
 // ============================================================
@@ -111,31 +167,27 @@ app.use((req, res) => {
 // ============================================================
 // Global Error Handler
 // ============================================================
-app.use((err, req, res, next) => {
-  console.error('[API Gateway Error]', err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Gateway error'
-  });
-});
+app.use(Sentry.Handlers.errorHandler());
+const { errorHandler } = require('./src/utils/response');
+app.use(errorHandler);
 
 // ============================================================
 // Start Server
 // ============================================================
-app.listen(PORT, () => {
-  console.log('');
-  console.log('  ███╗   ███╗ ██████╗ ██████╗  ██████╗ ');
-  console.log('  ████╗ ████║██╔═══██╗██╔══██╗██╔═══██╗');
-  console.log('  ██╔████╔██║██║   ██║██████╔╝██║   ██║');
-  console.log('  ██║╚██╔╝██║██║   ██║██╔══██╗██║   ██║');
-  console.log('  ██║ ╚═╝ ██║╚██████╔╝██████╔╝╚██████╔╝');
-  console.log('  ╚═╝     ╚═╝ ╚═════╝ ╚═════╝  ╚═════╝ ');
-  console.log('');
-  console.log('  Your City. Your Ride. Your Community.');
-  console.log('');
-  console.log(`  API Gateway running on port ${PORT}`);
-  console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('');
-});
+if (process.env.NODE_ENV !== 'test') {
+  const server = app.listen(PORT, () => {
+    logger.info(`[MOBO API Gateway] Running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
+  });
+  const _shutdown = (signal) => {
+    logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
+    server.close(() => {
+      logger.info(`${process.env.SERVICE_NAME} HTTP server closed`);
+      process.exit(0);
+    });
+    setTimeout(() => { logger.error(`${process.env.SERVICE_NAME} forced shutdown`); process.exit(1); }, 30000).unref();
+  };
+  process.on('SIGTERM', () => _shutdown('SIGTERM'));
+  process.on('SIGINT',  () => _shutdown('SIGINT'));
+}
 
 module.exports = app;

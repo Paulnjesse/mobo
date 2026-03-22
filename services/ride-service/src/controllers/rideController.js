@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const pool = require('../config/database');
 const axios = require('axios');
+const cache = require('../utils/cache');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -548,6 +549,11 @@ const getFare = async (req, res) => {
     const { pickup_location, dropoff_location, ride_type = 'standard', stops = [] } = req.body;
     const userId = req.headers['x-user-id'];
 
+    // Cache fare estimates (coords quantized to ~111m precision via *1000 rounding)
+    const cacheKey = `fare:${ride_type}:${Math.round(pickup_location.lat * 1000)}:${Math.round(pickup_location.lng * 1000)}:${Math.round(dropoff_location.lat * 1000)}:${Math.round(dropoff_location.lng * 1000)}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
     const userResult = await pool.query('SELECT subscription_plan FROM users WHERE id = $1', [userId]);
     const subscription = userResult.rows[0]?.subscription_plan || 'none';
 
@@ -593,7 +599,7 @@ const getFare = async (req, res) => {
     });
     const fare = fares[ride_type] || fares.standard;
 
-    res.json({
+    const fareResponse = {
       fare,
       fares,           // per-type breakdown for RideCompareScreen
       distance_km: totalDistance.toFixed(2),
@@ -602,7 +608,10 @@ const getFare = async (req, res) => {
       surge_active: surgeMultiplier > 1.0,
       stops_count: stops.length,
       waypoints_count: waypoints.length,
-    });
+    };
+
+    await cache.set(cacheKey, fareResponse, 300); // 5 min TTL
+    res.json(fareResponse);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1468,6 +1477,13 @@ const roundUpFare = async (req, res) => {
 const getSurgePricing = async (req, res) => {
   try {
     const { lat, lng } = req.query;
+
+    const surgeCacheKey = `surge:${Math.round(parseFloat(lat) * 100) / 100}:${Math.round(parseFloat(lng) * 100) / 100}`;
+    const cachedSurge = await cache.get(surgeCacheKey);
+    if (cachedSurge !== null) {
+      return res.json(cachedSurge);
+    }
+
     const result = await pool.query(
       `SELECT name, multiplier, starts_at, ends_at FROM surge_zones
        WHERE ST_Within(ST_SetSRID(ST_MakePoint($1, $2), 4326), zone)
@@ -1476,7 +1492,9 @@ const getSurgePricing = async (req, res) => {
        ORDER BY multiplier DESC LIMIT 1`,
       [parseFloat(lng), parseFloat(lat)]
     );
-    res.json({ surge: result.rows[0] || null, surge_active: !!result.rows[0] });
+    const surgeResponse = { surge: result.rows[0] || null, surge_active: !!result.rows[0] };
+    await cache.set(surgeCacheKey, surgeResponse, 120); // 2 min TTL
+    res.json(surgeResponse);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -8,12 +8,17 @@ import {
   Share,
   StatusBar,
   ActivityIndicator,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, shadows } from '../theme';
 import FareBreakdown from '../components/FareBreakdown';
 import StarRating from '../components/StarRating';
+import { ridesService } from '../services/rides';
+
+const TIP_PRESETS = [0, 500, 1000, 2000];
 
 const MOCK_RECEIPT = {
   rideId: 'MOBO-20240320-0042',
@@ -51,6 +56,13 @@ export default function RideReceiptScreen({ navigation, route }) {
   const [hasRated, setHasRated] = useState(receipt.rated);
   const [submittingRating, setSubmittingRating] = useState(false);
 
+  // Tipping state
+  const [selectedTip, setSelectedTip] = useState(null);
+  const [customTip, setCustomTip] = useState('');
+  const [showCustomTip, setShowCustomTip] = useState(false);
+  const [tipSubmitted, setTipSubmitted] = useState(false);
+  const [submittingTip, setSubmittingTip] = useState(false);
+
   const handleShare = async () => {
     try {
       await Share.share({
@@ -76,6 +88,20 @@ export default function RideReceiptScreen({ navigation, route }) {
       pickup: receipt.pickup,
       dropoff: receipt.dropoff,
     });
+  };
+
+  const handleSendTip = async () => {
+    const amount = showCustomTip ? parseInt(customTip || '0', 10) : selectedTip;
+    if (!amount || amount <= 0) return;
+    setSubmittingTip(true);
+    try {
+      await ridesService.addTip(receipt.rideId, amount);
+      setTipSubmitted(true);
+    } catch {
+      Alert.alert('Error', 'Could not send tip. Please try again.');
+    } finally {
+      setSubmittingTip(false);
+    }
   };
 
   return (
@@ -198,6 +224,69 @@ export default function RideReceiptScreen({ navigation, route }) {
           </View>
         </View>
 
+        {/* Tip Driver */}
+        {!tipSubmitted ? (
+          <View style={[styles.card, styles.tipCard]}>
+            <Text style={styles.tipTitle}>Leave a tip for {receipt.driver.name}?</Text>
+            <Text style={styles.tipSubtitle}>100% goes directly to your driver</Text>
+            <View style={styles.tipPresetsRow}>
+              {TIP_PRESETS.map((amt) => (
+                <TouchableOpacity
+                  key={amt}
+                  style={[styles.tipChip, selectedTip === amt && !showCustomTip && styles.tipChipSelected]}
+                  onPress={() => { setSelectedTip(amt); setShowCustomTip(false); setCustomTip(''); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipChipText, selectedTip === amt && !showCustomTip && styles.tipChipTextSelected]}>
+                    {amt === 0 ? 'No tip' : `${amt.toLocaleString()} XAF`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.tipChip, showCustomTip && styles.tipChipSelected]}
+                onPress={() => { setShowCustomTip(true); setSelectedTip(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tipChipText, showCustomTip && styles.tipChipTextSelected]}>Custom</Text>
+              </TouchableOpacity>
+            </View>
+            {showCustomTip && (
+              <View style={styles.customTipRow}>
+                <TextInput
+                  style={styles.customTipInput}
+                  value={customTip}
+                  onChangeText={setCustomTip}
+                  placeholder="Enter amount in XAF"
+                  placeholderTextColor={colors.textLight}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </View>
+            )}
+            {(selectedTip !== null || (showCustomTip && customTip)) && selectedTip !== 0 && (
+              <TouchableOpacity
+                style={[styles.tipSendBtn, submittingTip && { opacity: 0.6 }]}
+                onPress={handleSendTip}
+                disabled={submittingTip}
+                activeOpacity={0.85}
+              >
+                {submittingTip ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.tipSendBtnText}>
+                    Send {showCustomTip ? `${parseInt(customTip || '0').toLocaleString()} XAF` : `${selectedTip?.toLocaleString()} XAF`} Tip
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={[styles.card, styles.tipDoneCard]}>
+            <Ionicons name="heart" size={22} color={colors.primary} />
+            <Text style={styles.tipDoneText}>Tip sent! {receipt.driver.name} will love it.</Text>
+          </View>
+        )}
+
         {/* Rate Driver */}
         {!hasRated ? (
           <View style={[styles.card, styles.ratingCard]}>
@@ -227,6 +316,20 @@ export default function RideReceiptScreen({ navigation, route }) {
             <Text style={styles.ratedText}>Thanks for rating {receipt.driver.name}!</Text>
           </View>
         )}
+
+        {/* Split Fare */}
+        <TouchableOpacity
+          style={styles.splitFareBtn}
+          onPress={() => navigation.navigate('FareSplit', {
+            rideId: receipt.rideId,
+            totalFare: receipt.fareData.total,
+            driverName: receipt.driver.name,
+          })}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="people-outline" size={18} color={colors.primary} />
+          <Text style={styles.splitFareBtnText}>Split Fare with Others</Text>
+        </TouchableOpacity>
 
         {/* Actions */}
         <View style={styles.actionsRow}>
@@ -420,4 +523,41 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   bookAgainText: { fontSize: 14, fontWeight: '800', color: colors.white },
+  splitFareBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    paddingVertical: 13, borderRadius: radius.pill, marginTop: spacing.sm,
+    borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white,
+  },
+  splitFareBtnText: { fontSize: 14, fontWeight: '700', color: colors.primary },
+
+  // Tipping
+  tipCard: { marginTop: spacing.sm, paddingVertical: spacing.lg },
+  tipTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: 4, textAlign: 'center' },
+  tipSubtitle: { fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.md },
+  tipPresetsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'center', marginBottom: spacing.sm },
+  tipChip: {
+    paddingHorizontal: spacing.md, paddingVertical: 9,
+    borderRadius: radius.round, borderWidth: 1.5, borderColor: colors.gray200,
+    backgroundColor: colors.surface,
+  },
+  tipChipSelected: { borderColor: colors.primary, backgroundColor: 'rgba(255,0,191,0.07)' },
+  tipChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  tipChipTextSelected: { color: colors.primary, fontWeight: '700' },
+  customTipRow: { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  customTipInput: {
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+    fontSize: 15, color: colors.text, borderWidth: 1, borderColor: colors.gray200,
+  },
+  tipSendBtn: {
+    backgroundColor: colors.primary, borderRadius: radius.pill,
+    paddingVertical: 13, marginHorizontal: spacing.md,
+    alignItems: 'center', marginTop: spacing.xs,
+  },
+  tipSendBtnText: { fontSize: 15, fontWeight: '800', color: colors.white },
+  tipDoneCard: {
+    marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md,
+  },
+  tipDoneText: { fontSize: 14, fontWeight: '600', color: colors.primary },
 });

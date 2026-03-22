@@ -172,14 +172,14 @@ export default function HelpScreen({ navigation }) {
         <View style={styles.contactRow}>
           <TouchableOpacity
             style={styles.contactCard}
-            onPress={() => navigation.navigate('Messages')}
+            onPress={() => navigation.navigate('SupportChat')}
             activeOpacity={0.8}
           >
             <View style={[styles.contactIcon, { backgroundColor: 'rgba(255,0,191,0.1)' }]}>
               <Ionicons name="chatbubble-outline" size={22} color={colors.primary} />
             </View>
             <Text style={styles.contactLabel}>Chat</Text>
-            <Text style={styles.contactSub}>Instant</Text>
+            <Text style={styles.contactSub}>24/7 Live</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

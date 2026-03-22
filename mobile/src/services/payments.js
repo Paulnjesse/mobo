@@ -21,8 +21,28 @@ export const paymentsService = {
     return response.data;
   },
 
+  /**
+   * Initiate a ride payment.
+   * For mobile-money methods the server returns { pending: true, reference_id }.
+   * Callers must poll checkStatus() until resolved.
+   *
+   * @param {string} rideId
+   * @param {{ method, phone, payment_method_id, tip, roundUp }} paymentData
+   */
   async chargeRide(rideId, paymentData) {
-    const response = await api.post(`/payments/charge/${rideId}`, paymentData);
+    const response = await api.post('/payments/charge', {
+      ride_id: rideId,
+      ...paymentData,
+    });
+    return response.data;
+  },
+
+  /**
+   * Poll the status of a pending mobile-money payment.
+   * Returns { status: 'pending' | 'completed' | 'failed', payment_id, ... }
+   */
+  async checkStatus(referenceId) {
+    const response = await api.get(`/payments/status/${referenceId}`);
     return response.data;
   },
 
@@ -63,6 +83,15 @@ export const paymentsService = {
 
   async redeemPoints(points) {
     const response = await api.post('/payments/loyalty/redeem', { points });
+    return response.data;
+  },
+
+  /**
+   * Create a Stripe PaymentIntent for the card payment sheet.
+   * Returns { client_secret, payment_intent_id, publishable_key, amount, currency }
+   */
+  async createPaymentIntent(rideId, amount) {
+    const response = await api.post('/payments/stripe/payment-intent', { ride_id: rideId, amount });
     return response.data;
   },
 };

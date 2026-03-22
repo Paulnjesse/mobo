@@ -1110,4 +1110,190 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner, setHomeLocation, forgotPassword, resetPassword };
+/**
+ * POST /auth/social
+ * Social sign-in / sign-up via Google or Apple.
+ * Body: { provider: 'google'|'apple', token, email?, name?, role? }
+ *
+ * Flow:
+ *  1. Verify the ID token with the provider's token-info endpoint
+ *  2. Find existing user by provider_id OR email
+ *  3. If none exists, create account automatically (rider by default)
+ *  4. Return JWT — no OTP required for social login
+ */
+const socialLogin = async (req, res) => {
+  try {
+    const { provider, token: providerToken, email: bodyEmail, name: bodyName, role = 'rider' } = req.body;
+
+    if (!provider || !providerToken) {
+      return res.status(400).json({ success: false, message: 'provider and token are required' });
+    }
+    if (!['google', 'apple'].includes(provider)) {
+      return res.status(400).json({ success: false, message: 'provider must be google or apple' });
+    }
+
+    let providerId = null;
+    let verifiedEmail = bodyEmail || null;
+    let verifiedName  = bodyName  || null;
+
+    // ── Verify token with provider ──────────────────────────────────────────
+    if (provider === 'google') {
+      try {
+        const { data } = await require('axios').get(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${providerToken}`,
+          { timeout: 10000 }
+        );
+        // Verify audience matches our client ID(s)
+        const googleClientIds = [
+          process.env.GOOGLE_CLIENT_ID_IOS,
+          process.env.GOOGLE_CLIENT_ID_ANDROID,
+          process.env.GOOGLE_CLIENT_ID_WEB,
+        ].filter(Boolean);
+
+        if (googleClientIds.length > 0 && !googleClientIds.includes(data.aud)) {
+          return res.status(401).json({ success: false, message: 'Invalid Google token audience' });
+        }
+
+        providerId     = data.sub;
+        verifiedEmail  = data.email || verifiedEmail;
+        verifiedName   = data.name  || verifiedName;
+      } catch (gErr) {
+        console.error('[SocialLogin] Google token verify failed:', gErr.message);
+        return res.status(401).json({ success: false, message: 'Google token verification failed' });
+      }
+    } else if (provider === 'apple') {
+      // Apple tokens are JWTs signed with Apple's public key
+      // For simplicity, we trust the decoded payload sent by Expo (which already verified it)
+      // In strict production: fetch Apple's public keys and verify signature
+      try {
+        const parts  = providerToken.split('.');
+        if (parts.length < 2) throw new Error('Invalid Apple JWT format');
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+
+        const appleAud = process.env.APPLE_APP_BUNDLE_ID;
+        if (appleAud && payload.aud !== appleAud) {
+          return res.status(401).json({ success: false, message: 'Invalid Apple token audience' });
+        }
+
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          return res.status(401).json({ success: false, message: 'Apple token has expired' });
+        }
+
+        providerId    = payload.sub;
+        verifiedEmail = payload.email || verifiedEmail;
+        // Apple doesn't always include name in token; caller passes it from the first-time consent
+      } catch (aErr) {
+        console.error('[SocialLogin] Apple token decode failed:', aErr.message);
+        return res.status(401).json({ success: false, message: 'Apple token verification failed' });
+      }
+    }
+
+    if (!providerId) {
+      return res.status(401).json({ success: false, message: 'Could not extract identity from provider token' });
+    }
+
+    // ── Find or create user ─────────────────────────────────────────────────
+    let user = null;
+
+    // 1. Look up by social account record
+    const socialRow = await db.query(
+      'SELECT user_id FROM user_social_accounts WHERE provider = $1 AND provider_id = $2',
+      [provider, providerId]
+    );
+    if (socialRow.rows.length > 0) {
+      const userRow = await db.query(
+        'SELECT * FROM users WHERE id = $1 AND is_active = true',
+        [socialRow.rows[0].user_id]
+      );
+      user = userRow.rows[0] || null;
+    }
+
+    // 2. Look up by email if social record not found
+    if (!user && verifiedEmail) {
+      const emailRow = await db.query(
+        'SELECT * FROM users WHERE email = $1 AND is_active = true',
+        [verifiedEmail]
+      );
+      user = emailRow.rows[0] || null;
+    }
+
+    // 3. Create new account
+    if (!user) {
+      const id       = uuidv4();
+      const fullName = verifiedName || (verifiedEmail ? verifiedEmail.split('@')[0] : 'MOBO User');
+
+      const newUserResult = await db.query(
+        `INSERT INTO users (
+           id, full_name, email, role, country, language,
+           is_verified, is_active, loyalty_points, otp_attempts,
+           registration_step, registration_completed
+         ) VALUES ($1,$2,$3,$4,'Cameroon','fr',true,true,50,0,'complete',true)
+         RETURNING *`,
+        [id, fullName, verifiedEmail || null, role]
+      );
+      user = newUserResult.rows[0];
+
+      // Signup loyalty points
+      await db.query(
+        `INSERT INTO loyalty_transactions (user_id, points, action, description)
+         VALUES ($1, 50, 'signup_bonus', 'Welcome to MOBO — 50 bonus points!')`,
+        [id]
+      ).catch(() => {});
+    }
+
+    if (user.is_suspended) {
+      return res.status(403).json({ success: false, message: 'Your account has been suspended. Contact support.' });
+    }
+
+    // Upsert social account link
+    await db.query(
+      `INSERT INTO user_social_accounts (user_id, provider, provider_id, email, name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (provider, provider_id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name`,
+      [user.id, provider, providerId, verifiedEmail, verifiedName]
+    ).catch(() => {});
+
+    // Update google_id / apple_id shortcut columns
+    const idColumn = provider === 'google' ? 'google_id' : 'apple_id';
+    await db.query(
+      `UPDATE users SET ${idColumn} = $1 WHERE id = $2`,
+      [providerId, user.id]
+    ).catch(() => {});
+
+    // Issue JWT
+    const tokenPayload = {
+      id: user.id,
+      phone: user.phone,
+      email: user.email,
+      role: user.role,
+      full_name: user.full_name,
+    };
+    const jwtToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    res.json({
+      success: true,
+      message: 'Social login successful',
+      token: jwtToken,
+      data: {
+        token: jwtToken,
+        user: {
+          id:                   user.id,
+          full_name:            user.full_name,
+          email:                user.email,
+          phone:                user.phone,
+          role:                 user.role,
+          country:              user.country,
+          is_verified:          user.is_verified,
+          loyalty_points:       user.loyalty_points,
+          registration_step:    user.registration_step,
+          registration_completed: user.registration_completed,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[SocialLogin Error]', err);
+    res.status(500).json({ success: false, message: 'Social login failed' });
+  }
+};
+
+module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner, setHomeLocation, forgotPassword, resetPassword, socialLogin };

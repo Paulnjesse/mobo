@@ -20,6 +20,7 @@ import { useRide } from '../context/RideContext';
 import { locationService } from '../services/location';
 import { searchPlaces, getPlaceDetails } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
+import AdBanner from '../components/AdBanner';
 
 const { height, width } = Dimensions.get('window');
 
@@ -29,6 +30,12 @@ const RIDE_TYPES = [
   { id: 'luxury', label: 'Luxury', icon: 'diamond-outline', eta: '8 min', price: '3,500 XAF' },
   { id: 'shared', label: 'Shared', icon: 'people-outline', eta: '4 min', price: '700 XAF' },
   { id: 'delivery', label: 'Delivery', icon: 'cube-outline', eta: '6 min', price: '1,500 XAF' },
+  { id: 'rental', label: 'Rental', icon: 'time-outline', eta: 'By hour', price: 'From 8k' },
+  { id: 'outstation', label: 'Outstation', icon: 'map-outline', eta: 'Intercity', price: 'From 25k' },
+  { id: 'wav', label: 'Accessible', icon: 'accessibility-outline', eta: '8 min', price: '1,500 XAF' },
+  { id: 'ev', label: 'Green', icon: 'leaf-outline', eta: '6 min', price: '1,400 XAF' },
+  { id: 'moto', label: 'Benskin', icon: 'bicycle-outline', eta: '2 min', price: '500 XAF' },
+  { id: 'xl', label: 'XL Group', icon: 'bus-outline', eta: '6 min', price: '2,500 XAF' },
 ];
 
 const RECENT_DESTINATIONS = [
@@ -106,6 +113,13 @@ export default function HomeScreen({ navigation }) {
       setSearchQuery('');
       return;
     }
+    if (selectedType === 'rental') {
+      navigation.navigate('RentalRide', {
+        pickup: location ? { lat: location.latitude, lng: location.longitude } : null,
+      });
+      setSearchQuery('');
+      return;
+    }
 
     // Navigate to BookRide with the selected destination
     const details = await getPlaceDetails(place.placeId);
@@ -123,6 +137,16 @@ export default function HomeScreen({ navigation }) {
   const handleBookRide = () => {
     if (selectedType === 'delivery') {
       navigation.navigate('DeliveryBooking');
+      return;
+    }
+    if (selectedType === 'rental') {
+      navigation.navigate('RentalRide', {
+        pickup: location ? { lat: location.latitude, lng: location.longitude } : null,
+      });
+      return;
+    }
+    if (selectedType === 'outstation') {
+      navigation.navigate('OutstationRide');
       return;
     }
     navigation.navigate('BookRide', { initialRideType: selectedType });
@@ -195,7 +219,7 @@ export default function HomeScreen({ navigation }) {
       <View style={[styles.topBar, { top: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.topBarBtn}
-          onPress={() => navigation.navigate('Settings')}
+          onPress={() => navigation.openDrawer?.() || navigation.navigate('Settings')}
           activeOpacity={0.8}
         >
           <Ionicons name="menu" size={22} color={colors.text} />
@@ -299,6 +323,15 @@ export default function HomeScreen({ navigation }) {
         )}
 
         {/* Ride type selector — horizontal scroll */}
+        <View style={styles.rideTypesHeader}>
+          <Text style={styles.rideTypesSectionLabel}>Ride type</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('RideCompare', { initialRideType: selectedType })}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.compareAllBtn}>Compare all</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -352,6 +385,15 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             ))}
           </>
+        )}
+
+        {/* Ad banner — rotating promos */}
+        {!searchFocused && (
+          <AdBanner onCtaPress={(ad) => {
+            if (ad.id === '3') navigation.navigate('CommuterPass');
+            else if (ad.id === '4') navigation.navigate('Referral');
+            else if (ad.id === '5') navigation.navigate('BookRide', { initialRideType: 'moto' });
+          }} />
         )}
       </View>
     </View>
@@ -550,6 +592,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 1,
   },
+  rideTypesHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.xs, marginBottom: 4,
+  },
+  rideTypesSectionLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  compareAllBtn: { fontSize: 12, fontWeight: '700', color: colors.primary },
   rideTypesScroll: {
     paddingBottom: spacing.sm,
     gap: spacing.sm,

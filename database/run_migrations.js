@@ -27,6 +27,7 @@ const FILES = [
   'migration_016.sql',
   'migration_017.sql',
   'migration_018.sql',
+  'migration_019.sql',
   'seed.sql',
 ];
 

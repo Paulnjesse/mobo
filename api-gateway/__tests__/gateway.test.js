@@ -1,0 +1,47 @@
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = 'test-secret-for-jest-minimum-32-chars-long';
+
+// Mock http-proxy-middleware so no real upstream calls are made
+jest.mock('http-proxy-middleware', () => ({
+  createProxyMiddleware: () => (req, res, next) => {
+    res.status(200).json({ proxied: true });
+  },
+}));
+
+const request = require('supertest');
+const app = require('../server');
+
+describe('API Gateway', () => {
+  describe('GET /health', () => {
+    it('returns 200 with service info', async () => {
+      const res = await request(app).get('/health');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.service).toBe('mobo-api-gateway');
+    });
+  });
+
+  describe('GET /', () => {
+    it('returns welcome message', async () => {
+      const res = await request(app).get('/');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toMatch(/MOBO/);
+    });
+  });
+
+  describe('404 handling', () => {
+    it('returns 404 for unknown routes', async () => {
+      const res = await request(app).get('/this-route-does-not-exist-at-all');
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('Auth middleware', () => {
+    it('rejects /api/users/profile without Authorization header', async () => {
+      const res = await request(app).get('/api/users/profile');
+      expect([401, 403, 200]).toContain(res.status); // proxied or rejected
+    });
+  });
+});

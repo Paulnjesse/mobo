@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const TOKEN_KEY = '@mobo_token';
 
 const api = axios.create({
-  baseURL: 'https://mobo-api-gateway.onrender.com/api',
+  baseURL: 'https://mobo-api-gateway.onrender.com/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ api.interceptors.response.use(
         const refreshToken = await AsyncStorage.getItem('@mobo_refresh_token');
         if (refreshToken) {
           const response = await axios.post(
-            'https://mobo-api-gateway.onrender.com/api/auth/refresh',
+            'https://mobo-api-gateway.onrender.com/api/v1/auth/refresh',
             { refreshToken },
             { timeout: 15000 }
           );

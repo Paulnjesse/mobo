@@ -58,37 +58,76 @@ export async function searchPlaces(query, location = null) {
     return [];
   }
 
-  if (!hasApiKey()) {
-    console.log('[Maps] No API key — returning empty place suggestions for:', query);
-    return [];
+  // ── Google Places Autocomplete ─────────────────────────────────────────────
+  if (hasApiKey()) {
+    try {
+      let url =
+        `${BASE}/place/autocomplete/json` +
+        `?input=${encodeURIComponent(query)}` +
+        `&key=${GOOGLE_MAPS_KEY}` +
+        `&language=en` +
+        `&types=geocode|establishment`;
+
+      if (location) {
+        url += `&location=${location.lat},${location.lng}&radius=50000`;
+      }
+
+      const data = await _fetch(url);
+
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        throw new Error(`Places API status: ${data.status}`);
+      }
+
+      return (data.predictions || []).map((p) => ({
+        placeId: p.place_id,
+        mainText: p.structured_formatting?.main_text || p.description,
+        secondaryText: p.structured_formatting?.secondary_text || '',
+        description: p.description,
+      }));
+    } catch (err) {
+      console.warn('[Maps] searchPlaces Google error:', err.message, '— trying Nominatim');
+    }
   }
 
+  // ── OpenStreetMap Nominatim fallback ───────────────────────────────────────
   try {
     let url =
-      `${BASE}/place/autocomplete/json` +
-      `?input=${encodeURIComponent(query)}` +
-      `&key=${GOOGLE_MAPS_KEY}` +
-      `&language=en` +
-      `&types=geocode|establishment`;
+      `https://nominatim.openstreetmap.org/search` +
+      `?q=${encodeURIComponent(query)}` +
+      `&format=json&addressdetails=1&limit=6&accept-language=en`;
 
     if (location) {
-      url += `&location=${location.lat},${location.lng}&radius=50000`;
+      // Viewbox bias: ±0.5° around current location
+      const d = 0.5;
+      url +=
+        `&viewbox=${location.lng - d},${location.lat + d},${location.lng + d},${location.lat - d}` +
+        `&bounded=0`;
     }
 
-    const data = await _fetch(url);
+    const results = await _fetch(url);
 
-    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      throw new Error(`Places API status: ${data.status}`);
-    }
-
-    return (data.predictions || []).map((p) => ({
-      placeId: p.place_id,
-      mainText: p.structured_formatting?.main_text || p.description,
-      secondaryText: p.structured_formatting?.secondary_text || '',
-      description: p.description
-    }));
+    return results.map((r) => {
+      const addr = r.address || {};
+      const mainText =
+        r.namedetails?.name ||
+        addr.amenity ||
+        addr.road ||
+        addr.suburb ||
+        addr.city ||
+        r.display_name.split(',')[0];
+      const secondary = r.display_name.replace(/^[^,]+,\s*/, '');
+      return {
+        // Encode lat/lng so getPlaceDetails can resolve without a second request
+        placeId: `osm:${r.lat},${r.lon}`,
+        mainText,
+        secondaryText: secondary,
+        description: r.display_name,
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+      };
+    });
   } catch (err) {
-    console.error('[Maps] searchPlaces error:', err.message);
+    console.error('[Maps] searchPlaces Nominatim error:', err.message);
     return [];
   }
 }
@@ -107,8 +146,34 @@ export async function searchPlaces(query, location = null) {
 export async function getPlaceDetails(placeId) {
   if (!placeId) return null;
 
+  // ── OSM-encoded place ID (from Nominatim fallback) ────────────────────────
+  if (placeId.startsWith('osm:')) {
+    const [latStr, lngStr] = placeId.slice(4).split(',');
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      // Reverse-geocode with Nominatim to get a human-readable address
+      try {
+        const url =
+          `https://nominatim.openstreetmap.org/reverse` +
+          `?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
+        const data = await _fetch(url);
+        return {
+          lat,
+          lng,
+          address: data.display_name || `${lat}, ${lng}`,
+          name: data.namedetails?.name || data.address?.road || data.display_name?.split(',')[0] || '',
+        };
+      } catch {
+        return { lat, lng, address: `${lat}, ${lng}`, name: '' };
+      }
+    }
+    return null;
+  }
+
+  // ── Google Place Details ───────────────────────────────────────────────────
   if (!hasApiKey()) {
-    console.log('[Maps] No API key — cannot fetch place details for:', placeId);
+    console.log('[Maps] No API key — cannot fetch Google place details for:', placeId);
     return null;
   }
 
@@ -130,7 +195,7 @@ export async function getPlaceDetails(placeId) {
       lat: result.geometry.location.lat,
       lng: result.geometry.location.lng,
       address: result.formatted_address,
-      name: result.name
+      name: result.name,
     };
   } catch (err) {
     console.error('[Maps] getPlaceDetails error:', err.message);

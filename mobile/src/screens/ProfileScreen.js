@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   ScrollView,
   Alert,
   StatusBar,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors, spacing, radius, shadows } from '../theme';
@@ -18,6 +20,26 @@ export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [businessMode, setBusinessMode] = useState(false);
+  const [businessName, setBusinessName] = useState(user?.businessName || '');
+
+  useEffect(() => {
+    AsyncStorage.getItem('mobo_business_mode').then(val => {
+      if (val === 'true') setBusinessMode(true);
+    });
+  }, []);
+
+  const toggleBusinessMode = async (val) => {
+    setBusinessMode(val);
+    await AsyncStorage.setItem('mobo_business_mode', val ? 'true' : 'false');
+    if (val) {
+      Alert.alert(
+        'Business Profile Activated',
+        'Rides will be billed to your corporate account. Expenses auto-categorized for reimbursement.',
+        [{ text: 'Got it' }]
+      );
+    }
+  };
 
   const firstName = user?.name?.split(' ')[0] || 'Rider';
   const initial = firstName.charAt(0).toUpperCase();
@@ -39,6 +61,7 @@ export default function ProfileScreen({ navigation }) {
   const MENU_ITEMS = [
     { icon: 'card-outline', label: t('paymentMethods') || 'Payment Methods', screen: 'PaymentMethods', color: colors.primary },
     { icon: 'star-outline', label: 'Subscriptions', screen: 'Subscription', color: colors.warning },
+    { icon: 'train-outline', label: 'Commuter Pass', screen: 'CommuterPass', color: colors.success },
     { icon: 'shield-checkmark-outline', label: 'Safety', screen: 'Safety', color: colors.success },
     { icon: 'pricetag-outline', label: 'Promo Codes', screen: 'PromoCode', color: colors.primary },
     { icon: 'calendar-outline', label: 'Scheduled Rides', screen: 'ScheduledRide', color: colors.primary },
@@ -98,6 +121,39 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.statLabel}>Points</Text>
           </View>
         </View>
+
+        {/* Business / Personal toggle */}
+        <View style={styles.bizCard}>
+          <View style={[styles.bizIconWrap, { backgroundColor: businessMode ? '#1a3c6e' : colors.primary + '18' }]}>
+            <Ionicons name={businessMode ? 'briefcase' : 'briefcase-outline'} size={22} color={businessMode ? '#fff' : colors.primary} />
+          </View>
+          <View style={styles.bizInfo}>
+            <Text style={styles.bizTitle}>{businessMode ? 'Business Profile' : 'Personal Profile'}</Text>
+            <Text style={styles.bizSub}>
+              {businessMode
+                ? (user?.businessName || 'Corporate billing active')
+                : 'Switch to bill to your company'}
+            </Text>
+          </View>
+          <Switch
+            value={businessMode}
+            onValueChange={toggleBusinessMode}
+            trackColor={{ false: colors.gray200, true: '#1a3c6e' }}
+            thumbColor={businessMode ? '#fff' : '#f4f3f4'}
+          />
+        </View>
+
+        {businessMode && (
+          <TouchableOpacity
+            style={styles.bizCorporateLink}
+            onPress={() => navigation.navigate('Corporate')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="settings-outline" size={15} color="#1a3c6e" />
+            <Text style={styles.bizCorpText}>Manage Corporate Settings</Text>
+            <Ionicons name="chevron-forward" size={15} color="#1a3c6e" />
+          </TouchableOpacity>
+        )}
 
         {/* Menu list */}
         <View style={styles.menuSection}>
@@ -239,6 +295,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   menuLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.text },
+  bizCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray200,
+    gap: spacing.md,
+  },
+  bizIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bizInfo: { flex: 1 },
+  bizTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  bizSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  bizCorporateLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: '#eef2f8',
+    marginHorizontal: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    marginTop: -1,
+    marginBottom: spacing.sm,
+  },
+  bizCorpText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#1a3c6e' },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',

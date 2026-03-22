@@ -18,6 +18,8 @@ export default function FareBreakdown({ fareData = {} }) {
     surgeMultiplier = null,
     discount = 0,
     discountLabel = 'Subscription discount',
+    waitingFee = 0,
+    stopsCount = 0,
     total = 0,
   } = fareData;
 
@@ -27,6 +29,8 @@ export default function FareBreakdown({ fareData = {} }) {
     { label: 'Base fare', amount: base },
     { label: 'Distance fare', amount: distance },
     { label: 'Time fare', amount: time },
+    stopsCount > 0 && { label: `${stopsCount} stop${stopsCount > 1 ? 's' : ''}`, amount: 0, isInfo: true },
+    waitingFee > 0 && { label: 'Waiting fee', amount: waitingFee, isWait: true },
     bookingFee > 0 && { label: 'Booking fee', amount: bookingFee },
     serviceFee > 0 && { label: 'Service fee', amount: serviceFee },
     surge > 0 && { label: 'Surge pricing', amount: surge, isSurge: true },
@@ -56,6 +60,7 @@ export default function FareBreakdown({ fareData = {} }) {
                 styles.label,
                 item.isSurge && styles.surgeLabel,
                 item.isDiscount && styles.discountLabel,
+                item.isWait && styles.waitLabel,
               ]}
             >
               {item.label}
@@ -76,9 +81,15 @@ export default function FareBreakdown({ fareData = {} }) {
               styles.amount,
               item.isSurge && styles.surgeAmount,
               item.isDiscount && styles.discountAmount,
+              item.isWait && styles.waitAmount,
+              item.isInfo && styles.infoAmount,
             ]}
           >
-            {item.isDiscount ? `- ${fmt(Math.abs(item.amount))} XAF` : `${fmt(item.amount)} XAF`}
+            {item.isDiscount
+              ? `- ${fmt(Math.abs(item.amount))} XAF`
+              : item.isInfo
+              ? 'included'
+              : `${fmt(item.amount)} XAF`}
           </Text>
         </View>
       ))}
@@ -151,6 +162,10 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontWeight: '500',
   },
+  waitLabel: {
+    color: colors.warning,
+    fontWeight: '500',
+  },
   amount: {
     fontSize: 14,
     fontWeight: '600',
@@ -161,6 +176,15 @@ const styles = StyleSheet.create({
   },
   discountAmount: {
     color: colors.success,
+  },
+  waitAmount: {
+    color: colors.warning,
+    fontWeight: '700',
+  },
+  infoAmount: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   surgeBadge: {
     backgroundColor: colors.surgeBg,

@@ -810,12 +810,19 @@ const webhookMtn = async (req, res) => {
     // Verify webhook secret token to prevent spoofing
     const webhookSecret = process.env.MTN_WEBHOOK_SECRET;
     if (webhookSecret) {
-      const providedSecret =
-        req.headers['x-callback-secret'] ||
-        req.query.secret ||
-        req.headers['x-mtn-signature'];
-      if (!providedSecret || providedSecret !== webhookSecret) {
-        console.warn('[Webhook/MTN] Rejected: invalid webhook secret');
+      const signature = req.headers['x-mtn-signature'] || req.headers['x-callback-secret'];
+      if (!signature) return res.sendStatus(401);
+      const crypto = require('crypto');
+      const rawBody = JSON.stringify(req.body);
+      const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+      const provided = signature.replace(/^sha256=/, '');
+      try {
+        const expectedBuf = Buffer.from(expected, 'hex');
+        const providedBuf = Buffer.from(provided.padEnd(expected.length * 2, '0').slice(0, expected.length * 2), 'hex');
+        if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+          return res.sendStatus(401);
+        }
+      } catch {
         return res.sendStatus(401);
       }
     }
@@ -861,12 +868,19 @@ const webhookOrange = async (req, res) => {
     // Verify webhook secret token to prevent spoofing
     const webhookSecret = process.env.ORANGE_WEBHOOK_SECRET;
     if (webhookSecret) {
-      const providedSecret =
-        req.headers['x-callback-secret'] ||
-        req.query.secret ||
-        req.headers['x-orange-signature'];
-      if (!providedSecret || providedSecret !== webhookSecret) {
-        console.warn('[Webhook/Orange] Rejected: invalid webhook secret');
+      const signature = req.headers['x-orange-signature'] || req.headers['x-callback-secret'];
+      if (!signature) return res.sendStatus(401);
+      const crypto = require('crypto');
+      const rawBody = JSON.stringify(req.body);
+      const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+      const provided = signature.replace(/^sha256=/, '');
+      try {
+        const expectedBuf = Buffer.from(expected, 'hex');
+        const providedBuf = Buffer.from(provided.padEnd(expected.length * 2, '0').slice(0, expected.length * 2), 'hex');
+        if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+          return res.sendStatus(401);
+        }
+      } catch {
         return res.sendStatus(401);
       }
     }
@@ -1196,6 +1210,71 @@ const getSubscriptionStatus = async (req, res) => {
   }
 };
 
+/**
+ * POST /payments/stripe/payment-intent
+ * Creates a Stripe PaymentIntent and returns the client_secret to the mobile app.
+ * The app uses this with the Stripe payment sheet SDK to collect card details securely.
+ *
+ * Body: { ride_id?, amount?, currency? }
+ */
+const createStripePaymentIntent = async (req, res) => {
+  try {
+    const userId   = req.user.id;
+    const { ride_id, amount: bodyAmount, currency = 'XAF' } = req.body;
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey || stripeKey === 'sk_test_xxxx') {
+      // Dev mode — return a mock client secret so the UI can be tested
+      return res.json({
+        success: true,
+        mock: true,
+        client_secret: `pi_mock_${Date.now()}_secret_mock`,
+        publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_mock',
+        amount: bodyAmount || 0,
+        currency,
+      });
+    }
+
+    let amount = bodyAmount;
+    if (!amount && ride_id) {
+      const rideRow = await db.query(
+        'SELECT estimated_fare, final_fare FROM rides WHERE id = $1 AND rider_id = $2',
+        [ride_id, userId]
+      );
+      if (rideRow.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Ride not found' });
+      }
+      amount = rideRow.rows[0].final_fare || rideRow.rows[0].estimated_fare;
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'amount is required' });
+    }
+
+    const stripe = require('stripe')(stripeKey);
+
+    // XAF is a zero-decimal currency — Stripe expects the amount as-is (not ×100)
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount:   Math.round(amount),
+      currency: currency.toLowerCase(),
+      metadata: { user_id: userId, ride_id: ride_id || '' },
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.json({
+      success:         true,
+      client_secret:   paymentIntent.client_secret,
+      payment_intent_id: paymentIntent.id,
+      publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
+      amount,
+      currency,
+    });
+  } catch (err) {
+    console.error('[CreateStripePaymentIntent Error]', err.message);
+    res.status(500).json({ success: false, message: `Failed to create payment intent: ${err.message}` });
+  }
+};
+
 module.exports = {
   addPaymentMethod,
   listPaymentMethods,
@@ -1203,6 +1282,7 @@ module.exports = {
   deletePaymentMethod,
   chargeRide,
   checkPaymentStatus,
+  createStripePaymentIntent,
   webhookMtn,
   webhookOrange,
   getPaymentHistory,

@@ -1,42 +1,54 @@
 const express = require('express');
-const router = express.Router();
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const router  = express.Router();
+const { authenticate } = require('../middleware/auth');
 const {
   addPaymentMethod,
   listPaymentMethods,
   setDefaultMethod,
   deletePaymentMethod,
   chargeRide,
+  checkPaymentStatus,
+  createStripePaymentIntent,
+  webhookMtn,
+  webhookOrange,
   getPaymentHistory,
   refundPayment,
   getWalletBalance,
   processSubscription,
-  getSubscriptionStatus
+  getSubscriptionStatus,
 } = require('../controllers/paymentController');
 
-// All payment routes require authentication
+// ── Public webhook endpoints (no auth — called by MTN / Orange servers) ────────
+router.post('/webhook/mtn',    webhookMtn);
+router.post('/webhook/orange', webhookOrange);
+
+// ── All other routes require a valid JWT ───────────────────────────────────────
 router.use(authenticate);
 
 // Payment methods
-router.post('/methods', addPaymentMethod);
-router.get('/methods', listPaymentMethods);
-router.put('/methods/:id/default', setDefaultMethod);
-router.delete('/methods/:id', deletePaymentMethod);
+router.post('/methods',               addPaymentMethod);
+router.get('/methods',                listPaymentMethods);
+router.put('/methods/:id/default',    setDefaultMethod);
+router.delete('/methods/:id',         deletePaymentMethod);
 
-// Charge
-router.post('/charge', chargeRide);
+// Charge + async status polling
+router.post('/charge',                chargeRide);
+router.get('/status/:referenceId',    checkPaymentStatus);
 
 // History
-router.get('/history', getPaymentHistory);
+router.get('/history',                getPaymentHistory);
 
 // Refund
-router.post('/refund/:id', refundPayment);
+router.post('/refund/:id',            refundPayment);
 
 // Wallet
-router.get('/wallet', getWalletBalance);
+router.get('/wallet',                 getWalletBalance);
 
 // Subscription
-router.post('/subscribe', processSubscription);
-router.get('/subscription', getSubscriptionStatus);
+router.post('/subscribe',             processSubscription);
+router.get('/subscription',           getSubscriptionStatus);
+
+// Stripe payment sheet — creates a PaymentIntent; client uses client_secret with Stripe SDK
+router.post('/stripe/payment-intent', createStripePaymentIntent);
 
 module.exports = router;

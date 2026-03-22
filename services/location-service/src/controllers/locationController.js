@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const googleMaps = require('../services/googleMaps');
+const cache = require('../utils/cache');
 
 // Average city speed for ETA estimation (km/h) — used as fallback
 const AVG_SPEED_KMH = 25;
@@ -150,6 +151,11 @@ const getNearbyDrivers = async (req, res) => {
     const longitude = parseFloat(lng);
     const radiusMeters = parseFloat(radius);
 
+    // Cache key quantizes coords to ~500m grid cells (1/200 degree ≈ 555m)
+    const cacheKey = `nearby:${Math.round(latitude * 200) / 200}:${Math.round(longitude * 200) / 200}:${radiusMeters}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
     if (isNaN(latitude) || isNaN(longitude)) {
       return res.status(400).json({ success: false, message: 'Invalid coordinates' });
     }
@@ -275,7 +281,7 @@ const getNearbyDrivers = async (req, res) => {
       }
     }
 
-    res.json({
+    const nearbyResponse = {
       success: true,
       data: {
         drivers,
@@ -284,7 +290,10 @@ const getNearbyDrivers = async (req, res) => {
         center: { lat: latitude, lng: longitude },
         eta_source: googleMaps.hasApiKey() ? 'google_maps' : 'straight_line_estimate'
       }
-    });
+    };
+
+    await cache.set(cacheKey, nearbyResponse, 15); // 15 second TTL (drivers move!)
+    res.json(nearbyResponse);
   } catch (err) {
     console.error('[GetNearbyDrivers Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get nearby drivers' });
@@ -306,6 +315,12 @@ const checkSurgeZone = async (req, res) => {
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lng);
 
+    const surgeCacheKey = `surge:${Math.round(latitude * 100) / 100}:${Math.round(longitude * 100) / 100}`;
+    const cachedSurge = await cache.get(surgeCacheKey);
+    if (cachedSurge !== null) {
+      return res.json(cachedSurge);
+    }
+
     const result = await db.query(
       `SELECT id, name, city, multiplier, starts_at, ends_at
        FROM surge_zones
@@ -323,7 +338,7 @@ const checkSurgeZone = async (req, res) => {
 
     if (result.rows.length > 0) {
       const zone = result.rows[0];
-      return res.json({
+      const surgeActiveResponse = {
         success: true,
         data: {
           surge_active: true,
@@ -333,7 +348,9 @@ const checkSurgeZone = async (req, res) => {
           zone_id: zone.id,
           message: `High demand in ${zone.name}. Fares are ${zone.multiplier}x.`
         }
-      });
+      };
+      await cache.set(surgeCacheKey, surgeActiveResponse, 120); // 2 min TTL
+      return res.json(surgeActiveResponse);
     }
 
     // Check peak hour surge (West Africa Time approximation)
@@ -344,7 +361,7 @@ const checkSurgeZone = async (req, res) => {
 
     if (isPeakMorning || isPeakEvening) {
       const periodName = isPeakMorning ? 'morning rush hour' : 'evening rush hour';
-      return res.json({
+      const peakHourResponse = {
         success: true,
         data: {
           surge_active: true,
@@ -354,10 +371,12 @@ const checkSurgeZone = async (req, res) => {
           zone_id: null,
           message: `Fares are higher during ${periodName} (1.5x).`
         }
-      });
+      };
+      await cache.set(surgeCacheKey, peakHourResponse, 120); // 2 min TTL
+      return res.json(peakHourResponse);
     }
 
-    res.json({
+    const noSurgeResponse = {
       success: true,
       data: {
         surge_active: false,
@@ -365,7 +384,9 @@ const checkSurgeZone = async (req, res) => {
         zone_name: null,
         message: 'Normal pricing in this area.'
       }
-    });
+    };
+    await cache.set(surgeCacheKey, noSurgeResponse, 120); // 2 min TTL
+    res.json(noSurgeResponse);
   } catch (err) {
     console.error('[CheckSurgeZone Error]', err);
     res.status(500).json({ success: false, message: 'Failed to check surge zone' });
