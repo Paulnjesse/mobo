@@ -23,6 +23,10 @@ import TwoFactorSetup from './pages/TwoFactorSetup';
 import BackgroundChecks from './pages/BackgroundChecks';
 import SafetyZones from './pages/SafetyZones';
 import Deliveries from './pages/Deliveries';
+import MultiCity from './pages/MultiCity';
+import FareManagement from './pages/FareManagement';
+import AdsManagement from './pages/AdsManagement';
+import FoodManagement from './pages/FoodManagement';
 
 const theme = createTheme({
   palette: {
@@ -145,6 +149,10 @@ function App() {
               <Route path="/safety-zones-mgr"  element={<SafetyZones />} />
               <Route path="/2fa-setup"         element={<TwoFactorSetup />} />
               <Route path="/deliveries-mgmt"   element={<Deliveries />} />
+              <Route path="/multi-city"        element={<MultiCity />} />
+              <Route path="/fare-management"   element={<FareManagement />} />
+              <Route path="/ads"               element={<AdsManagement />} />
+              <Route path="/food"              element={<FoodManagement />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

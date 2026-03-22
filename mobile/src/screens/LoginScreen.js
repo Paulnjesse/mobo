@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import Input from '../components/Input';
+import AdBanner from '../components/AdBanner';
 import { colors, spacing, radius, shadows } from '../theme';
 
 export default function LoginScreen({ navigation }) {
@@ -26,6 +28,42 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricType, setBiometricType] = useState(null); // 'face' | 'fingerprint'
+
+  useEffect(() => {
+    (async () => {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (compatible && enrolled) {
+        setBiometricAvailable(true);
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          setBiometricType('face');
+        } else {
+          setBiometricType('fingerprint');
+        }
+      }
+    })();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Login to MOBO',
+        fallbackLabel: 'Use password',
+        cancelLabel: 'Cancel',
+      });
+      if (result.success) {
+        // Biometric verified — login with stored credentials
+        await login(null, null, { biometric: true });
+      } else if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
+        Alert.alert('Authentication Failed', 'Could not verify your identity. Please use your password.');
+      }
+    } catch {
+      Alert.alert('Biometric Error', 'Biometric authentication is not available right now.');
+    }
+  };
 
   const validate = () => {
     const e = {};
@@ -97,7 +135,11 @@ export default function LoginScreen({ navigation }) {
               icon={<Ionicons name="lock-closed-outline" size={18} color={colors.gray400} />}
             />
 
-            <TouchableOpacity style={styles.forgotRow} onPress={() => {}}>
+            <TouchableOpacity
+              style={styles.forgotRow}
+              onPress={() => navigation.navigate('ForgotPassword')}
+              activeOpacity={0.7}
+            >
               <Text style={styles.forgotText}>{t('forgotPassword')}</Text>
             </TouchableOpacity>
 
@@ -129,6 +171,20 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.googleText}>{t('loginWithGoogle')}</Text>
           </TouchableOpacity>
 
+          {/* Biometric login */}
+          {biometricAvailable && (
+            <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometricLogin} activeOpacity={0.85}>
+              <Ionicons
+                name={biometricType === 'face' ? 'scan-outline' : 'finger-print-outline'}
+                size={22}
+                color={colors.primary}
+              />
+              <Text style={styles.biometricText}>
+                {biometricType === 'face' ? 'Login with Face ID' : 'Login with Fingerprint'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Sign up link */}
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>{t('newToMobo')} </Text>
@@ -136,6 +192,9 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.signupLink}>{t('signUp')}</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Sliding ad banner — local businesses + MOBO promos */}
+          <AdBanner context="auth" />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -285,5 +344,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.primary,
     fontWeight: '700',
+  },
+  biometricBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    height: 52,
+    backgroundColor: colors.white,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  biometricText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

@@ -8,8 +8,11 @@ const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 
 const rideRoutes = require('./src/routes/rides');
+const adsRoutes  = require('./src/routes/ads');
+const foodRoutes = require('./src/routes/food');
 const { initRideSocket } = require('./src/socket/rideSocket');
 const { startEscalationJob } = require('./src/jobs/escalationJob');
+const { startScheduledRideJob } = require('./src/jobs/scheduledRideJob');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -35,6 +38,8 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Routes
+app.use('/ads',   adsRoutes);
+app.use('/food',  foodRoutes);
 app.use('/rides', rideRoutes);
 app.use('/ride', rideRoutes);
 app.use('/fare', rideRoutes);
@@ -91,6 +96,7 @@ httpServer.listen(PORT, () => {
   console.log(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`);
   console.log(`[MOBO Ride Service] Socket.IO namespace: /rides`);
   startEscalationJob();
+  startScheduledRideJob(io);  // Feature 29: scheduled ride reminders + auto-dispatch
 });
 
 module.exports = app;

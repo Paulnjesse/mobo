@@ -9,9 +9,11 @@ import {
   StatusBar,
   Linking,
   Platform,
+  ScrollView,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoLocation from 'expo-location';
 import { useLanguage } from '../context/LanguageContext';
@@ -19,6 +21,85 @@ import SOSButton from '../components/SOSButton';
 import AudioRecordingToggle from '../components/AudioRecordingToggle';
 import { colors, spacing, radius, shadows } from '../theme';
 import { connectSockets, rideSocket } from '../services/socket';
+import { ridesService } from '../services/rides';
+
+// ── OSRM turn-by-turn routing ─────────────────────────────────────────────────
+const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
+
+async function fetchOSRMRoute(originLat, originLng, destLat, destLng) {
+  try {
+    const url = `${OSRM_URL}/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson&steps=true&annotations=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.routes[0]) return null;
+
+    const route = data.routes[0];
+    const polylineCoords = route.geometry.coordinates.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+
+    // Flatten steps from all legs
+    const steps = route.legs.flatMap((leg) =>
+      leg.steps.map((step) => ({
+        instruction: step.maneuver.type === 'arrive' ? 'Arrive at destination' : formatInstruction(step),
+        distance: step.distance,
+        duration: step.duration,
+        maneuver: step.maneuver.type,
+        modifier: step.maneuver.modifier,
+      }))
+    );
+
+    return {
+      polyline: polylineCoords,
+      steps,
+      distanceM: route.distance,
+      durationS: route.duration,
+    };
+  } catch (err) {
+    console.warn('[OSRM]', err.message);
+    return null;
+  }
+}
+
+function formatInstruction(step) {
+  const type = step.maneuver?.type || '';
+  const modifier = step.maneuver?.modifier || '';
+  const name = step.name || 'the road';
+
+  const typeMap = {
+    'turn': `Turn ${modifier}`, 'new name': `Continue onto`, 'depart': 'Head',
+    'arrive': 'Arrive at', 'merge': 'Merge', 'ramp': `Take the ramp ${modifier}`,
+    'on ramp': 'Take the on-ramp', 'off ramp': 'Take the off-ramp',
+    'fork': `Keep ${modifier} at the fork`, 'end of road': `Turn ${modifier}`,
+    'continue': 'Continue on', 'roundabout': 'Enter the roundabout',
+    'rotary': 'Enter the rotary', 'roundabout turn': `Take the ${modifier} exit`,
+    'notification': 'Continue', 'exit roundabout': 'Exit the roundabout',
+  };
+  const prefix = typeMap[type] || `${type} ${modifier}`.trim();
+  return name ? `${prefix} onto ${name}` : prefix;
+}
+
+function maneuverIcon(maneuver, modifier) {
+  if (maneuver === 'arrive') return 'location';
+  if (maneuver === 'depart') return 'navigate';
+  if (maneuver === 'roundabout' || maneuver === 'rotary') return 'refresh-circle-outline';
+  if (modifier === 'left') return 'arrow-back';
+  if (modifier === 'right') return 'arrow-forward';
+  if (modifier === 'sharp left') return 'return-down-back-outline';
+  if (modifier === 'sharp right') return 'return-down-forward-outline';
+  if (modifier === 'slight left') return 'arrow-up-outline';
+  if (modifier === 'slight right') return 'arrow-up-outline';
+  if (modifier === 'uturn') return 'refresh-outline';
+  return 'arrow-up';
+}
+
+function fmtDist(m) {
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toFixed(1)} km`;
+}
+function fmtDur(s) {
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  return `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
+}
 
 const RIDE_STEPS = [
   { key: 'pickup',    label: 'Navigate to Pickup',  action: 'Arrived at Pickup',  icon: 'navigate-outline',           color: colors.warning },
@@ -45,6 +126,32 @@ export default function DriverRideScreen({ navigation, route }) {
   const [otpInput, setOtpInput] = useState('');
   const [otpError, setOtpError] = useState(false);
 
+  // ── Waiting fee timer (shown after "Arrived at Pickup" = step 1) ──────────
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  const waitTimerRef = useRef(null);
+
+  const FREE_WAIT_SEC = 3 * 60;   // 3 minutes free
+  const WAIT_RATE_XAF = 50 / 60;  // 50 XAF/min → per second
+
+  useEffect(() => {
+    if (stepIndex === 1) {
+      // Start timer when driver marks "Arrived at Pickup"
+      setWaitSeconds(0);
+      waitTimerRef.current = setInterval(() => setWaitSeconds((s) => s + 1), 1000);
+    } else {
+      clearInterval(waitTimerRef.current);
+    }
+    return () => clearInterval(waitTimerRef.current);
+  }, [stepIndex]);
+
+  const chargeableSec = Math.max(0, waitSeconds - FREE_WAIT_SEC);
+  const waitingFee = Math.round(chargeableSec * WAIT_RATE_XAF);
+
+  // ── In-app navigation ──────────────────────────────────────────────────────
+  const [navRoute, setNavRoute] = useState(null);       // { polyline, steps, distanceM, durationS }
+  const [navStepIdx, setNavStepIdx] = useState(0);
+  const [navExpanded, setNavExpanded] = useState(false);
+
   // Incoming messages from the rider
   const [riderMessage, setRiderMessage] = useState(null);
   const messageTimerRef = useRef(null);
@@ -61,6 +168,34 @@ export default function DriverRideScreen({ navigation, route }) {
   const mapRegion = ride.pickup?.coords
     ? { latitude: ride.pickup.coords.latitude, longitude: ride.pickup.coords.longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 }
     : { latitude: 3.848, longitude: 11.502, latitudeDelta: 0.04, longitudeDelta: 0.04 };
+
+  // ── Fetch OSRM route whenever the navigation target changes ──────────────
+  useEffect(() => {
+    // step 0 → navigate to pickup; step 2 → navigate to dropoff
+    const targetCoords =
+      stepIndex === 0 ? ride.pickup?.coords :
+      stepIndex === 2 ? ride.dropoff?.coords : null;
+
+    if (!targetCoords) { setNavRoute(null); return; }
+
+    let cancelled = false;
+    (async () => {
+      // Get current driver position
+      try {
+        const perm = await ExpoLocation.requestForegroundPermissionsAsync();
+        if (perm.status !== 'granted') return;
+        const loc = await ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced });
+        if (cancelled) return;
+        const result = await fetchOSRMRoute(
+          loc.coords.latitude, loc.coords.longitude,
+          targetCoords.latitude, targetCoords.longitude,
+        );
+        if (!cancelled) { setNavRoute(result); setNavStepIdx(0); }
+      } catch { /* silent — nav is best-effort */ }
+    })();
+
+    return () => { cancelled = true; };
+  }, [stepIndex]);
 
   // -------------------------------------------------------------------------
   // Connect sockets + start GPS broadcasting + listen for rider messages
@@ -193,10 +328,19 @@ export default function DriverRideScreen({ navigation, route }) {
     }
   };
 
-  const handleCallRider = () => {
-    const phone = ride.rider?.phone;
-    if (!phone) { Alert.alert('Not available', 'Rider phone not available'); return; }
-    Linking.openURL(`tel:${phone}`);
+  const handleCallRider = async () => {
+    if (!rideId) { Alert.alert('Not available', 'Ride ID missing'); return; }
+    try {
+      const session = await ridesService.initiateCall(rideId);
+      const dialNumber = session.masked_number || ride.rider?.phone;
+      if (!dialNumber) throw new Error('no number');
+      Linking.openURL(`tel:${dialNumber}`);
+    } catch {
+      // Fall back to direct dial
+      const phone = ride.rider?.phone;
+      if (phone) Linking.openURL(`tel:${phone}`);
+      else Alert.alert('Not available', 'Rider phone not available');
+    }
   };
 
   const handleMessageRider = () => {
@@ -236,6 +380,14 @@ export default function DriverRideScreen({ navigation, route }) {
             </View>
           </Marker>
         )}
+        {navRoute?.polyline?.length > 1 && (
+          <Polyline
+            coordinates={navRoute.polyline}
+            strokeColor={colors.primary}
+            strokeWidth={4}
+            lineDashPattern={undefined}
+          />
+        )}
       </MapView>
 
       {/* Top bar */}
@@ -253,6 +405,93 @@ export default function DriverRideScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Navigation instruction panel */}
+      {navRoute && (stepIndex === 0 || stepIndex === 2) && (() => {
+        const step = navRoute.steps[navStepIdx];
+        return (
+          <View style={styles.navPanel}>
+            <TouchableOpacity
+              style={styles.navPanelMain}
+              activeOpacity={0.85}
+              onPress={() => setNavExpanded((v) => !v)}
+            >
+              <View style={styles.navIconWrap}>
+                <Ionicons
+                  name={maneuverIcon(step?.maneuver, step?.modifier)}
+                  size={28}
+                  color={colors.white}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.navInstruction} numberOfLines={2}>
+                  {step?.instruction || 'Follow route'}
+                </Text>
+                <Text style={styles.navMeta}>
+                  {fmtDist(step?.distance ?? 0)}
+                  {'  ·  '}
+                  {fmtDur(navRoute.durationS)} total
+                  {'  ·  '}
+                  {fmtDist(navRoute.distanceM)}
+                </Text>
+              </View>
+              <Ionicons
+                name={navExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color="rgba(255,255,255,0.7)"
+              />
+            </TouchableOpacity>
+
+            {navExpanded && (
+              <ScrollView style={styles.navStepList} nestedScrollEnabled>
+                {navRoute.steps.map((s, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.navStepRow, i === navStepIdx && styles.navStepRowActive]}
+                    onPress={() => setNavStepIdx(i)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons
+                      name={maneuverIcon(s.maneuver, s.modifier)}
+                      size={16}
+                      color={i === navStepIdx ? colors.white : 'rgba(255,255,255,0.6)'}
+                    />
+                    <Text style={[styles.navStepText, i === navStepIdx && { color: colors.white }]} numberOfLines={1}>
+                      {s.instruction}
+                    </Text>
+                    <Text style={styles.navStepDist}>{fmtDist(s.distance)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            {/* Step prev / next */}
+            {navRoute.steps.length > 1 && (
+              <View style={styles.navStepNav}>
+                <TouchableOpacity
+                  style={[styles.navStepBtn, navStepIdx === 0 && { opacity: 0.3 }]}
+                  disabled={navStepIdx === 0}
+                  onPress={() => setNavStepIdx((i) => i - 1)}
+                >
+                  <Ionicons name="chevron-back" size={16} color={colors.white} />
+                  <Text style={styles.navStepBtnText}>Prev</Text>
+                </TouchableOpacity>
+                <Text style={styles.navStepCount}>
+                  {navStepIdx + 1} / {navRoute.steps.length}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.navStepBtn, navStepIdx === navRoute.steps.length - 1 && { opacity: 0.3 }]}
+                  disabled={navStepIdx === navRoute.steps.length - 1}
+                  onPress={() => setNavStepIdx((i) => i + 1)}
+                >
+                  <Text style={styles.navStepBtnText}>Next</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.white} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       {/* Rider message toast */}
       {riderMessage && (
@@ -290,6 +529,79 @@ export default function DriverRideScreen({ navigation, route }) {
             <Text style={styles.fareValue}>{Number(ride.fare || 0).toLocaleString()} XAF</Text>
           </View>
         </View>
+
+        {/* ── Pickup instructions ──────────────────────────────────────── */}
+        {ride.pickup_instructions && (
+          <View style={[styles.alertBanner, { backgroundColor: '#eff6ff', borderLeftColor: '#3b82f6' }]}>
+            <Ionicons name="information-circle-outline" size={15} color="#3b82f6" />
+            <Text style={[styles.alertBannerText, { color: '#1e40af' }]}>
+              Pickup note: <Text style={{ fontWeight: '700' }}>{ride.pickup_instructions}</Text>
+            </Text>
+          </View>
+        )}
+
+        {/* ── Ride preferences ─────────────────────────────────────────── */}
+        {(ride.quiet_mode || ride.ac_preference === 'on' || ride.ac_preference === 'off' || ride.music_preference === false) && (
+          <View style={[styles.alertBanner, { backgroundColor: '#f5f3ff', borderLeftColor: '#7c3aed', flexWrap: 'wrap', gap: 4 }]}>
+            <Ionicons name="options-outline" size={15} color="#7c3aed" />
+            <Text style={[styles.alertBannerText, { color: '#4c1d95', flex: undefined }]}>Rider preferences:</Text>
+            {ride.quiet_mode && (
+              <View style={styles.prefChip}><Ionicons name="volume-mute-outline" size={11} color="#7c3aed" /><Text style={styles.prefChipText}>Quiet</Text></View>
+            )}
+            {ride.ac_preference === 'on' && (
+              <View style={styles.prefChip}><Ionicons name="snow-outline" size={11} color="#7c3aed" /><Text style={styles.prefChipText}>AC On</Text></View>
+            )}
+            {ride.ac_preference === 'off' && (
+              <View style={styles.prefChip}><Ionicons name="sunny-outline" size={11} color="#7c3aed" /><Text style={styles.prefChipText}>AC Off</Text></View>
+            )}
+            {ride.music_preference === false && (
+              <View style={styles.prefChip}><Ionicons name="musical-notes-outline" size={11} color="#7c3aed" /><Text style={styles.prefChipText}>No music</Text></View>
+            )}
+          </View>
+        )}
+
+        {/* ── Waiting fee timer (step 1 = verify, driver has arrived) ────── */}
+        {stepIndex === 1 && (
+          <View style={[styles.alertBanner, {
+            backgroundColor: waitingFee > 0 ? '#fef2f2' : '#f0fdf4',
+            borderLeftColor: waitingFee > 0 ? colors.danger : colors.success,
+          }]}>
+            <Ionicons name="timer-outline" size={15} color={waitingFee > 0 ? colors.danger : colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.alertBannerText, { color: waitingFee > 0 ? '#991b1b' : '#14532d' }]}>
+                {waitSeconds < FREE_WAIT_SEC
+                  ? `Free wait: ${Math.floor((FREE_WAIT_SEC - waitSeconds) / 60)}:${String(Math.floor((FREE_WAIT_SEC - waitSeconds) % 60)).padStart(2, '0')} remaining`
+                  : `Waiting fee: +${waitingFee.toLocaleString()} XAF`}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+                {waitSeconds < FREE_WAIT_SEC
+                  ? '3 min free — 50 XAF/min after'
+                  : `${Math.floor(chargeableSec / 60)}:${String(Math.floor(chargeableSec % 60)).padStart(2,'0')} chargeable`}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Ride-for-other alert */}
+        {ride.is_for_other && ride.other_passenger_name && (
+          <View style={styles.alertBanner}>
+            <Ionicons name="person" size={15} color="#2563eb" />
+            <Text style={styles.alertBannerText}>
+              Passenger: <Text style={{ fontWeight: '800' }}>{ride.other_passenger_name}</Text>
+              {ride.other_passenger_phone ? `  ·  ${ride.other_passenger_phone}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {/* Child seat alert */}
+        {ride.child_seat_required && (
+          <View style={[styles.alertBanner, { backgroundColor: '#fff7ed', borderLeftColor: colors.warning }]}>
+            <Ionicons name="happy" size={15} color={colors.warning} />
+            <Text style={[styles.alertBannerText, { color: '#92400e' }]}>
+              Child seat required — {ride.child_seat_count || 1} seat{(ride.child_seat_count || 1) > 1 ? 's' : ''}
+            </Text>
+          </View>
+        )}
 
         {/* Route */}
         <View style={styles.routeRow}>
@@ -406,6 +718,25 @@ const styles = StyleSheet.create({
     padding: spacing.md, shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.1, shadowRadius: 20, elevation: 16,
   },
+  alertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#eff6ff',
+    borderLeftWidth: 3,
+    borderLeftColor: '#2563eb',
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    marginBottom: spacing.sm,
+  },
+  alertBannerText: { flex: 1, fontSize: 13, color: '#1e40af', fontWeight: '500' },
+  prefChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#ede9fe', borderRadius: radius.pill,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  prefChipText: { fontSize: 10, fontWeight: '700', color: '#7c3aed' },
   riderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   riderAvatar: {
     width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary,
@@ -453,4 +784,37 @@ const styles = StyleSheet.create({
   pickupMarker: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,0,191,0.15)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.primary },
   pickupDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
   dropoffMarker: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.gray300, ...shadows.sm },
+
+  // ── Navigation panel ──────────────────────────────────────────────────────
+  navPanel: {
+    position: 'absolute', top: 90, left: spacing.md, right: spacing.md,
+    zIndex: 15, borderRadius: radius.lg, overflow: 'hidden',
+    backgroundColor: 'rgba(25,25,35,0.93)', ...shadows.lg,
+  },
+  navPanelMain: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.md,
+  },
+  navIconWrap: {
+    width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navInstruction: { fontSize: 15, fontWeight: '700', color: colors.white, lineHeight: 20 },
+  navMeta: { fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 3 },
+  navStepList: { maxHeight: 200, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
+  navStepRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+  },
+  navStepRowActive: { backgroundColor: 'rgba(255,0,191,0.25)' },
+  navStepText: { flex: 1, fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
+  navStepDist: { fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
+  navStepNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.md, paddingVertical: 8,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  navStepBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  navStepBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  navStepCount: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600' },
 });

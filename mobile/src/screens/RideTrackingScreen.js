@@ -10,6 +10,7 @@ import {
   StatusBar,
   Animated,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -19,9 +20,12 @@ import { useRide } from '../context/RideContext';
 import SOSButton from '../components/SOSButton';
 import AudioRecordingToggle from '../components/AudioRecordingToggle';
 import SpeedAlertOverlay from '../components/SpeedAlertOverlay';
+import AdBanner from '../components/AdBanner';
 import { getDirections } from '../services/maps';
 import { colors, spacing, radius, shadows } from '../theme';
-import { connectSockets, onDriverLocation, onRideStatus, onMessage, onSpeedAlert } from '../services/socket';
+import { connectSockets, onDriverLocation, onRideStatus, onMessage, onSpeedAlert, getCachedDriverLocation } from '../services/socket';
+import { useLiveActivity } from '../hooks/useLiveActivity';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 // Decode a Google Maps encoded polyline string into an array of { latitude, longitude }
 function decodePolyline(encoded) {
@@ -84,6 +88,22 @@ export default function RideTrackingScreen({ navigation, route }) {
   // Stable function object — AudioRecordingToggle attaches .currentSave onto it
   const recordingCompleteRef = useRef(() => {});
 
+  // In-ride tipping
+  const [tipAmount, setTipAmount] = useState(null);
+  const [tipSent, setTipSent] = useState(false);
+  const TIP_OPTIONS = [200, 500, 1000, 2000];
+
+  const sendTip = async (amount) => {
+    if (tipSent) return;
+    setTipAmount(amount);
+    try {
+      const { ridesService } = require('../services/rides');
+      await ridesService.addTip(rideId, amount);
+    } catch {}
+    setTipSent(true);
+    Alert.alert('Tip Sent!', `${Number(amount).toLocaleString()} XAF tip added for your driver. Thank you!`);
+  };
+
   // Real-time driver position received via WebSocket
   const [driverLocation, setDriverLocation] = useState(null);
   // Toast notification for incoming messages
@@ -105,6 +125,18 @@ export default function RideTrackingScreen({ navigation, route }) {
 
   // Derive the displayed status — WebSocket ride_status_change updates this
   const [liveStatus, setLiveStatus] = useState(status);
+
+  // Feature 27 — Live Activity: keep persistent notification updated with ride status
+  useLiveActivity(ride ? { ...ride, status: liveStatus } : null);
+
+  // Feature 30 — Offline: show stale location when connection drops
+  const { isOnline, lastOnlineAt } = useNetworkStatus();
+  useEffect(() => {
+    if (!isOnline && rideId) {
+      const cached = getCachedDriverLocation(rideId);
+      if (cached) setDriverLocation({ latitude: cached.latitude, longitude: cached.longitude });
+    }
+  }, [isOnline, rideId]);
 
   // Sync liveStatus when REST-polled activeRide status changes
   useEffect(() => {
@@ -409,6 +441,20 @@ export default function RideTrackingScreen({ navigation, route }) {
         </View>
       </SafeAreaView>
 
+      {/* Feature 30 — Offline indicator */}
+      {!isOnline && (
+        <View style={styles.offlineBar}>
+          <Ionicons name="cloud-offline-outline" size={13} color="#fff" />
+          <Text style={styles.offlineBarText}>
+            {`No connection · map last updated ${
+              lastOnlineAt
+                ? Math.floor((Date.now() - new Date(lastOnlineAt).getTime()) / 60000) + ' min ago'
+                : 'recently'
+            }`}
+          </Text>
+        </View>
+      )}
+
       {/* Message toast notification */}
       {messageToast && (
         <View style={styles.messageToast}>
@@ -450,33 +496,55 @@ export default function RideTrackingScreen({ navigation, route }) {
 
         {/* Driver info */}
         {driver ? (
-          <View style={styles.driverRow}>
-            <View style={styles.driverAvatar}>
-              <Text style={styles.driverAvatarText}>
-                {(driver.name || 'D').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-
-            <View style={styles.driverInfo}>
-              <Text style={styles.driverName}>{driver.name}</Text>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={13} color={colors.warning} />
-                <Text style={styles.ratingText}>{driver.rating?.toFixed(1) || '–'}</Text>
-              </View>
-              <Text style={styles.vehicleText}>
-                {driver.vehicle?.make} {driver.vehicle?.model}
-                {driver.vehicle?.color ? ` · ${driver.vehicle.color}` : ''}
-              </Text>
-              {driver.vehicle?.plate && (
-                <Text style={styles.plateText}>{driver.vehicle.plate}</Text>
+          <View>
+            <View style={styles.driverRow}>
+              {/* Photo or initials avatar */}
+              {driver.photo_url ? (
+                <Image
+                  source={{ uri: driver.photo_url }}
+                  style={styles.driverPhoto}
+                />
+              ) : (
+                <View style={styles.driverAvatar}>
+                  <Text style={styles.driverAvatarText}>
+                    {(driver.name || 'D').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
               )}
+
+              <View style={styles.driverInfo}>
+                <Text style={styles.driverName}>{driver.name}</Text>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={13} color={colors.warning} />
+                  <Text style={styles.ratingText}>{driver.rating?.toFixed(1) || '–'}</Text>
+                  {driver.vehicle?.color && (
+                    <Text style={styles.vehicleColorDot}>·</Text>
+                  )}
+                  <Text style={styles.vehicleText} numberOfLines={1}>
+                    {[driver.vehicle?.color, driver.vehicle?.make, driver.vehicle?.model]
+                      .filter(Boolean).join(' ')}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.etaBox}>
+                <Text style={styles.etaBoxLabel}>ETA</Text>
+                <Text style={styles.etaBoxValue}>{driver.eta || '–'}</Text>
+                <Text style={styles.etaBoxUnit}>min</Text>
+              </View>
             </View>
 
-            <View style={styles.etaBox}>
-              <Text style={styles.etaBoxLabel}>ETA</Text>
-              <Text style={styles.etaBoxValue}>{driver.eta || '–'}</Text>
-              <Text style={styles.etaBoxUnit}>min</Text>
-            </View>
+            {/* License plate — safety verification strip */}
+            {driver.vehicle?.plate && (
+              <View style={styles.plateStrip}>
+                <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
+                <Text style={styles.plateStripLabel}>Verify plate:</Text>
+                <View style={styles.plateBadge}>
+                  <Text style={styles.plateBadgeText}>{driver.vehicle.plate}</Text>
+                </View>
+                <Text style={styles.plateHint}>Confirm before boarding</Text>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.findingRow}>
@@ -492,7 +560,38 @@ export default function RideTrackingScreen({ navigation, route }) {
             role="rider"
             onRecordingComplete={recordingCompleteRef.current}
           />
+        )}
 
+        {/* In-ride tipping */}
+        {(liveStatus === 'in_progress' || liveStatus === 'arrived') && !tipSent && (
+          <View style={styles.tipRow}>
+            <Text style={styles.tipLabel}>Tip your driver</Text>
+            <View style={styles.tipBtns}>
+              {TIP_OPTIONS.map((amt) => (
+                <TouchableOpacity
+                  key={amt}
+                  style={[styles.tipBtn, tipAmount === amt && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                  onPress={() => sendTip(amt)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipBtnText, tipAmount === amt && { color: '#fff' }]}>
+                    {Number(amt).toLocaleString()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+        {tipSent && (
+          <View style={styles.tipSentRow}>
+            <Ionicons name="heart" size={16} color={colors.primary} />
+            <Text style={styles.tipSentText}>{Number(tipAmount).toLocaleString()} XAF tip sent!</Text>
+          </View>
+        )}
+
+        {/* Sliding ad banner — shown during ride */}
+        {(liveStatus === 'in_progress' || liveStatus === 'arrived') && (
+          <AdBanner context="ride" />
         )}
 
         {/* Action buttons: Message + Call */}
@@ -592,6 +691,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.danger,
   },
+  offlineBar: {
+    position: 'absolute', top: 90, left: 0, right: 0, zIndex: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#CC0000', paddingVertical: 6, paddingHorizontal: spacing.md,
+  },
+  offlineBarText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   messageToast: {
     position: 'absolute',
     top: 100,
@@ -831,5 +936,80 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.text,
+  },
+
+  // ── In-ride tipping ───────────────────────────────────────────────────────
+  tipRow: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+  },
+  tipLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8 },
+  tipBtns: { flexDirection: 'row', gap: 8 },
+  tipBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 8,
+    borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.pill,
+  },
+  tipBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  tipSentRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: spacing.sm, paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.gray200,
+  },
+  tipSentText: { fontSize: 13, fontWeight: '600', color: colors.primary },
+
+  // ── Feature 12: Driver photo + plate safety strip ─────────────────────────
+  driverPhoto: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  vehicleColorDot: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginHorizontal: 2,
+  },
+  plateStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: 'rgba(0,185,107,0.07)',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0,185,107,0.2)',
+    flexWrap: 'wrap',
+  },
+  plateStripLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  plateBadge: {
+    backgroundColor: '#FFF3CD',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#C8A400',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  plateBadgeText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1A1A2E',
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    textTransform: 'uppercase',
+  },
+  plateHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    flex: 1,
+    textAlign: 'right',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -94,6 +94,66 @@ export default function BookRideScreen({ navigation, route }) {
   // Map route preview
   const [routeCoords, setRouteCoords] = useState([]);
   const [showMapPreview, setShowMapPreview] = useState(false);
+
+  // ── Ride options ──────────────────────────────────────────────────────────
+  const [isForOther, setIsForOther] = useState(false);
+  const [otherName, setOtherName] = useState('');
+  const [otherPhone, setOtherPhone] = useState('');
+  const [childSeat, setChildSeat] = useState(false);
+  const [childSeatCount, setChildSeatCount] = useState(1);
+
+  // ── Pickup instructions & ride preferences ────────────────────────────────
+  const [pickupInstructions, setPickupInstructions] = useState('');
+  const [quietMode, setQuietMode] = useState(false);
+  const [acPreference, setAcPreference] = useState('auto'); // 'auto','on','off'
+  const [musicPreference, setMusicPreference] = useState(true);
+  const [showPreferences, setShowPreferences] = useState(false);
+
+  // ── Multiple stops (up to 3) ──────────────────────────────────────────────
+  // Each stop: { address: string, coords: {latitude, longitude} | null }
+  const MAX_STOPS = 3;
+  const [stops, setStops] = useState([]); // array of { address, coords }
+  const [stopFocusIdx, setStopFocusIdx] = useState(null);
+  const [stopSuggestions, setStopSuggestions] = useState({});
+  const stopDebounce = useRef({});
+
+  const handleStopChange = (idx, text) => {
+    const updated = [...stops];
+    updated[idx] = { address: text, coords: null };
+    setStops(updated);
+    clearTimeout(stopDebounce.current[idx]);
+    if (text.length < 2) { setStopSuggestions((p) => ({ ...p, [idx]: [] })); return; }
+    stopDebounce.current[idx] = setTimeout(async () => {
+      try {
+        const results = await searchPlaces(text);
+        setStopSuggestions((p) => ({ ...p, [idx]: results }));
+      } catch { setStopSuggestions((p) => ({ ...p, [idx]: [] })); }
+    }, 300);
+  };
+
+  const selectStopPlace = async (idx, place) => {
+    try {
+      const details = await getPlaceDetails(place.placeId);
+      const updated = [...stops];
+      updated[idx] = {
+        address: place.mainText + (place.secondaryText ? `, ${place.secondaryText}` : ''),
+        coords: details?.coords ? { latitude: details.coords.lat, longitude: details.coords.lng } : null,
+      };
+      setStops(updated);
+      setStopFocusIdx(null);
+      setStopSuggestions((p) => ({ ...p, [idx]: [] }));
+    } catch { /* keep text */ }
+  };
+
+  const addStop = () => {
+    if (stops.length < MAX_STOPS) setStops([...stops, { address: '', coords: null }]);
+  };
+
+  const removeStop = (idx) => {
+    const updated = stops.filter((_, i) => i !== idx);
+    setStops(updated);
+    setStopSuggestions((p) => { const n = { ...p }; delete n[idx]; return n; });
+  };
 
   // ---------------------------------------------------------------------------
   // Current location
@@ -227,11 +287,19 @@ export default function BookRideScreen({ navigation, route }) {
       return;
     }
     setLoadingEstimate(true);
+    // Build stops payload for API (only stops with known coords)
+    const stopsPayload = stops
+      .filter((s) => s.address && s.coords)
+      .map((s) => ({
+        address: s.address,
+        location: { lat: s.coords.latitude, lng: s.coords.longitude },
+      }));
     try {
       const estimate = await getFareEstimate(
         { address: pickup, coords: pickupCoords },
         { address: dropoff, coords: dropoffCoords },
-        initialRideType
+        initialRideType,
+        stopsPayload
       );
       navigation.navigate('FareEstimate', {
         pickup,
@@ -240,7 +308,17 @@ export default function BookRideScreen({ navigation, route }) {
         dropoffCoords,
         rideType: initialRideType,
         estimate,
+        stops: stopsPayload,
         routePolyline: routeCoords.length > 0 ? routeCoords : null,
+        isForOther,
+        otherName: isForOther ? otherName : null,
+        otherPhone: isForOther ? otherPhone : null,
+        childSeat,
+        childSeatCount: childSeat ? childSeatCount : 0,
+        pickupInstructions: pickupInstructions.trim() || null,
+        quietMode,
+        acPreference,
+        musicPreference,
       });
     } catch (err) {
       navigation.navigate('FareEstimate', {
@@ -250,6 +328,7 @@ export default function BookRideScreen({ navigation, route }) {
         dropoffCoords,
         rideType: initialRideType,
         estimate: null,
+        stops: stopsPayload,
       });
     } finally {
       setLoadingEstimate(false);
@@ -380,6 +459,59 @@ export default function BookRideScreen({ navigation, route }) {
             </View>
           </View>
 
+          {/* ── Stops section ── */}
+          {stops.length > 0 && (
+            <View style={styles.stopsSection}>
+              {stops.map((stop, idx) => (
+                <View key={idx}>
+                  <View style={styles.stopRow}>
+                    <View style={styles.stopDot} />
+                    <View style={[styles.inputWrap, styles.stopInput, stopFocusIdx === idx && styles.inputWrapFocused]}>
+                      <TextInput
+                        style={styles.inputField}
+                        placeholder={`Stop ${idx + 1}`}
+                        placeholderTextColor={colors.textLight}
+                        value={stop.address}
+                        onChangeText={(t) => handleStopChange(idx, t)}
+                        onFocus={() => setStopFocusIdx(idx)}
+                        onBlur={() => setTimeout(() => setStopFocusIdx(null), 200)}
+                      />
+                      <TouchableOpacity onPress={() => removeStop(idx)} activeOpacity={0.7}>
+                        <Ionicons name="close-circle" size={18} color={colors.gray400} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {stopFocusIdx === idx && (stopSuggestions[idx] || []).length > 0 && (
+                    <View style={[styles.suggestionsDropdown, { marginLeft: 24 }]}>
+                      <FlatList
+                        data={stopSuggestions[idx]}
+                        keyExtractor={(item) => item.placeId}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item }) => (
+                          <TouchableOpacity style={styles.suggestionItem} onPress={() => selectStopPlace(idx, item)} activeOpacity={0.75}>
+                            <Ionicons name="location-outline" size={14} color={colors.primary} style={{ marginRight: 8 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.suggestionMain} numberOfLines={1}>{item.mainText}</Text>
+                              {item.secondaryText ? <Text style={styles.suggestionSub} numberOfLines={1}>{item.secondaryText}</Text> : null}
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      />
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Add stop button — shown when at least pickup is set and < MAX_STOPS */}
+          {pickup && stops.length < MAX_STOPS && (
+            <TouchableOpacity style={styles.addStopBtn} onPress={addStop} activeOpacity={0.75}>
+              <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+              <Text style={styles.addStopText}>Add a stop</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Map preview of route — shown after both locations selected */}
           {showMapPreview && pickupCoords && dropoffCoords && (
             <View style={styles.mapPreviewContainer}>
@@ -456,6 +588,156 @@ export default function BookRideScreen({ navigation, route }) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* ── Ride Options ──────────────────────────────────────────────── */}
+          <View style={styles.rideOptions}>
+            {/* Ride for Others toggle */}
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => setIsForOther((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: isForOther ? colors.primary + '18' : colors.gray100 }]}>
+                <Ionicons name="people-outline" size={18} color={isForOther ? colors.primary : colors.gray500} />
+              </View>
+              <Text style={[styles.optionLabel, { color: isForOther ? colors.primary : colors.text }]}>Book for someone else</Text>
+              <View style={[styles.optionCheck, { backgroundColor: isForOther ? colors.primary : colors.gray200 }]}>
+                {isForOther && <Ionicons name="checkmark" size={12} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+            {isForOther && (
+              <View style={styles.optionExpand}>
+                <TextInput
+                  style={[styles.optionInput, { color: colors.text, borderColor: colors.gray200 }]}
+                  placeholder="Passenger name"
+                  placeholderTextColor={colors.gray400}
+                  value={otherName}
+                  onChangeText={setOtherName}
+                />
+                <TextInput
+                  style={[styles.optionInput, { color: colors.text, borderColor: colors.gray200, marginTop: 8 }]}
+                  placeholder="+237 6XX XXX XXX"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="phone-pad"
+                  value={otherPhone}
+                  onChangeText={setOtherPhone}
+                />
+              </View>
+            )}
+
+            {/* Child seat toggle */}
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => setChildSeat((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: childSeat ? '#FF6B0018' : colors.gray100 }]}>
+                <Ionicons name="person-outline" size={18} color={childSeat ? '#FF6B00' : colors.gray500} />
+              </View>
+              <Text style={[styles.optionLabel, { color: childSeat ? '#FF6B00' : colors.text }]}>Child seat needed</Text>
+              <View style={[styles.optionCheck, { backgroundColor: childSeat ? '#FF6B00' : colors.gray200 }]}>
+                {childSeat && <Ionicons name="checkmark" size={12} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+            {childSeat && (
+              <View style={styles.optionExpand}>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Number of child seats:</Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {[1, 2, 3].map((n) => (
+                    <TouchableOpacity
+                      key={n}
+                      style={[styles.seatChip, childSeatCount === n && { backgroundColor: '#FF6B00', borderColor: '#FF6B00' }]}
+                      onPress={() => setChildSeatCount(n)}
+                    >
+                      <Text style={[styles.seatChipText, childSeatCount === n && { color: '#fff' }]}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* ── Pickup instructions & ride preferences ───────────────── */}
+          <TouchableOpacity
+            style={styles.optionRow}
+            onPress={() => setShowPreferences((v) => !v)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: showPreferences ? colors.primary + '18' : colors.gray100 }]}>
+              <Ionicons name="options-outline" size={18} color={showPreferences ? colors.primary : colors.gray500} />
+            </View>
+            <Text style={[styles.optionLabel, { color: showPreferences ? colors.primary : colors.text }]}>
+              Ride preferences
+            </Text>
+            <Ionicons name={showPreferences ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
+          </TouchableOpacity>
+
+          {showPreferences && (
+            <View style={styles.optionExpand}>
+              {/* Pickup instructions */}
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 4 }}>
+                Special pickup instructions (optional)
+              </Text>
+              <TextInput
+                style={[styles.optionInput, { color: colors.text, borderColor: colors.gray200, marginBottom: 10 }]}
+                placeholder="e.g. I'll be at the blue gate, call on arrival"
+                placeholderTextColor={colors.gray400}
+                value={pickupInstructions}
+                onChangeText={setPickupInstructions}
+                multiline
+                maxLength={200}
+              />
+
+              {/* Quiet mode */}
+              <View style={[styles.optionRow, { backgroundColor: 'transparent', paddingHorizontal: 0 }]}>
+                <View style={[styles.optionIcon, { backgroundColor: quietMode ? '#1A1A2E18' : colors.gray100 }]}>
+                  <Ionicons name="volume-mute-outline" size={18} color={quietMode ? '#1A1A2E' : colors.gray500} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, { color: colors.text }]}>Quiet mode</Text>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>No conversation preference</Text>
+                </View>
+                <View style={[styles.optionCheck, { backgroundColor: quietMode ? '#1A1A2E' : colors.gray200 }]}>
+                  {quietMode && <Ionicons name="checkmark" size={12} color="#fff" />}
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setQuietMode((v) => !v)} style={{ marginTop: -34, alignSelf: 'flex-end', padding: 8 }} />
+
+              {/* AC preference */}
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 6 }}>Air conditioning</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {[['auto', 'Auto'], ['on', 'On'], ['off', 'Off']].map(([val, label]) => (
+                    <TouchableOpacity
+                      key={val}
+                      style={[styles.seatChip, acPreference === val && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                      onPress={() => setAcPreference(val)}
+                    >
+                      <Text style={[styles.seatChipText, acPreference === val && { color: '#fff' }]}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Music preference */}
+              <TouchableOpacity
+                style={[styles.optionRow, { backgroundColor: 'transparent', paddingHorizontal: 0, marginTop: 10 }]}
+                onPress={() => setMusicPreference((v) => !v)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.optionIcon, { backgroundColor: musicPreference ? '#FF6B0018' : colors.gray100 }]}>
+                  <Ionicons name="musical-notes-outline" size={18} color={musicPreference ? '#FF6B00' : colors.gray500} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionLabel, { color: colors.text }]}>Music</Text>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>{musicPreference ? 'Music welcome' : 'No music please'}</Text>
+                </View>
+                <View style={[styles.optionCheck, { backgroundColor: musicPreference ? '#FF6B00' : colors.gray200 }]}>
+                  {musicPreference && <Ionicons name="checkmark" size={12} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Continue / Fare Estimate button */}
           <View style={styles.footer}>
@@ -726,5 +1008,98 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // ── Stops ──────────────────────────────────────────────────────────────────
+  stopsSection: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    backgroundColor: colors.white,
+  },
+  stopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  stopDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.warning,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  stopInput: { flex: 1 },
+  addStopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  addStopText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+
+  // ── Ride Options ───────────────────────────────────────────────────────────
+  rideOptions: {
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 10,
+  },
+  optionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  optionCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionExpand: {
+    marginLeft: 46,
+    marginBottom: 8,
+  },
+  optionInput: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  seatChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.gray200,
+  },
+  seatChipText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
   },
 });

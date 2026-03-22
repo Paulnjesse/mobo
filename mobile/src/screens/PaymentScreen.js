@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,13 +17,21 @@ import { useLanguage } from '../context/LanguageContext';
 import { paymentsService } from '../services/payments';
 import { colors, spacing, radius, shadows } from '../theme';
 
+// ── Payment method config ───────────────────────────────────────────────────
+// id:     used as selectedMethod state value and displayed in UI
+// type:   sent to the backend (backend enum values)
 const PAYMENT_METHODS = [
-  { id: 'cash', label: 'Cash', icon: 'cash-outline', color: colors.success },
-  { id: 'mtn', label: 'MTN Mobile Money', icon: 'phone-portrait-outline', color: '#FFCB00' },
-  { id: 'orange', label: 'Orange Money', icon: 'phone-portrait-outline', color: '#FF6600' },
-  { id: 'wave', label: 'Wave', icon: 'wallet-outline', color: '#0A4BF0' },
-  { id: 'card', label: 'Card', icon: 'card-outline', color: colors.text },
+  { id: 'wallet', type: 'wallet',           label: 'MOBO Wallet',       icon: 'wallet-outline',         color: colors.primary },
+  { id: 'cash',   type: 'cash',             label: 'Cash',              icon: 'cash-outline',           color: colors.success },
+  { id: 'mtn',    type: 'mtn_mobile_money', label: 'MTN Mobile Money',  icon: 'phone-portrait-outline', color: '#FFCB00' },
+  { id: 'orange', type: 'orange_money',     label: 'Orange Money',      icon: 'phone-portrait-outline', color: '#FF6600' },
+  { id: 'wave',   type: 'wave',             label: 'Wave',              icon: 'flash-outline',          color: '#0A4BF0' },
+  { id: 'card',   type: 'card',             label: 'Card',              icon: 'card-outline',           color: colors.text },
 ];
+
+const MOBILE_MONEY_IDS = new Set(['mtn', 'orange', 'wave']);
+const POLL_INTERVAL_MS = 3000;   // poll every 3 s
+const POLL_TIMEOUT_MS  = 90000;  // give up after 90 s
 
 const QUICK_TIPS = [500, 1000, 2000];
 
@@ -32,43 +40,215 @@ function formatFare(amount) {
   return `${Math.round(Number(amount)).toLocaleString()} XAF`;
 }
 
+// ── Pending overlay shown while waiting for USSD confirmation ───────────────
+function MobileMoneyPendingOverlay({ method, onCancel }) {
+  const label = method === 'mtn' ? 'MTN Mobile Money' : 'Orange Money';
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    const t = setInterval(() => setDots((d) => (d.length >= 3 ? '' : d + '.')), 600);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <View style={styles.loadingOverlay}>
+      <View style={styles.pendingCard}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.pendingTitle}>Waiting for confirmation{dots}</Text>
+        <Text style={styles.pendingSubtitle}>
+          A USSD prompt has been sent to your phone.{'\n'}
+          Approve the {label} request to complete payment.
+        </Text>
+        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+          <Text style={styles.cancelBtnText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function PaymentScreen({ navigation, route }) {
-  const { ride, fare } = route.params || {};
+  const {
+    ride, fare,
+    // Extended booking params from FareEstimateScreen
+    isForOther, otherName, otherPhone,
+    childSeat, childSeatCount,
+    splitPayment: splitPaymentParam, walletPct: walletPctParam,
+    // FareEstimateScreen passes pickup/dropoff objects (with .address) and coords
+    pickup, dropoff, pickupCoords, dropoffCoords,
+    rideType, priceLocked,
+    upfront_fare: upfrontFare,  // FareEstimateScreen key
+    stops, recurringRideId,
+    pickupInstructions, quietMode, acPreference, musicPreference,
+  } = route.params || {};
+
+  const pickupAddress = pickup?.address || (typeof pickup === 'string' ? pickup : null);
+  const dropoffAddress = dropoff?.address || (typeof dropoff === 'string' ? dropoff : null);
   const { t } = useLanguage();
 
-  const [selectedMethod, setSelectedMethod] = useState('cash');
-  const [tip, setTip] = useState('');
+  // Pre-select wallet if split payment was requested
+  const [selectedMethod, setSelectedMethod] = useState(splitPaymentParam ? 'wallet' : 'cash');
+  const [phone, setPhone]     = useState('');
+  const [tip, setTip]         = useState('');
   const [roundUp, setRoundUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState(false);
 
-  const totalFare = fare || ride?.fare || ride?.totalFare || 0;
-  const tipAmount = parseFloat(tip) || 0;
-  const roundedFare = roundUp ? Math.ceil(totalFare / 100) * 100 : totalFare;
-  const roundUpAmount = roundUp ? roundedFare - totalFare : 0;
-  const grandTotal = roundedFare + tipAmount;
+  const pollTimerRef   = useRef(null);
+  const timeoutRef     = useRef(null);
+  const cancelledRef   = useRef(false);
 
+  const totalFare    = fare || ride?.fare || ride?.totalFare || 0;
+  const tipAmount    = parseFloat(tip) || 0;
+  const roundedFare  = roundUp ? Math.ceil(totalFare / 100) * 100 : totalFare;
+  const roundUpAmt   = roundUp ? roundedFare - totalFare : 0;
+  const grandTotal   = roundedFare + tipAmount;
+
+  const isMobileMoney = MOBILE_MONEY_IDS.has(selectedMethod);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(pollTimerRef.current);
+      clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  // ── Mobile-money polling loop ─────────────────────────────────────────────
+  function startPolling(referenceId) {
+    cancelledRef.current = false;
+
+    // Timeout guard
+    timeoutRef.current = setTimeout(() => {
+      if (cancelledRef.current) return;
+      clearInterval(pollTimerRef.current);
+      setPending(false);
+      Alert.alert(
+        'Payment Timeout',
+        'We did not receive confirmation from your mobile money provider. Please check your phone and try again.',
+        [{ text: 'OK' }]
+      );
+    }, POLL_TIMEOUT_MS);
+
+    // Polling interval
+    pollTimerRef.current = setInterval(async () => {
+      if (cancelledRef.current) return;
+      try {
+        const res  = await paymentsService.checkStatus(referenceId);
+        const status = res?.data?.status;
+
+        if (status === 'completed') {
+          clearInterval(pollTimerRef.current);
+          clearTimeout(timeoutRef.current);
+          if (!cancelledRef.current) {
+            setPending(false);
+            Alert.alert('Payment Successful', t('paymentSuccess'), [
+              { text: 'Done', onPress: () => navigation.navigate('Home') },
+            ]);
+          }
+        } else if (status === 'failed') {
+          clearInterval(pollTimerRef.current);
+          clearTimeout(timeoutRef.current);
+          if (!cancelledRef.current) {
+            setPending(false);
+            Alert.alert('Payment Failed', res?.data?.reason || t('paymentError'));
+          }
+        }
+        // 'pending' — keep polling
+      } catch (err) {
+        // Network hiccup — keep polling silently
+        console.warn('[PaymentScreen] Poll error:', err.message);
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  function cancelPending() {
+    cancelledRef.current = true;
+    clearInterval(pollTimerRef.current);
+    clearTimeout(timeoutRef.current);
+    setPending(false);
+  }
+
+  // ── Main pay handler ──────────────────────────────────────────────────────
   const handlePay = async () => {
+    if (isMobileMoney && !phone.trim()) {
+      Alert.alert('Phone Required', 'Please enter your mobile money phone number.');
+      return;
+    }
+
+    const methodConfig = PAYMENT_METHODS.find((m) => m.id === selectedMethod);
+    const backendMethod = methodConfig?.type || selectedMethod;
+
     setLoading(true);
     try {
-      await paymentsService.chargeRide(ride?._id || ride?.id || 'current', {
-        paymentMethod: selectedMethod,
-        tip: tipAmount,
+      // ── Step 1: Create the ride if not already created ──────────────────
+      let rideId = ride?._id || ride?.id;
+      if (!rideId && pickupCoords && dropoffCoords) {
+        const { ridesService } = require('../services/rides');
+        const rideResult = await ridesService.requestRide({
+          pickup_address:        pickupAddress,
+          dropoff_address:       dropoffAddress,
+          pickup_location:       pickupCoords,
+          dropoff_location:      dropoffCoords,
+          ride_type:             rideType || 'standard',
+          payment_method:        backendMethod,
+          stops:                 stops || [],
+          use_price_lock:        priceLocked || false,
+          locked_fare:           upfrontFare || undefined,
+          is_for_other:          isForOther || false,
+          other_passenger_name:  otherName || undefined,
+          other_passenger_phone: otherPhone || undefined,
+          child_seat_required:   childSeat || false,
+          child_seat_count:      childSeatCount || 0,
+          split_payment:         splitPaymentParam || false,
+          split_wallet_pct:      walletPctParam || 100,
+          split_momo_pct:        walletPctParam ? 100 - walletPctParam : 0,
+          recurring_ride_id:     recurringRideId || undefined,
+          pickup_instructions:   pickupInstructions || undefined,
+          quiet_mode:            quietMode || false,
+          ac_preference:         acPreference || 'auto',
+          music_preference:      musicPreference !== false,
+        });
+        rideId = rideResult?.ride?.id;
+      }
+
+      if (!rideId) throw new Error('Could not create ride — check your location details.');
+
+      // ── Step 2: Charge payment ──────────────────────────────────────────
+      const result = await paymentsService.chargeRide(rideId, {
+        method:  backendMethod,
+        phone:   phone.trim() || undefined,
+        tip:     tipAmount,
         roundUp,
-        total: grandTotal,
+        total:   grandTotal,
+        // Split payment breakdown
+        split_payment:    splitPaymentParam || false,
+        split_wallet_pct: walletPctParam || 100,
+        split_momo_pct:   walletPctParam ? 100 - walletPctParam : 0,
       });
-      Alert.alert('Payment Successful', t('paymentSuccess'), [
-        { text: 'Done', onPress: () => navigation.navigate('Home') },
-      ]);
-    } catch (err) {
-      Alert.alert('Payment Failed', err.message || t('paymentError'));
-    } finally {
+
       setLoading(false);
+
+      if (result.pending && result.data?.reference_id) {
+        setPending(true);
+        startPolling(result.data.reference_id);
+      } else {
+        Alert.alert('Payment Successful', t('paymentSuccess'), [
+          { text: 'Done', onPress: () => navigation.navigate('Home') },
+        ]);
+      }
+    } catch (err) {
+      setLoading(false);
+      Alert.alert('Payment Failed', err.response?.data?.message || err.message || t('paymentError'));
     }
   };
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+
+      {/* Synchronous loading spinner */}
       {loading && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingCard}>
@@ -76,6 +256,11 @@ export default function PaymentScreen({ navigation, route }) {
             <Text style={styles.loadingText}>Processing payment...</Text>
           </View>
         </View>
+      )}
+
+      {/* Mobile-money pending overlay */}
+      {pending && (
+        <MobileMoneyPendingOverlay method={selectedMethod} onCancel={cancelPending} />
       )}
 
       {/* Header */}
@@ -105,13 +290,54 @@ export default function PaymentScreen({ navigation, route }) {
               <Text style={styles.summaryValue}>{formatFare(tipAmount)}</Text>
             </View>
           )}
-          {roundUp && roundUpAmount > 0 && (
+          {roundUp && roundUpAmt > 0 && (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, styles.loyaltyLabel]}>Round-up (loyalty)</Text>
-              <Text style={[styles.summaryValue, styles.loyaltyValue]}>+{formatFare(roundUpAmount)}</Text>
+              <Text style={[styles.summaryValue, styles.loyaltyValue]}>+{formatFare(roundUpAmt)}</Text>
+            </View>
+          )}
+          {priceLocked && (
+            <View style={styles.upfrontBadge}>
+              <Text style={styles.upfrontBadgeText}>🔒 Upfront Price — Guaranteed</Text>
             </View>
           )}
         </View>
+
+        {/* Ride-for-someone-else info card */}
+        {isForOther && otherName && (
+          <View style={[styles.infoCard, { borderLeftColor: '#2563eb' }]}>
+            <Ionicons name="person" size={18} color="#2563eb" />
+            <View style={styles.infoCardText}>
+              <Text style={styles.infoCardTitle}>Ride for {otherName}</Text>
+              {otherPhone ? <Text style={styles.infoCardSub}>{otherPhone}</Text> : null}
+            </View>
+          </View>
+        )}
+
+        {/* Child seat info card */}
+        {childSeat && (
+          <View style={[styles.infoCard, { borderLeftColor: colors.warning }]}>
+            <Ionicons name="happy" size={18} color={colors.warning} />
+            <View style={styles.infoCardText}>
+              <Text style={styles.infoCardTitle}>Child seat required</Text>
+              <Text style={styles.infoCardSub}>{childSeatCount || 1} seat{(childSeatCount || 1) > 1 ? 's' : ''} — driver confirmed</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Split payment info card */}
+        {splitPaymentParam && walletPctParam && (
+          <View style={[styles.infoCard, { borderLeftColor: colors.primary }]}>
+            <Ionicons name="git-branch-outline" size={18} color={colors.primary} />
+            <View style={styles.infoCardText}>
+              <Text style={styles.infoCardTitle}>Split payment</Text>
+              <Text style={styles.infoCardSub}>
+                Wallet {walletPctParam}% ({formatFare(Math.round(grandTotal * walletPctParam / 100))})
+                {' + '}MTN MoMo {100 - walletPctParam}% ({formatFare(Math.round(grandTotal * (100 - walletPctParam) / 100))})
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Payment methods */}
         <Text style={styles.sectionLabel}>{t('selectPaymentMethod')}</Text>
@@ -139,6 +365,30 @@ export default function PaymentScreen({ navigation, route }) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Phone number input — shown only for mobile money */}
+        {isMobileMoney && (
+          <View style={styles.phoneCard}>
+            <Text style={styles.phoneLabel}>
+              {selectedMethod === 'mtn' ? 'MTN' : 'Orange'} phone number
+            </Text>
+            <View style={styles.phoneInputRow}>
+              <Text style={styles.phonePrefix}>+237</Text>
+              <TextInput
+                style={styles.phoneInput}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="6XX XXX XXX"
+                placeholderTextColor={colors.textLight}
+                maxLength={9}
+              />
+            </View>
+            <Text style={styles.phoneHint}>
+              You will receive a USSD prompt on this number to approve the payment.
+            </Text>
+          </View>
+        )}
 
         {/* Tip section */}
         <Text style={styles.sectionLabel}>{t('addTip')}</Text>
@@ -178,9 +428,9 @@ export default function PaymentScreen({ navigation, route }) {
             </View>
             <View style={styles.roundUpTexts}>
               <Text style={styles.roundUpLabel}>{t('roundUpFare')}</Text>
-              {roundUp && roundUpAmount > 0 && (
+              {roundUp && roundUpAmt > 0 && (
                 <Text style={styles.roundUpSub}>
-                  +{Math.round(roundUpAmount).toLocaleString()} XAF → loyalty points
+                  +{Math.round(roundUpAmt).toLocaleString()} XAF → loyalty points
                 </Text>
               )}
             </View>
@@ -198,9 +448,9 @@ export default function PaymentScreen({ navigation, route }) {
       {/* Pay button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.payBtn, loading && styles.payBtnDisabled]}
+          style={[styles.payBtn, (loading || pending) && styles.payBtnDisabled]}
           onPress={handlePay}
-          disabled={loading}
+          disabled={loading || pending}
           activeOpacity={0.88}
         >
           <Text style={styles.payBtnLabel}>{t('payNow')}</Text>
@@ -238,6 +488,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     fontWeight: '500',
+  },
+  // Mobile-money pending overlay
+  pendingCard: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.xl,
+  },
+  pendingTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  pendingSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  cancelBtn: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.gray300,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   header: {
     flexDirection: 'row',
@@ -302,17 +586,35 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: spacing.xs + 1,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
+  summaryLabel: { fontSize: 14, color: colors.textSecondary },
+  summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
   loyaltyLabel: { color: colors.warning },
   loyaltyValue: { color: colors.warning },
+  upfrontBadge: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  upfrontBadgeText: { fontSize: 12, fontWeight: '700', color: colors.success },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderLeftWidth: 3,
+    ...shadows.sm,
+  },
+  infoCardText: { flex: 1 },
+  infoCardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  infoCardSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -375,6 +677,49 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: colors.primary,
   },
+  // Phone input
+  phoneCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  phoneLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  phonePrefix: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginRight: spacing.sm,
+  },
+  phoneInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    letterSpacing: 1,
+  },
+  phoneHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
   tipCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
@@ -420,15 +765,8 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: 'rgba(255,0,191,0.06)',
   },
-  quickTipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  quickTipTextActive: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
+  quickTipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  quickTipTextActive: { color: colors.primary, fontWeight: '700' },
   roundUpCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -454,16 +792,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   roundUpTexts: { flex: 1 },
-  roundUpLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  roundUpSub: {
-    fontSize: 12,
-    color: colors.warning,
-    marginTop: 2,
-  },
+  roundUpLabel: { fontSize: 14, fontWeight: '600', color: colors.text },
+  roundUpSub: { fontSize: 12, color: colors.warning, marginTop: 2 },
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -489,20 +819,12 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   payBtnDisabled: { opacity: 0.7 },
-  payBtnLabel: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.white,
-  },
+  payBtnLabel: { fontSize: 17, fontWeight: '700', color: colors.white },
   payBtnAmountWrap: {
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 1,
   },
-  payBtnAmount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.white,
-  },
+  payBtnAmount: { fontSize: 15, fontWeight: '800', color: colors.white },
 });

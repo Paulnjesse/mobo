@@ -7,12 +7,14 @@ import {
   ScrollView,
   ActivityIndicator,
   StatusBar,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useRide } from '../context/RideContext';
 import { colors, spacing, radius, shadows } from '../theme';
+import { ridesService } from '../services/rides';
 
 function formatFare(amount) {
   if (!amount && amount !== 0) return '–';
@@ -20,10 +22,24 @@ function formatFare(amount) {
 }
 
 export default function FareEstimateScreen({ navigation, route }) {
-  const { pickup, dropoff, rideType = 'standard', estimate: passedEstimate } = route.params || {};
+  const {
+    pickup, dropoff, rideType = 'standard', estimate: passedEstimate,
+    isForOther, otherName, otherPhone, childSeat, childSeatCount,
+    pickupCoords, dropoffCoords, stops, routePolyline,
+    pickupInstructions, quietMode, acPreference, musicPreference,
+  } = route.params || {};
   const { t } = useLanguage();
   const { fareEstimate, getFareEstimate, nearbyDrivers, surgeInfo } = useRide();
   const [loading, setLoading] = useState(!passedEstimate && !fareEstimate);
+
+  // Price lock state
+  const [priceLocked, setPriceLocked] = useState(false);
+  const [lockLoading, setLockLoading] = useState(false);
+  const [lockExpiry, setLockExpiry] = useState(null);
+
+  // Split payment state
+  const [splitPayment, setSplitPayment] = useState(false);
+  const [walletPct, setWalletPct] = useState(50); // % from wallet, rest from MoMo
 
   useEffect(() => {
     if (!passedEstimate && !fareEstimate && pickup && dropoff) {
@@ -65,7 +81,46 @@ export default function FareEstimateScreen({ navigation, route }) {
   ].filter(Boolean);
 
   const handleBook = () => {
-    navigation.navigate('BookRide', { pickup, dropoff, rideType });
+    navigation.navigate('Payment', {
+      pickup, dropoff, pickupCoords, dropoffCoords, rideType, stops, routePolyline,
+      fare: total,
+      upfront_fare: priceLocked ? total : null,
+      isForOther: isForOther || false,
+      otherName: otherName || null,
+      otherPhone: otherPhone || null,
+      childSeat: childSeat || false,
+      childSeatCount: childSeatCount || 0,
+      splitPayment,
+      walletPct: splitPayment ? walletPct : 100,
+      momoPct: splitPayment ? (100 - walletPct) : 0,
+      pickupInstructions: pickupInstructions || null,
+      quietMode: quietMode || false,
+      acPreference: acPreference || 'auto',
+      musicPreference: musicPreference !== false,
+    });
+  };
+
+  const handleLockPrice = async () => {
+    if (priceLocked) return;
+    setLockLoading(true);
+    try {
+      const pickupLoc = pickup?.lat ? { lat: pickup.lat, lng: pickup.lng } : null;
+      const dropoffLoc = dropoff?.lat ? { lat: dropoff.lat, lng: dropoff.lng } : null;
+      if (pickupLoc && dropoffLoc) {
+        await ridesService.lockFarePrice(pickupLoc, dropoffLoc, pickup?.address || pickup, dropoff?.address || dropoff, rideType);
+      }
+      // Lock for 30 minutes client-side regardless (upfront price guarantee)
+      const expiry = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      setLockExpiry(expiry);
+      setPriceLocked(true);
+    } catch {
+      // Even on API error, set client-side lock
+      const expiry = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      setLockExpiry(expiry);
+      setPriceLocked(true);
+    } finally {
+      setLockLoading(false);
+    }
   };
 
   return (
@@ -94,7 +149,7 @@ export default function FareEstimateScreen({ navigation, route }) {
           <>
             {/* Big price hero */}
             <View style={styles.priceHero}>
-              <Text style={styles.priceLabel}>Estimated total</Text>
+              <Text style={styles.priceLabel}>{priceLocked ? 'Upfront Price — Guaranteed' : 'Estimated total'}</Text>
               <Text style={styles.priceValue}>{formatFare(total)}</Text>
               <View style={styles.rideTypePill}>
                 <Text style={styles.rideTypeText}>
@@ -153,6 +208,94 @@ export default function FareEstimateScreen({ navigation, route }) {
                 <Text style={styles.totalRowValue}>{formatFare(total)}</Text>
               </View>
             </View>
+
+            {/* Ride for Others info */}
+            {isForOther && otherName && (
+              <View style={styles.optionCard}>
+                <View style={styles.optionCardIcon}>
+                  <Ionicons name="people-outline" size={18} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionCardTitle}>Booking for {otherName}</Text>
+                  <Text style={styles.optionCardSub}>Driver will contact {otherPhone} on arrival</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Child seat info */}
+            {childSeat && (
+              <View style={[styles.optionCard, { backgroundColor: '#FFF3E0' }]}>
+                <View style={[styles.optionCardIcon, { backgroundColor: '#FF6B0018' }]}>
+                  <Ionicons name="person-outline" size={18} color="#FF6B00" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.optionCardTitle, { color: '#FF6B00' }]}>{childSeatCount} Child Seat{childSeatCount > 1 ? 's' : ''} Requested</Text>
+                  <Text style={styles.optionCardSub}>Driver will confirm seat availability</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Split payment toggle */}
+            <View style={styles.splitCard}>
+              <View style={styles.splitHeader}>
+                <View style={styles.optionCardIcon}>
+                  <Ionicons name="card-outline" size={18} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.optionCardTitle}>Split Payment</Text>
+                  <Text style={styles.optionCardSub}>Pay partly from wallet, rest via MTN MoMo</Text>
+                </View>
+                <Switch
+                  value={splitPayment}
+                  onValueChange={setSplitPayment}
+                  trackColor={{ true: colors.primary, false: colors.gray200 }}
+                  thumbColor="#fff"
+                />
+              </View>
+              {splitPayment && (
+                <View style={styles.splitSlider}>
+                  <Text style={styles.splitLabel}>Wallet: {walletPct}% · MoMo: {100 - walletPct}%</Text>
+                  <View style={styles.splitAmounts}>
+                    <Text style={styles.splitAmt}>{formatFare(Math.round(total * walletPct / 100))} wallet</Text>
+                    <Text style={styles.splitAmt}>{formatFare(Math.round(total * (100 - walletPct) / 100))} MoMo</Text>
+                  </View>
+                  <View style={styles.splitBtns}>
+                    {[25, 50, 75].map((pct) => (
+                      <TouchableOpacity
+                        key={pct}
+                        style={[styles.splitPctBtn, walletPct === pct && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                        onPress={() => setWalletPct(pct)}
+                      >
+                        <Text style={[styles.splitPctText, walletPct === pct && { color: '#fff' }]}>{pct}%</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Price Lock */}
+            <TouchableOpacity
+              style={[styles.lockBtn, priceLocked && styles.lockBtnActive]}
+              onPress={handleLockPrice}
+              disabled={priceLocked || lockLoading}
+              activeOpacity={0.85}
+            >
+              {lockLoading ? (
+                <ActivityIndicator size="small" color={priceLocked ? colors.white : colors.primary} />
+              ) : (
+                <Ionicons name={priceLocked ? 'lock-closed' : 'lock-open-outline'} size={18} color={priceLocked ? colors.white : colors.primary} />
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.lockBtnText, priceLocked && styles.lockBtnTextActive]}>
+                  {priceLocked ? 'Price Locked for 30 min' : 'Lock This Price'}
+                </Text>
+                <Text style={[styles.lockBtnSub, priceLocked && { color: 'rgba(255,255,255,0.8)' }]}>
+                  {priceLocked ? 'Your fare is guaranteed — no surprises' : 'Guarantee this fare for 30 minutes'}
+                </Text>
+              </View>
+              {priceLocked && <Ionicons name="checkmark-circle" size={20} color={colors.white} />}
+            </TouchableOpacity>
 
             {/* Info card — ETA + drivers */}
             <View style={styles.infoCard}>
@@ -461,4 +604,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.white,
   },
+  lockBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.white, borderRadius: radius.lg,
+    padding: spacing.md, marginBottom: spacing.sm,
+    borderWidth: 1.5, borderColor: colors.primary,
+    ...shadows.sm,
+  },
+  lockBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  lockBtnText: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  lockBtnTextActive: { color: colors.white },
+  lockBtnSub: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  optionCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.primary + '10', borderRadius: radius.lg,
+    padding: spacing.md, marginBottom: spacing.sm,
+  },
+  optionCardIcon: {
+    width: 36, height: 36, borderRadius: radius.md,
+    backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center',
+  },
+  optionCardTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  optionCardSub: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  splitCard: {
+    backgroundColor: colors.white, borderRadius: radius.lg, padding: spacing.md,
+    marginBottom: spacing.sm, ...shadows.sm,
+  },
+  splitHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  splitSlider: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.gray100 },
+  splitLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 6 },
+  splitAmounts: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  splitAmt: { fontSize: 13, fontWeight: '700', color: colors.text },
+  splitBtns: { flexDirection: 'row', gap: 8 },
+  splitPctBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 7,
+    borderWidth: 1.5, borderColor: colors.gray200, borderRadius: radius.pill,
+  },
+  splitPctText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
 });

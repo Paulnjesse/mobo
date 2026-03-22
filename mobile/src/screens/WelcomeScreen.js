@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, shadows } from '../theme';
+import AdBanner from '../components/AdBanner';
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,6 +36,9 @@ export default function WelcomeScreen({ navigation }) {
           <FeatureRow icon="phone-portrait-outline" text="Mobile money payments supported" />
           <FeatureRow icon="people-outline" text="Community-focused ride-hailing" />
         </View>
+
+        {/* Sliding ad banner — local businesses + MOBO promos */}
+        <AdBanner dark context="auth" />
 
         <View style={styles.bottomSection}>
           <TouchableOpacity

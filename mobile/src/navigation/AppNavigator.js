@@ -1,8 +1,10 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DrawerContent from '../components/DrawerContent';
 
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -13,7 +15,9 @@ import WelcomeScreen        from '../screens/WelcomeScreen';
 import LanguageScreen       from '../screens/LanguageScreen';
 import LoginScreen          from '../screens/LoginScreen';
 import RegisterScreen       from '../screens/RegisterScreen';
-import VerificationScreen   from '../screens/VerificationScreen';
+import VerificationScreen      from '../screens/VerificationScreen';
+import ForgotPasswordScreen    from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen     from '../screens/ResetPasswordScreen';
 
 // New multi-role registration screens
 import RoleSelectionScreen    from '../screens/auth/RoleSelectionScreen';
@@ -44,7 +48,8 @@ import SearchLocationScreen from '../screens/SearchLocationScreen';
 import PromoCodeScreen      from '../screens/PromoCodeScreen';
 import SafetyScreen         from '../screens/SafetyScreen';
 import HelpScreen           from '../screens/HelpScreen';
-import CorporateScreen      from '../screens/CorporateScreen';
+import CorporateScreen         from '../screens/CorporateScreen';
+import ConciergeBookingScreen  from '../screens/ConciergeBookingScreen';
 import ReferralScreen       from '../screens/ReferralScreen';
 import FamilyAccountScreen  from '../screens/FamilyAccountScreen';
 import LostAndFoundScreen   from '../screens/LostAndFoundScreen';
@@ -57,6 +62,30 @@ import DriverMatchScreen        from '../screens/DriverMatchScreen';
 import DeliveryBookingScreen    from '../screens/DeliveryBookingScreen';
 import DeliveryTrackingScreen   from '../screens/DeliveryTrackingScreen';
 import DeliveryHistoryScreen    from '../screens/DeliveryHistoryScreen';
+import FareSplitScreen          from '../screens/FareSplitScreen';
+import RentalRideScreen         from '../screens/RentalRideScreen';
+import OutstationRideScreen     from '../screens/OutstationRideScreen';
+import SupportChatScreen        from '../screens/SupportChatScreen';
+import CommuterPassScreen       from '../screens/CommuterPassScreen';
+import RideCompareScreen        from '../screens/RideCompareScreen';
+import SavedPlacesScreen        from '../screens/SavedPlacesScreen';
+import USSDBookingScreen        from '../screens/USSDBookingScreen';
+import RecurringRideScreen      from '../screens/RecurringRideScreen';
+import WhatsAppBookingScreen    from '../screens/WhatsAppBookingScreen';
+
+import DriverEarningsScreen      from '../screens/DriverEarningsScreen';
+import AirportModeScreen         from '../screens/AirportModeScreen';
+import DriverHeatMapScreen       from '../screens/DriverHeatMapScreen';
+import TripRadarScreen           from '../screens/TripRadarScreen';
+import DriverTierScreen          from '../screens/DriverTierScreen';
+import EarningsGuaranteeScreen   from '../screens/EarningsGuaranteeScreen';
+import FuelCardScreen            from '../screens/FuelCardScreen';
+import MaintenanceTrackerScreen  from '../screens/MaintenanceTrackerScreen';
+import DeveloperPortalScreen     from '../screens/DeveloperPortalScreen';
+import BiometricVerificationScreen from '../screens/BiometricVerificationScreen';
+import WatchCompanionScreen       from '../screens/WatchCompanionScreen';
+import CurrencyPickerScreen       from '../screens/CurrencyPickerScreen';
+import FoodDeliveryScreen         from '../screens/FoodDeliveryScreen';
 
 // ── Driver Screens ─────────────────────────────────────────────────────────────
 import DriverDeliveryScreen        from '../screens/DriverDeliveryScreen';
@@ -77,8 +106,9 @@ import FleetManagementScreen  from '../screens/fleet/FleetManagementScreen';
 import AddVehicleScreen       from '../screens/fleet/AddVehicleScreen';
 import VehicleDetailScreen    from '../screens/fleet/VehicleDetailScreen';
 
-const Stack = createStackNavigator();
-const Tab   = createBottomTabNavigator();
+const Stack  = createStackNavigator();
+const Tab    = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
 // ── Auth Stack ─────────────────────────────────────────────────────────────────
 function AuthStack() {
@@ -95,6 +125,8 @@ function AuthStack() {
       <Stack.Screen name="DriverRegister"   component={DriverRegisterScreen} />
       <Stack.Screen name="FleetOwnerRegister" component={FleetOwnerRegisterScreen} />
       <Stack.Screen name="Verification"     component={VerificationScreen} />
+      <Stack.Screen name="ForgotPassword"   component={ForgotPasswordScreen} />
+      <Stack.Screen name="ResetPassword"    component={ResetPasswordScreen} />
       {/* Driver onboarding: set home location right after registration */}
       <Stack.Screen name="HomeLocation"     component={HomeLocationScreen} />
     </Stack.Navigator>
@@ -162,6 +194,7 @@ function RiderStack() {
       <Stack.Screen name="Safety"             component={SafetyScreen} />
       <Stack.Screen name="Help"               component={HelpScreen} />
       <Stack.Screen name="Corporate"          component={CorporateScreen} />
+      <Stack.Screen name="ConciergeBooking"  component={ConciergeBookingScreen} />
       <Stack.Screen name="Referral"           component={ReferralScreen} />
       <Stack.Screen name="FamilyAccount"      component={FamilyAccountScreen} />
       <Stack.Screen name="LostAndFound"       component={LostAndFoundScreen} />
@@ -174,7 +207,38 @@ function RiderStack() {
       <Stack.Screen name="DeliveryBooking"    component={DeliveryBookingScreen}   options={{ presentation: 'modal' }} />
       <Stack.Screen name="DeliveryTracking"   component={DeliveryTrackingScreen} />
       <Stack.Screen name="DeliveryHistory"    component={DeliveryHistoryScreen} />
+      <Stack.Screen name="FareSplit"          component={FareSplitScreen}         options={{ presentation: 'modal' }} />
+      <Stack.Screen name="RentalRide"         component={RentalRideScreen} />
+      <Stack.Screen name="OutstationRide"     component={OutstationRideScreen} />
+      <Stack.Screen name="SupportChat"        component={SupportChatScreen} />
+      <Stack.Screen name="CommuterPass"       component={CommuterPassScreen} />
+      <Stack.Screen name="RideCompare"        component={RideCompareScreen}       options={{ presentation: 'modal' }} />
+      <Stack.Screen name="SavedPlaces"        component={SavedPlacesScreen} />
+      <Stack.Screen name="USSDBooking"        component={USSDBookingScreen} />
+      <Stack.Screen name="RecurringRide"      component={RecurringRideScreen} />
+      <Stack.Screen name="WhatsAppBooking"    component={WhatsAppBookingScreen} />
+      <Stack.Screen name="DeveloperPortal"    component={DeveloperPortalScreen} />
+      <Stack.Screen name="WatchCompanion"     component={WatchCompanionScreen} />
+      <Stack.Screen name="CurrencyPicker"     component={CurrencyPickerScreen} />
+      <Stack.Screen name="FoodDelivery"       component={FoodDeliveryScreen} />
     </Stack.Navigator>
+  );
+}
+
+// ── Rider Drawer ───────────────────────────────────────────────────────────────
+function RiderDrawer() {
+  return (
+    <Drawer.Navigator
+      drawerContent={(props) => <DrawerContent {...props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerType: 'slide',
+        overlayColor: 'rgba(0,0,0,0.4)',
+        drawerStyle: { width: '80%' },
+      }}
+    >
+      <Drawer.Screen name="RiderMain" component={RiderStack} />
+    </Drawer.Navigator>
   );
 }
 
@@ -197,6 +261,7 @@ function DriverStack() {
       <Stack.Screen name="Messages"         component={MessagesScreen} />
       <Stack.Screen name="SOS"              component={SOSScreen}             options={{ presentation: 'modal' }} />
       <Stack.Screen name="DriverBonus"      component={DriverBonusScreen} />
+      <Stack.Screen name="DriverEarnings"   component={DriverEarningsScreen} />
       <Stack.Screen name="ExpressPay"       component={ExpressPayScreen} />
       <Stack.Screen name="DestinationMode"  component={DestinationModeScreen} />
       <Stack.Screen
@@ -211,7 +276,36 @@ function DriverStack() {
       <Stack.Screen name="DriverDelivery"   component={DriverDeliveryScreen} />
       <Stack.Screen name="DriverDeliveryRequest" component={DriverDeliveryRequestScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="DeliveryTracking" component={DeliveryTrackingScreen} />
+      <Stack.Screen name="AirportMode"           component={AirportModeScreen} />
+      <Stack.Screen name="SupportChat"            component={SupportChatScreen} />
+      <Stack.Screen name="DriverHeatMap"          component={DriverHeatMapScreen} />
+      <Stack.Screen name="TripRadar"              component={TripRadarScreen} />
+      <Stack.Screen name="DriverTier"             component={DriverTierScreen} />
+      <Stack.Screen name="EarningsGuarantee"      component={EarningsGuaranteeScreen} />
+      <Stack.Screen name="FuelCard"               component={FuelCardScreen} />
+      <Stack.Screen name="MaintenanceTracker"     component={MaintenanceTrackerScreen} />
+      <Stack.Screen name="BiometricVerification"  component={BiometricVerificationScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="WatchCompanion"          component={WatchCompanionScreen} />
+      <Stack.Screen name="CurrencyPicker"          component={CurrencyPickerScreen} />
+      <Stack.Screen name="FoodDelivery"             component={FoodDeliveryScreen} />
     </Stack.Navigator>
+  );
+}
+
+// ── Driver Drawer ──────────────────────────────────────────────────────────────
+function DriverDrawer() {
+  return (
+    <Drawer.Navigator
+      drawerContent={(props) => <DrawerContent {...props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerType: 'slide',
+        overlayColor: 'rgba(0,0,0,0.4)',
+        drawerStyle: { width: '80%' },
+      }}
+    >
+      <Drawer.Screen name="DriverMain" component={DriverStack} />
+    </Drawer.Navigator>
   );
 }
 
@@ -285,7 +379,7 @@ export default function AppNavigator() {
   }
 
   if (user?.role === 'driver') {
-    return <DriverStack />;
+    return <DriverDrawer />;
   }
 
   if (user?.role === 'fleet_owner') {
@@ -293,7 +387,7 @@ export default function AppNavigator() {
   }
 
   // Default: rider
-  return <RiderStack />;
+  return <RiderDrawer />;
 }
 
 const styles = StyleSheet.create({

@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import {
+  Restaurant as RestaurantIcon,
   BarChart as BarChartIcon,
   People as PeopleIcon,
   DriveEta as DriveEtaIcon,
@@ -25,6 +26,7 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   LocalShipping as FleetIcon,
+  LocalOffer as FareIcon,
   Gavel as GavelIcon,
   WarningAmber as WarningAmberIcon,
   VerifiedUser as VerifiedUserIcon,
@@ -32,6 +34,8 @@ import {
   LocationOn as LocationOnIcon,
   Security as SecurityIcon,
   DeliveryDining as DeliveryDiningIcon,
+  LocationCity as LocationCityIcon,
+  Campaign as CampaignIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -52,6 +56,10 @@ const NAV_ITEMS = [
   { label: 'Safety Zones',   path: '/safety-zones-mgr', icon: <LocationOnIcon /> },
   { label: '2FA Security',   path: '/2fa-setup',      icon: <SecurityIcon /> },
   { label: 'Deliveries',     path: '/deliveries-mgmt', icon: <DeliveryDiningIcon /> },
+  { label: 'Multi-City',    path: '/multi-city',      icon: <LocationCityIcon /> },
+  { label: 'Fare Mgmt',    path: '/fare-management', icon: <FareIcon /> },
+  { label: 'Ad Banners',   path: '/ads',             icon: <CampaignIcon /> },
+  { label: 'Food Delivery', path: '/food',           icon: <RestaurantIcon /> },
   { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
   { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];
