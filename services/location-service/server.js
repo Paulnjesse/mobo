@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
+    console.error('[FATAL] JWT_SECRET must be set to a strong secret in production. Refusing to start.');
+    process.exit(1);
+  }
+}
+
 const http = require('http');
 const express = require('express');
 const cors = require('cors');

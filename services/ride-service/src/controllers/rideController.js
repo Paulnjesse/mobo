@@ -676,7 +676,8 @@ const acceptRide = async (req, res) => {
       }
     }
 
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const { randomInt } = require('crypto');
+    const otp = randomInt(1000, 10000).toString();
     const result = await pool.query(
       `UPDATE rides SET driver_id = $1, status = 'accepted', pickup_otp = $2,
        accepted_at = NOW(), updated_at = NOW()
@@ -699,6 +700,40 @@ const acceptRide = async (req, res) => {
        WHERE id = $1`,
       [driverId]
     );
+
+    // Push notification to rider: driver accepted
+    try {
+      const ride = result.rows[0];
+      const { notifyRiderDriverAccepted } = require('../services/pushNotifications');
+      const notifInfo = await pool.query(
+        `SELECT
+           u_rider.push_token   AS rider_token,
+           u_driver.full_name   AS driver_name,
+           v.make || ' ' || v.model AS vehicle,
+           v.plate,
+           v.color              AS vehicle_color
+         FROM rides r
+         JOIN users u_rider  ON u_rider.id  = r.rider_id
+         JOIN drivers d      ON d.id         = r.driver_id
+         JOIN users u_driver ON u_driver.id  = d.user_id
+         LEFT JOIN vehicles v ON v.id        = d.vehicle_id
+         WHERE r.id = $1`,
+        [ride.id]
+      );
+      const info = notifInfo.rows[0];
+      if (info?.rider_token) {
+        await notifyRiderDriverAccepted(info.rider_token, {
+          ride_id:     ride.id,
+          driver_name: info.driver_name,
+          vehicle:     info.vehicle || '',
+          plate:       info.plate   || '',
+          eta_minutes: 5,
+          user_id:     ride.rider_id,
+        });
+      }
+    } catch (pnErr) {
+      console.warn('[AcceptRide PushNotification]', pnErr.message);
+    }
 
     res.json({ ride: result.rows[0] });
   } catch (err) {
@@ -767,6 +802,31 @@ const updateRideStatus = async (req, res) => {
       const ride = result.rows[0];
       const rideId = ride.id;
       const riderId = ride.rider_id;
+
+      // ── Push notification: trip started ──────────────────────────────────
+      try {
+        const { _send } = require('../services/pushNotifications');
+        const riderTokenRow = await pool.query(
+          'SELECT push_token FROM users WHERE id = $1',
+          [riderId]
+        );
+        const riderToken = riderTokenRow.rows[0]?.push_token;
+        if (riderToken) {
+          const { Expo } = require('expo-server-sdk');
+          const expo = new Expo();
+          if (Expo.isExpoPushToken(riderToken)) {
+            await expo.sendPushNotificationsAsync([{
+              to: riderToken,
+              sound: 'default',
+              title: 'Trip started!',
+              body: `You're on your way to ${ride.dropoff_address || 'your destination'}.`,
+              data: { type: 'trip_started', ride_id: ride.id, user_id: riderId },
+            }]);
+          }
+        }
+      } catch (pnErr) {
+        console.warn('[InProgressPushNotification]', pnErr.message);
+      }
 
       // ── Waiting time charge ──────────────────────────────────────────────
       // driver_arrived_at set when status = 'arriving' (driver clicks "Arrived at Pickup")
@@ -970,6 +1030,27 @@ const updateRideStatus = async (req, res) => {
         }
       } catch (passErr) { console.warn('[CommuterPass consume]', passErr.message); }
 
+      // ── Push notification: ride completed ────────────────────────────────
+      try {
+        const { notifyRideCompleted } = require('../services/pushNotifications');
+        const riderTokenRow = await pool.query(
+          'SELECT push_token FROM users WHERE id = $1',
+          [ride.rider_id]
+        );
+        const riderToken = riderTokenRow.rows[0]?.push_token;
+        if (riderToken) {
+          const earnedPoints = Math.floor((ride.estimated_fare || 0) / 100);
+          await notifyRideCompleted(riderToken, {
+            ride_id:      ride.id,
+            final_fare:   finalFare,
+            points_earned: earnedPoints,
+            user_id:      ride.rider_id,
+          });
+        }
+      } catch (pnErr) {
+        console.warn('[CompletedPushNotification]', pnErr.message);
+      }
+
       // ── Send ride receipt email ──────────────────────────────────────────
       try {
         const [userRow, driverRow, freshRide] = await Promise.all([
@@ -1125,6 +1206,47 @@ const cancelRide = async (req, res) => {
       }
     }
 
+    // ── Push notification to the OTHER party that ride was cancelled ─────────
+    try {
+      const { notifyRideCancelled } = require('../services/pushNotifications');
+      const cancelledRide = result.rows[0];
+      // If rider cancelled, notify driver; if driver cancelled, notify rider
+      const notifyUserId = cancelledBy === 'rider' ? null : cancelledRide.rider_id;
+      if (notifyUserId) {
+        const tokenRow = await pool.query(
+          'SELECT push_token FROM users WHERE id = $1',
+          [notifyUserId]
+        );
+        const token = tokenRow.rows[0]?.push_token;
+        if (token) {
+          await notifyRideCancelled(token, {
+            ride_id:      cancelledRide.id,
+            reason:       reason || 'Cancelled',
+            cancelled_by: cancelledBy,
+            user_id:      notifyUserId,
+          });
+        }
+      }
+      // Also notify driver if rider cancelled and driver was assigned
+      if (cancelledBy === 'rider' && r.driver_id) {
+        const driverTokenRow = await pool.query(
+          `SELECT u.push_token FROM drivers d JOIN users u ON u.id = d.user_id WHERE d.id = $1`,
+          [r.driver_id]
+        );
+        const driverToken = driverTokenRow.rows[0]?.push_token;
+        if (driverToken) {
+          await notifyRideCancelled(driverToken, {
+            ride_id:      cancelledRide.id,
+            reason:       reason || 'Cancelled by rider',
+            cancelled_by: cancelledBy,
+            user_id:      null,
+          });
+        }
+      }
+    } catch (pnErr) {
+      console.warn('[CancelPushNotification]', pnErr.message);
+    }
+
     res.json({
       ride: result.rows[0],
       cancellation_fee: cancellationFee,
@@ -1169,8 +1291,9 @@ const listRides = async (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
     const { limit = 20, offset = 0, status } = req.query;
+    const safeLimit = Math.min(Math.max(1, parseInt(limit) || 20), 100);
     let whereClause = 'WHERE (r.rider_id = $1 OR d.user_id = $1)';
-    const params = [userId, limit, offset];
+    const params = [userId, safeLimit, parseInt(offset) || 0];
     if (status) { whereClause += ` AND r.status = $4`; params.push(status); }
 
     const result = await pool.query(

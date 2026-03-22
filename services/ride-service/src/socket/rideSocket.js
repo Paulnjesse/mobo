@@ -1,6 +1,7 @@
 'use strict';
 
 const jwt = require('jsonwebtoken');
+const db = require('../config/database');
 
 /**
  * Map of rideId -> Set of socketIds currently in that ride room.
@@ -154,7 +155,7 @@ function initRideSocket(io) {
      * @event ride_status_change
      * @param {{ rideId: string, status: string, driverId?: string, riderId?: string, meta?: object }} data
      */
-    socket.on('ride_status_change', (data = {}) => {
+    socket.on('ride_status_change', async (data = {}) => {
       const { rideId, status } = data;
       if (!rideId || !status) {
         return socket.emit('error', { message: 'ride_status_change requires rideId and status' });
@@ -163,6 +164,26 @@ function initRideSocket(io) {
       const validStatuses = ['accepted', 'arriving', 'arrived', 'in_progress', 'completed', 'cancelled'];
       if (!validStatuses.includes(status)) {
         return socket.emit('error', { message: `Invalid status: ${status}` });
+      }
+
+      // Verify the socket user is an actual participant in this ride
+      try {
+        const userId = String(socket.user?.id);
+        const { rows } = await db.query(
+          `SELECT id FROM rides
+           WHERE id = $1
+             AND (
+               rider_id = $2
+               OR driver_id IN (SELECT id FROM drivers WHERE user_id = $2)
+             )`,
+          [rideId, userId]
+        );
+        if (rows.length === 0) {
+          return socket.emit('error', { message: 'Unauthorized: you are not a participant in this ride' });
+        }
+      } catch (dbErr) {
+        console.error('[RideSocket] ride_status_change DB check failed:', dbErr.message);
+        return socket.emit('error', { message: 'Authorization check failed' });
       }
 
       const payload = {

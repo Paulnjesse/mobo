@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const { randomInt } = require('crypto');
 const db = require('../config/database');
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
@@ -17,7 +18,7 @@ const MAX_OTP_ATTEMPTS = 5;
  * Generate a 6-digit OTP
  */
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 /**
@@ -809,12 +810,18 @@ const logout = async (req, res) => {
  */
 const refreshToken = async (req, res) => {
   try {
+    // Accept token from Authorization header OR from request body { refreshToken }
+    let token = null;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.body?.refreshToken) {
+      token = req.body.refreshToken;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
 
     let decoded;
     try {
@@ -850,7 +857,8 @@ const refreshToken = async (req, res) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    res.json({ success: true, data: { token: newToken } });
+    // Return token at both levels for compatibility: response.data.token AND response.data.data.token
+    res.json({ success: true, token: newToken, data: { token: newToken } });
   } catch (err) {
     console.error('[RefreshToken Error]', err);
     res.status(500).json({ success: false, message: 'Token refresh failed' });
@@ -906,4 +914,200 @@ const setHomeLocation = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner, setHomeLocation };
+// ── Password-reset OTP constants ─────────────────────────────────────────────
+const MAX_RESET_ATTEMPTS = 5;
+
+/**
+ * POST /auth/forgot-password
+ * Accepts { identifier } — either an email address or phone number.
+ * Generates a 6-digit OTP, stores it in reset_otp / reset_otp_expiry,
+ * and sends it via email (and SMS when the identifier is a phone number).
+ */
+const forgotPassword = async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email or phone number is required',
+      });
+    }
+
+    const id = identifier.trim();
+    const isEmail = id.includes('@');
+
+    // Look up user by email or phone
+    const query  = isEmail ? 'SELECT * FROM users WHERE email = $1' : 'SELECT * FROM users WHERE phone = $1';
+    const result = await db.query(query, [id]);
+
+    // Always return a success-looking response to prevent user enumeration
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: isEmail
+          ? 'If that email is registered, a reset code has been sent.'
+          : 'If that phone number is registered, a reset code has been sent.',
+      });
+    }
+
+    const user = result.rows[0];
+
+    if (!user.is_active) {
+      return res.status(403).json({ success: false, message: 'Account is inactive.' });
+    }
+
+    const reset_otp    = generateOtp();
+    const reset_expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await db.query(
+      `UPDATE users
+       SET reset_otp = $1, reset_otp_expiry = $2, reset_otp_attempts = 0
+       WHERE id = $3`,
+      [reset_otp, reset_expiry, user.id]
+    );
+
+    let emailSent = false;
+    let smsSent   = false;
+
+    // Send email OTP if user has an email address
+    if (user.email) {
+      const emailRes = await emailService.sendPasswordResetOtp(
+        user.email, reset_otp, user.full_name, user.language || 'en'
+      );
+      emailSent = emailRes.success;
+    }
+
+    // Send SMS OTP if the identifier was a phone number (or always if phone exists)
+    if (user.phone) {
+      const smsRes = await smsService.sendOTP(user.phone, reset_otp, user.language || 'en');
+      smsSent = smsRes.success;
+    }
+
+    const channel = emailSent && smsSent
+      ? 'email and SMS'
+      : emailSent
+      ? 'email'
+      : smsSent
+      ? 'SMS'
+      : 'registered contact';
+
+    return res.json({
+      success: true,
+      message: `A 6-digit reset code has been sent to your ${channel}. It expires in 10 minutes.`,
+      email_sent: emailSent,
+      sms_sent:   smsSent,
+      // Only expose OTP in development mode to simplify local testing
+      note: process.env.NODE_ENV === 'development' ? `DEV OTP: ${reset_otp}` : undefined,
+    });
+  } catch (err) {
+    console.error('[ForgotPassword Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to send reset code' });
+  }
+};
+
+/**
+ * POST /auth/reset-password
+ * Accepts { identifier, otp_code, new_password }.
+ * Validates the OTP, then updates the password hash.
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { identifier, otp_code, new_password } = req.body;
+
+    if (!identifier || !otp_code || !new_password) {
+      return res.status(400).json({
+        success: false,
+        message: 'identifier, otp_code, and new_password are required',
+      });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters',
+      });
+    }
+
+    const id      = identifier.trim();
+    const isEmail = id.includes('@');
+    const query   = isEmail
+      ? 'SELECT * FROM users WHERE email = $1'
+      : 'SELECT * FROM users WHERE phone = $1';
+
+    const result = await db.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Account not found' });
+    }
+
+    const user = result.rows[0];
+
+    if (!user.reset_otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'No reset code was requested. Please request a new one.',
+      });
+    }
+
+    // Lock after too many wrong attempts
+    if ((user.reset_otp_attempts || 0) >= MAX_RESET_ATTEMPTS) {
+      // Clear the OTP so the user must request a new one
+      await db.query(
+        'UPDATE users SET reset_otp = NULL, reset_otp_expiry = NULL, reset_otp_attempts = 0 WHERE id = $1',
+        [user.id]
+      );
+      return res.status(429).json({
+        success: false,
+        message: 'Too many incorrect attempts. Please request a new reset code.',
+      });
+    }
+
+    if (user.reset_otp !== otp_code) {
+      await db.query(
+        'UPDATE users SET reset_otp_attempts = COALESCE(reset_otp_attempts, 0) + 1 WHERE id = $1',
+        [user.id]
+      );
+      const remaining = Math.max(0, MAX_RESET_ATTEMPTS - (user.reset_otp_attempts + 1));
+      return res.status(400).json({
+        success: false,
+        message: `Invalid reset code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`,
+      });
+    }
+
+    if (new Date() > new Date(user.reset_otp_expiry)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset code has expired. Please request a new one.',
+      });
+    }
+
+    // All good — update password and clear reset OTP
+    const password_hash = await bcrypt.hash(new_password, 10);
+
+    await db.query(
+      `UPDATE users
+       SET password_hash = $1,
+           reset_otp = NULL, reset_otp_expiry = NULL, reset_otp_attempts = 0
+       WHERE id = $2`,
+      [password_hash, user.id]
+    );
+
+    // Send confirmation email (fire-and-forget)
+    if (user.email) {
+      emailService
+        .sendPasswordChangedEmail(user.email, user.full_name, user.language || 'en')
+        .catch((err) => console.warn('[ResetPassword] Confirmation email failed:', err.message));
+    }
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully. You can now log in with your new password.',
+    });
+  } catch (err) {
+    console.error('[ResetPassword Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to reset password' });
+  }
+};
+
+module.exports = { signup, login, verify, resendOtp, logout, refreshToken, registerDriver, registerFleetOwner, setHomeLocation, forgotPassword, resetPassword };

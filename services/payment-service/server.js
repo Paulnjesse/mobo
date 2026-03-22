@@ -1,4 +1,12 @@
 require('dotenv').config();
+
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
+    console.error('[FATAL] JWT_SECRET must be set to a strong secret in production. Refusing to start.');
+    process.exit(1);
+  }
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -10,8 +18,13 @@ const paymentRoutes = require('./src/routes/payments');
 const app = express();
 const PORT = process.env.PORT || 3003;
 
+// Restrict CORS to known origins — never use wildcard on the payment service
+const CORS_ORIGINS = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['http://localhost:3000', 'http://localhost:8081', 'exp://localhost:8081'];
+
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));

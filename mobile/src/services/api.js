@@ -78,7 +78,7 @@ api.interceptors.response.use(
             { refreshToken },
             { timeout: 15000 }
           );
-          const newToken = response.data.token;
+          const newToken = response.data.token || response.data.data?.token;
           await AsyncStorage.setItem(TOKEN_KEY, newToken);
           processQueue(null, newToken);
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
