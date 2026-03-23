@@ -27,7 +27,7 @@ import api from '../services/api';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, complete2FA, isAuthenticated } = useAuth();
 
   // ── Step 1 state ──
   const [email, setEmail] = useState('');
@@ -66,28 +66,18 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      // Call login via AuthContext — but we need to intercept 2FA responses.
-      // AuthContext.login calls authAPI.login internally; here we call the raw
-      // API directly so we can detect requires_2fa before storing the session.
-      const response = await api.post('/auth/login', { email: email.trim(), password });
-      const data = response.data;
+      // Use AuthContext.login — stores token in memory only (not localStorage)
+      const result = await login(email.trim(), password);
 
-      if (data.requires_2fa) {
-        // Server says 2FA is required — switch to step 2
-        setTwoFaUserId(data.user_id);
+      if (result?.requires_2fa) {
+        // Server requires 2FA — switch to verification step
+        setTwoFaUserId(result.tempToken);  // tempToken carries the pre-auth context
         setTwoFaToken('');
         setTwoFaError('');
         setUseBackupCode(false);
         setStep(2);
       } else {
-        // Normal login — store session via AuthContext helper pattern
-        const { token: newToken, user: newUser } = data;
-        if (!newUser || newUser.role !== 'admin') {
-          throw new Error('Access denied. Admin privileges required.');
-        }
-        localStorage.setItem('mobo_admin_token', newToken);
-        localStorage.setItem('mobo_admin_user', JSON.stringify(newUser));
-        // Reload so AuthContext re-reads from localStorage
+        // Full session granted (only if admin has 2FA already set up and passed)
         navigate('/');
       }
     } catch (err) {
@@ -111,16 +101,8 @@ export default function LoginPage() {
     setTwoFaLoading(true);
     setTwoFaError('');
     try {
-      const response = await api.post('/auth/2fa/validate', {
-        user_id: twoFaUserId,
-        token: tok.trim(),
-      });
-      const { token: newToken, user: newUser } = response.data;
-      if (!newUser || newUser.role !== 'admin') {
-        throw new Error('Access denied. Admin privileges required.');
-      }
-      localStorage.setItem('mobo_admin_token', newToken);
-      localStorage.setItem('mobo_admin_user', JSON.stringify(newUser));
+      // complete2FA stores final token in memory only (not localStorage)
+      await complete2FA(twoFaUserId, tok.trim());
       navigate('/');
     } catch (err) {
       const msg =

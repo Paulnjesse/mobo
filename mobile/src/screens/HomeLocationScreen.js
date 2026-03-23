@@ -12,7 +12,6 @@ import {
 import MapView, { Marker, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
 const DOUALA_DEFAULT = { latitude: 4.0511, longitude: 9.7679 };
@@ -91,12 +90,10 @@ export default function HomeLocationScreen({ navigation, route }) {
     }
     setSaving(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      await api.post(
-        '/auth/driver/home-location',
-        { latitude: pin.latitude, longitude: pin.longitude, address },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // api interceptor attaches the Bearer token from SecureStore automatically
+      await api.post('/auth/driver/home-location', {
+        latitude: pin.latitude, longitude: pin.longitude, address,
+      });
       Alert.alert(
         'Home saved!',
         'We\'ll use this to match you with rides on your way home.',

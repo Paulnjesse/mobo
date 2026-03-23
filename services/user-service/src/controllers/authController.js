@@ -603,16 +603,30 @@ const login = async (req, res) => {
       full_name: user.full_name
     };
 
-    // Check if admin has 2FA enabled — if so, return a pre-auth challenge
-    // and do NOT issue the JWT yet. The token is issued by validate2FA after
-    // the user submits their TOTP or backup code.
+    // 2FA enforcement:
+    //   - Admin accounts: 2FA is MANDATORY. If not yet configured, login is blocked.
+    //   - Non-admin accounts: 2FA is optional; only required if totp_enabled.
     const freshUser = await db.query('SELECT totp_enabled FROM users WHERE id = $1', [user.id]);
-    if (freshUser.rows[0]?.totp_enabled) {
+    const totpEnabled = freshUser.rows[0]?.totp_enabled;
+
+    if (user.role === 'admin' && !totpEnabled) {
+      // Admin account exists but 2FA not set up — hard block.
+      // Admin must set up 2FA via /auth/2fa/setup before they can log in.
+      return res.status(403).json({
+        success: false,
+        requires_2fa_setup: true,
+        message: 'Admin accounts require Two-Factor Authentication. ' +
+                 'Please set up 2FA via your account settings before logging in.',
+      });
+    }
+
+    if (totpEnabled) {
+      // Return pre-auth challenge — JWT is issued by validate2FA after TOTP verified
       return res.json({
         success: true,
         requires_2fa: true,
         user_id: user.id,
-        message: 'Enter your 6-digit authenticator code to continue'
+        message: 'Enter your 6-digit authenticator code to continue',
       });
     }
 

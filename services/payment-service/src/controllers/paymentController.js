@@ -643,6 +643,21 @@ const chargeRide = async (req, res) => {
         [ride_id, userId, amount, method, initResult.reference_id, JSON.stringify(metadata)]
       );
 
+      // PCI DSS 10.2 — log payment initiation
+      await writePaymentAudit({
+        payment_id:   payment.rows[0].id,
+        ride_id,
+        user_id:      userId,
+        event_type:   'payment_initiated',
+        amount,
+        method,
+        provider:     initResult.provider,
+        provider_ref: initResult.reference_id,
+        status_after: 'pending',
+        ip_address:   req.ip,
+        user_agent:   req.get('user-agent'),
+      });
+
       return res.status(202).json({
         success:      true,
         pending:      true,
@@ -732,6 +747,19 @@ const chargeRide = async (req, res) => {
         JSON.stringify({ method, phone: paymentPhone || null }),
       ]
     );
+
+    // PCI DSS 10.2 — log synchronous payment initiation
+    await writePaymentAudit({
+      payment_id:   payment.rows[0].id,
+      ride_id,
+      user_id:      userId,
+      event_type:   'payment_initiated',
+      amount,
+      method,
+      status_after: paymentStatus,
+      ip_address:   req.ip,
+      user_agent:   req.get('user-agent'),
+    });
 
     if (paymentResult.success) {
       await db.query(

@@ -1,0 +1,61 @@
+{
+  "cli": {
+    "version": ">= 7.0.0",
+    "requireCommit": true
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ENV": "development"
+      },
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ENV": "preview"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "env": {
+        "EXPO_PUBLIC_ENV": "production"
+      },
+      "ios": {
+        "simulator": false,
+        "image": "latest"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "image": "latest"
+      },
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "your-apple-id@example.com",
+        "ascAppId": "your-app-store-connect-app-id",
+        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "../google-play-service-account.json",
+        "track": "production"
+      }
+    }
+  }
+}
