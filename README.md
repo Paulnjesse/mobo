@@ -36,7 +36,7 @@ MOBO follows a microservices architecture. Each service is independently deploya
      │  User Service  │  │ Ride Service │  │ Payment Service     │
      │  Port 3001     │  │ Port 3002    │  │ Port 3003           │
      │  Auth, profiles│  │ Rides, fares │  │ MTN, Orange, Stripe │
-     │  subscriptions │  │ promo codes  │  │ wallets             │
+     │  2FA, social   │  │ food, fleets │  │ wallets, express pay│
      └────────────────┘  └──────┬───────┘  └─────────────────────┘
                                 │
                         ┌───────▼────────┐
@@ -52,14 +52,14 @@ MOBO follows a microservices architecture. Each service is independently deploya
                         └────────────────┘
 ```
 
-| Service          | Port | Responsibility                                       |
-|------------------|------|------------------------------------------------------|
-| API Gateway      | 3000 | Routing, JWT auth, rate limiting, CORS               |
-| User Service     | 3001 | Auth (OTP), profiles, teen accounts, corporate, push |
-| Ride Service     | 3002 | Ride lifecycle, fares, surge pricing, promo codes    |
-| Payment Service  | 3003 | Payments, wallets, subscriptions, refunds            |
-| Location Service | 3004 | Real-time driver tracking, nearby drivers, Socket.IO |
-| Admin Dashboard  | 3005 | React admin panel (Create React App)                 |
+| Service          | Port | Responsibility                                                   |
+|------------------|------|------------------------------------------------------------------|
+| API Gateway      | 3000 | Routing, JWT auth, rate limiting, CORS, OpenTelemetry tracing   |
+| User Service     | 3001 | Auth (OTP/social/2FA), profiles, teen/family/corporate accounts |
+| Ride Service     | 3002 | Ride lifecycle, fares, surge, promos, food delivery, fleet mgmt |
+| Payment Service  | 3003 | Payments, wallets, subscriptions, refunds, express pay          |
+| Location Service | 3004 | Real-time driver tracking, nearby drivers, Socket.IO            |
+| Admin Dashboard  | 3005 | React admin panel (Create React App)                            |
 
 ---
 
@@ -99,6 +99,7 @@ docker-compose up --build
 The first run will automatically:
 - Start a PostgreSQL + PostGIS database
 - Run database/init.sql to create all tables
+- Run all migrations from migration_001.sql through migration_019.sql
 - Start all microservices
 
 ---
@@ -116,7 +117,12 @@ psql -U postgres -c "CREATE USER mobo_user WITH PASSWORD 'mobo_pass';"
 psql -U postgres -c "CREATE DATABASE mobo OWNER mobo_user;"
 psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS postgis;" mobo
 psql -U mobo_user -d mobo -f database/init.sql
-psql -U mobo_user -d mobo -f database/migration_001.sql
+
+# Run all migrations in order
+node database/run_migrations.js
+# or manually:
+# psql -U mobo_user -d mobo -f database/migration_001.sql
+# ... through migration_019.sql
 ```
 
 ### 2. API Gateway
@@ -134,7 +140,7 @@ npm start
 ```bash
 cd services/user-service
 cp .env.example .env
-# Edit .env with your values (Twilio, SMTP, JWT secret)
+# Edit .env with your values (Twilio, SMTP, JWT secret, Google/Apple OAuth)
 npm install
 npm start
 ```
@@ -197,6 +203,9 @@ npm start
 | `SMTP_PORT`           | SMTP port (587 for TLS)                              |
 | `SMTP_USER`           | SMTP username / email address                        |
 | `SMTP_PASS`           | SMTP password / app-specific password                |
+| `GOOGLE_CLIENT_ID`    | Google OAuth client ID (for social login)            |
+| `GOOGLE_CLIENT_SECRET`| Google OAuth client secret                           |
+| `APPLE_CLIENT_ID`     | Apple OAuth client ID (for Sign in with Apple)       |
 
 ### Ride Service (`services/ride-service/.env`)
 
@@ -272,13 +281,18 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 
 ### Authentication
 
-| Method | Endpoint               | Description                   | Auth |
-|--------|------------------------|-------------------------------|------|
-| POST   | `/auth/signup`         | Register a new user           | No   |
-| POST   | `/auth/login`          | Login with phone + password   | No   |
-| POST   | `/auth/verify`         | Verify OTP code               | No   |
-| POST   | `/auth/resend-otp`     | Resend OTP                    | No   |
-| POST   | `/auth/logout`         | Logout (invalidate session)   | Yes  |
+| Method | Endpoint               | Description                          | Auth |
+|--------|------------------------|--------------------------------------|------|
+| POST   | `/auth/signup`         | Register a new user                  | No   |
+| POST   | `/auth/login`          | Login with phone + password          | No   |
+| POST   | `/auth/verify`         | Verify OTP code                      | No   |
+| POST   | `/auth/resend-otp`     | Resend OTP                           | No   |
+| POST   | `/auth/logout`         | Logout (invalidate session)          | Yes  |
+| POST   | `/auth/social/google`  | Sign in with Google                  | No   |
+| POST   | `/auth/social/apple`   | Sign in with Apple                   | No   |
+| POST   | `/auth/2fa/setup`      | Set up TOTP two-factor auth          | Yes  |
+| POST   | `/auth/2fa/verify`     | Verify TOTP code                     | Yes  |
+| POST   | `/auth/2fa/disable`    | Disable two-factor auth              | Yes  |
 
 ### User / Profile
 
@@ -295,6 +309,15 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 | GET    | `/users/teen-accounts`              | List teen accounts                | Yes  |
 | GET    | `/users/subscription`               | Get subscription plan + benefits  | Yes  |
 | PUT    | `/users/push-token`                 | Update Expo push token            | Yes  |
+
+### Family Accounts
+
+| Method | Endpoint                                 | Description                        | Auth |
+|--------|------------------------------------------|------------------------------------|------|
+| POST   | `/users/family`                          | Create a family account            | Yes  |
+| GET    | `/users/family`                          | Get family account + members       | Yes  |
+| POST   | `/users/family/members`                  | Add a member to family account     | Yes  |
+| DELETE | `/users/family/members/:userId`          | Remove a member                    | Yes  |
 
 ### Corporate Accounts
 
@@ -321,6 +344,21 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 | POST   | `/rides/:id/round-up`     | Round up fare to wallet              | Yes  |
 | GET    | `/rides/:id/messages`     | Get in-ride messages                 | Yes  |
 | POST   | `/rides/:id/messages`     | Send an in-ride message              | Yes  |
+| POST   | `/rides/:id/share`        | Generate shareable trip link         | Yes  |
+| GET    | `/rides/share/:token`     | View shared trip (public)            | No   |
+| POST   | `/rides/:id/split`        | Initiate fare split                  | Yes  |
+| POST   | `/rides/recurring`        | Set up a recurring ride              | Yes  |
+
+### Food Delivery
+
+| Method | Endpoint                       | Description                          | Auth |
+|--------|--------------------------------|--------------------------------------|------|
+| GET    | `/food/restaurants`            | List nearby restaurants              | Yes  |
+| GET    | `/food/restaurants/:id/menu`   | Get restaurant menu                  | Yes  |
+| POST   | `/food/orders`                 | Place a food order                   | Yes  |
+| GET    | `/food/orders`                 | List user's food orders              | Yes  |
+| GET    | `/food/orders/:id`             | Get single food order                | Yes  |
+| PATCH  | `/food/orders/:id/cancel`      | Cancel a food order                  | Yes  |
 
 ### Promo Codes
 
@@ -350,6 +388,7 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 | GET    | `/payments/wallet`                | Get wallet balance                  | Yes  |
 | POST   | `/payments/subscribe`             | Subscribe to a plan (basic/premium) | Yes  |
 | GET    | `/payments/subscription`          | Get subscription status             | Yes  |
+| POST   | `/payments/express-pay`           | Instant driver payout               | Yes  |
 
 ### Location
 
@@ -362,6 +401,17 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 | GET    | `/location/route/estimate`     | Route estimate (Google Maps/Havers.) | Yes  |
 | GET    | `/drivers/nearby`              | Find nearby online drivers           | Yes  |
 
+### Fleet Management
+
+| Method | Endpoint                             | Description                         | Auth        |
+|--------|--------------------------------------|-------------------------------------|-------------|
+| POST   | `/fleets`                            | Create a fleet                      | fleet_owner |
+| GET    | `/fleets`                            | List my fleets                      | fleet_owner |
+| GET    | `/fleets/:id`                        | Get fleet details                   | fleet_owner |
+| POST   | `/fleets/:id/vehicles`               | Add a vehicle to a fleet            | fleet_owner |
+| DELETE | `/fleets/:id/vehicles/:vehicleId`    | Remove a vehicle from a fleet       | fleet_owner |
+| PUT    | `/fleets/:id/vehicles/:vehicleId/assign` | Assign driver to fleet vehicle  | fleet_owner |
+
 ---
 
 ## Fare Structure (XAF)
@@ -369,7 +419,7 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 All fares are in West/Central African CFA Francs (XAF).
 
 | Component       | Amount             |
-|-----------------|--------------------|
+|-----------------|---------------------|
 | Base fare       | 1,000 XAF          |
 | Per km          | 700 XAF            |
 | Per minute      | 100 XAF            |
@@ -377,19 +427,24 @@ All fares are in West/Central African CFA Francs (XAF).
 | Service fee     | 20% of subtotal    |
 | Cancellation    | 350 XAF            |
 | Minimum fare    | 2,000 XAF          |
+| Waiting fee     | Per minute after grace period |
 
 ### Ride Type Multipliers
 
-| Type      | Multiplier |
-|-----------|------------|
-| Standard  | 1.0x       |
-| Shared    | 0.75x      |
-| Comfort   | 1.3x       |
-| Luxury    | 2.0x       |
-| Bike      | 0.6x       |
-| Scooter   | 0.65x      |
-| Delivery  | 1.1x       |
-| Scheduled | 1.05x      |
+| Type       | Multiplier |
+|------------|------------|
+| Standard   | 1.0x       |
+| Shared     | 0.75x      |
+| Comfort    | 1.3x       |
+| Luxury     | 2.0x       |
+| Bike       | 0.6x       |
+| Scooter    | 0.65x      |
+| Delivery   | 1.1x       |
+| Scheduled  | 1.05x      |
+| Rental     | Package-based (1h/2h/4h/8h) |
+| Outstation | Variable   |
+| WAV        | 1.2x (Wheelchair Accessible) |
+| Pool       | 0.6x per seat (carpool) |
 
 ### Subscription Discounts
 
@@ -408,7 +463,7 @@ All fares are in West/Central African CFA Francs (XAF).
 1. Create a project at [supabase.com](https://supabase.com)
 2. Go to Settings > Database and copy the connection string
 3. In the Supabase SQL editor, paste and run `database/init.sql`
-4. Then run `database/migration_001.sql`
+4. Run all migrations using `node database/run_migrations.js` or run each `migration_001.sql` through `migration_019.sql` in order
 5. Set `DATABASE_URL` in each service's `.env` to the Supabase connection string
 6. Add `?sslmode=require` to the end of the connection string
 
@@ -466,6 +521,22 @@ eas submit --platform ios
 4. Go to Credentials > Create Credentials > API Key
 5. Restrict the key to your app's package name / bundle ID for security
 
+### Google OAuth (Social Login)
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Under your project, go to **APIs & Services > Credentials**
+3. Create an **OAuth 2.0 Client ID** for a Web Application
+4. Set the redirect URI to your API's `/auth/social/google/callback`
+5. Copy the **Client ID** and **Client Secret** into `services/user-service/.env`
+
+### Apple Sign In
+
+1. Sign in to [developer.apple.com](https://developer.apple.com)
+2. Go to **Certificates, Identifiers & Profiles > Identifiers**
+3. Enable **Sign In with Apple** for your App ID
+4. Create a **Services ID** for the web callback URL
+5. Generate a **Key** for Sign In with Apple and copy the Key ID
+
 ### Twilio (SMS OTP)
 
 1. Sign up at [twilio.com](https://twilio.com)
@@ -498,19 +569,117 @@ eas submit --platform ios
 
 ## Key Features
 
+### Rides & Booking
+- **Ride Types**: Standard, Comfort, Luxury, Shared, Pool (carpool), Bike, Scooter, Delivery, Scheduled, Rental, Outstation, WAV (Wheelchair Accessible)
+- **Multiple Stops**: Add intermediate stops to a ride request
+- **Upfront Pricing**: Locked fare before the ride starts
+- **Fare Splitting**: Split cost with other passengers
+- **Recurring Rides**: Schedule daily, weekday, weekend, or weekly repeating rides
+- **Ride for Others**: Book a ride for another person by name/phone
+- **Preferred Drivers**: Save and request favourite drivers
+- **Concierge Bookings**: Book rides on behalf of passengers
+- **USSD Booking**: Book rides without internet via USSD sessions
+- **Child Seat**: Request child seat(s) when booking
+- **Quiet Mode / AC Preference**: Set ride comfort preferences
+
+### Payments & Wallet
 - **Multi-currency**: CFA Francs (XAF) with transparent fare breakdown
-- **Ride Types**: Standard, Comfort, Luxury, Shared, Bike, Scooter, Delivery, Scheduled
-- **Payment Methods**: MTN Mobile Money, Orange Money, Wave, Cash, Card
-- **Surge Pricing**: Automatic during peak hours (7–9am, 5–8pm) and in custom zones
-- **Promo Codes**: Percentage or fixed discount codes with usage tracking
-- **Loyalty Points**: Earn 1 point per 100 XAF spent; round up fare to wallet
+- **Payment Methods**: MTN Mobile Money, Orange Money, Wave, Cash, Card (Flutterwave)
+- **Express Pay**: Instant driver payouts to mobile money
+- **Fare Splitting**: Shared payments across multiple participants
+- **Wallet**: Top up and round-up fare to wallet
 - **Subscriptions**: Basic (5,000 XAF/month, 10% off) or Premium (10,000 XAF/month, 20% off)
+
+### Safety & Security
+- **Two-Factor Authentication (TOTP)**: Admin and user 2FA with backup codes
+- **Social Login**: Sign in with Google or Apple
+- **Shareable Trip Links**: Share live trip link with trusted contacts
+- **Trusted Contacts**: Notify contacts automatically on trip start or SOS
+- **Ride Check-ins**: Automatic safety check if unusual stop detected
+- **In-Ride Audio Recording**: Encrypted ride recordings (30-day retention, admin-access only)
+- **Route Deviation Alerts**: Automatic alerts when driver deviates from route
+- **Speed Alerts**: Notifications when driver exceeds speed threshold
+- **Driver Real-ID Checks**: Selfie verification before going online
+- **Driver Biometric Verification**: Smile ID-powered biometric checks with confidence scores
+- **Driver Background Checks**: Tracked per driver with expiry dates
+- **Safety Zones**: Map-based incident zone alerts (flooding, crime, road closures, etc.)
+- **Ride Disputes**: Structured dispute filing with evidence uploads and admin resolution
+
+### Driver Features
+- **Driver Tiers**: Bronze, Gold, Platinum, Diamond based on performance
+- **Bonus Challenges & Streaks**: Gamified incentive system
+- **Destination Mode**: Set a direction and only receive rides going that way
+- **Fatigue Tracking**: Online hour tracking with break prompts
+- **Earnings Guarantee**: Minimum hourly earnings guarantee windows
+- **Fuel Card**: Discounted fuel with transaction tracking
+- **Vehicle Maintenance Tracker**: Service reminders by km
+
+### Fleet Management
+- **Fleet Owner Role**: Separate `fleet_owner` user role
+- **Fleet Creation**: Create and manage one or more fleets per owner
+- **Vehicle Registry**: Add vehicles (standard, comfort, luxury, van, bike, scooter) with insurance docs
+- **Driver Assignment**: Assign drivers to specific fleet vehicles
+- **Admin Approval**: Fleets require admin approval before activation
+- **Fleet Size Constraints**: Configurable `min_vehicles` and `max_vehicles` per fleet
+
+### Accounts & Community
 - **Teen Accounts**: Sub-accounts linked to parent with ride notifications
-- **Corporate Accounts**: Company accounts with member management and monthly spend tracking
+- **Family Accounts**: Shared payment with per-member spend limits
+- **Corporate Accounts**: Company accounts with member management
+- **Referral Program**: Earn 1,000 XAF for referrer and 500 XAF for referred user
+- **Loyalty Points**: Earn 1 point per 100 XAF spent; round-up fare to wallet
+
+### Food Delivery
+- **Restaurant Listings**: Browse nearby restaurants by city
+- **Menu Browsing**: Full menu with categories, images, pricing
+- **Food Orders**: Place, track, and cancel food orders
+- **Delivery via Drivers**: Orders assigned to nearby MOBO drivers
+- **OTP Pickup Verification**: Secure handoff with one-time codes
+
+### Platform & Infrastructure
+- **Ads Management**: Admin-managed ad banners (internal promotions + business sponsors)
+- **Surge Pricing**: Automatic during peak hours (7–9am, 5–8pm) and custom zones
+- **Promo Codes**: Percentage or fixed discount codes with usage tracking
+- **Demand Heat Map**: Visual zone-based demand intensity map
+- **Developer API Keys**: API access management with monthly call limits and webhooks
 - **In-Ride Messaging**: Real-time messages between rider and driver via Socket.IO
 - **Push Notifications**: Expo push notifications via stored device tokens
 - **Multilingual**: English, French, Swahili
-- **Admin Dashboard**: Real-time map, surge zone management, safety reports, user management
+- **Multi-city**: Easily configurable per-city markets
+- **OpenTelemetry Tracing**: Distributed tracing via API Gateway
+- **Monitoring**: Prometheus metrics + Grafana dashboards
+- **Cloudflare Rate Limiting**: Edge-level rate limiting worker
+- **Admin Dashboard**: 23-page React admin panel with real-time map, fleet management, dispute resolution, surge zone management, driver background checks, document expiry alerts, safety reports, ads management, and more
+
+---
+
+## Admin Dashboard Pages
+
+| Page                | Description                                              |
+|---------------------|----------------------------------------------------------|
+| Dashboard           | KPI overview, live stats                                 |
+| Users               | User management and profiles                            |
+| Drivers             | Driver management, approvals, tiers                     |
+| Rides               | Live and historical ride management                     |
+| Payments            | Payment history and wallet management                   |
+| Fleet Management    | Fleet and vehicle management, driver assignment          |
+| Location Map        | Real-time driver/rider map with satellite toggle         |
+| Surge Pricing       | Create and manage surge zones                           |
+| Promotions          | Promo code management                                   |
+| Safety Reports      | View and resolve safety incidents                       |
+| Safety Zones        | Manage incident zones overlaid on map                   |
+| Disputes            | Ride dispute review and resolution                      |
+| Background Checks   | Driver background check tracking                        |
+| Document Expiry     | Alert on expiring driver insurance / vehicle documents  |
+| Deliveries          | Food delivery order management                          |
+| Food Management     | Restaurant and menu management                          |
+| Fare Management     | Configure base fares, multipliers, surge rules          |
+| Ads Management      | Internal and business ad banner management              |
+| Notifications       | Send push notifications to users or drivers             |
+| Multi-City          | City and market configuration                           |
+| Settings            | Platform-wide settings                                  |
+| Two-Factor Setup    | Admin 2FA enrollment and management                     |
+| Login Page          | Secure admin login with 2FA                             |
 
 ---
 
@@ -519,11 +688,38 @@ eas submit --platform ios
 When updating an existing database, run migrations in order:
 
 ```bash
-# Run the first migration (corporate accounts, push tokens)
+# Recommended: use the migration runner
+node database/run_migrations.js
+
+# Or manually run each file:
 psql -U mobo_user -d mobo -f database/migration_001.sql
+# ... repeat through ...
+psql -U mobo_user -d mobo -f database/migration_019.sql
 ```
 
-New migrations should be named `migration_002.sql`, `migration_003.sql`, etc.
+### Migration Summary
+
+| Migration | Description                                                            |
+|-----------|------------------------------------------------------------------------|
+| 001       | Corporate accounts, push tokens                                        |
+| 002       | Fleet owner role, fleets, fleet vehicles                               |
+| 003       | Multiple stops, preferred drivers, Women+ Connect, ride check-ins, lost & found, driver bonus streaks, referrals, family accounts, concierge bookings, express pay |
+| 004       | *(see file)*                                                           |
+| 005       | Security: shareable trip links, trusted contacts, ride disputes, driver real-ID checks, fatigue tracking, speed alerts |
+| 006       | *(see file)*                                                           |
+| 007       | Admin 2FA (TOTP), driver background checks, rating abuse tracking, safety zones, ride audio recordings |
+| 008–009   | *(see files)*                                                          |
+| 010       | Tipping, fare splitting, rental ride type, price lock, driver earnings daily cache |
+| 011       | *(see file)*                                                           |
+| 012       | Waiting time charges, WAV ride type, preferred language                |
+| 013–014   | *(see files)*                                                          |
+| 015       | Driver tiers, heat map demand zones, saved places, recurring rides, earnings guarantee, fuel card, maintenance tracker, developer API keys, USSD booking, child seat, ride-for-others, upfront pricing, split payment |
+| 016       | *(see file)*                                                           |
+| 017       | Ads management table with seeded internal + business ads               |
+| 018       | Ride preferences (quiet mode, AC, music), food delivery tables (restaurants, menus, orders) |
+| 019       | Biometric driver verifications (Smile ID), pool/carpool ride groups, social auth (Google, Apple) |
+
+New migrations should be named `migration_020.sql`, `migration_021.sql`, etc.
 
 ---
 
