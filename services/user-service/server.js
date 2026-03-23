@@ -123,8 +123,8 @@ app.use((req, res) => {
 
 // Global error handler
 app.use(Sentry.Handlers.errorHandler());
-const { errorHandler } = require('./src/utils/response');
-app.use(errorHandler);
+const globalErrorHandler = require('./src/middleware/errorHandler');
+app.use(globalErrorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(PORT, () => {

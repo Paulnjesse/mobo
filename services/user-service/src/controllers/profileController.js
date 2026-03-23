@@ -1,130 +1,138 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
+const asyncHandler = require('../utils/asyncHandler');
+const AppError = require('../utils/AppError');
+const { validateImageMagicBytes } = require('../utils/validateImageBuffer');
 
 /**
  * GET /users/profile
+ * REFACTORED: Now uses the robust Global Error Handling architecture
+ * instead of raw try/catch blocks.
  */
-const getProfile = async (req, res) => {
-  try {
-    const userId = req.user.id;
+const getProfile = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
 
-    const result = await db.query(
-      `SELECT
-        u.id, u.full_name, u.phone, u.email, u.role,
-        u.profile_picture, u.date_of_birth, u.gender,
-        u.country, u.city, u.language,
-        u.is_verified, u.is_active,
-        u.rating, u.total_rides, u.loyalty_points, u.wallet_balance,
-        u.subscription_plan, u.subscription_expiry,
-        u.is_teen_account, u.parent_id,
-        u.created_at, u.updated_at
-       FROM users u
-       WHERE u.id = $1`,
-      [userId]
-    );
+  const result = await db.query(
+    `SELECT
+      u.id, u.full_name, u.phone, u.email, u.role,
+      u.profile_picture, u.date_of_birth, u.gender,
+      u.country, u.city, u.language,
+      u.is_verified, u.is_active,
+      u.rating, u.total_rides, u.loyalty_points, u.wallet_balance,
+      u.subscription_plan, u.subscription_expiry,
+      u.is_teen_account, u.parent_id,
+      u.created_at, u.updated_at
+     FROM users u
+     WHERE u.id = $1`,
+    [userId]
+  );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const user = result.rows[0];
-
-    // Fetch driver info if applicable
-    let driverInfo = null;
-    if (user.role === 'driver') {
-      const driverResult = await db.query(
-        `SELECT
-          d.id, d.license_number, d.license_expiry, d.is_approved, d.is_online,
-          d.total_earnings, d.acceptance_rate, d.cancellation_rate,
-          v.id AS vehicle_id, v.make, v.model, v.year, v.plate,
-          v.color, v.vehicle_type, v.seats, v.is_wheelchair_accessible, v.is_active
-         FROM drivers d
-         LEFT JOIN vehicles v ON v.id = d.vehicle_id
-         WHERE d.user_id = $1`,
-        [userId]
-      );
-      driverInfo = driverResult.rows[0] || null;
-    }
-
-    // Fetch teen accounts if parent
-    let teenAccounts = [];
-    if (!user.is_teen_account) {
-      const teenResult = await db.query(
-        `SELECT id, full_name, phone, email, total_rides, created_at
-         FROM users WHERE parent_id = $1 AND is_teen_account = true`,
-        [userId]
-      );
-      teenAccounts = teenResult.rows;
-    }
-
-    // Fetch active subscription
-    const subResult = await db.query(
-      `SELECT id, plan, price, currency, started_at, expires_at
-       FROM subscriptions
-       WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId]
-    );
-    const activeSubscription = subResult.rows[0] || null;
-
-    res.json({
-      success: true,
-      data: {
-        user,
-        driver: driverInfo,
-        teen_accounts: teenAccounts,
-        active_subscription: activeSubscription
-      }
-    });
-  } catch (err) {
-    console.error('[GetProfile Error]', err);
-    res.status(500).json({ success: false, message: 'Failed to get profile' });
+  if (result.rows.length === 0) {
+    return next(new AppError('User not found', 404));
   }
-};
+
+  const user = result.rows[0];
+
+  // Fetch driver info if applicable
+  let driverInfo = null;
+  if (user.role === 'driver') {
+    const driverResult = await db.query(
+      `SELECT
+        d.id, d.license_number, d.license_expiry, d.is_approved, d.is_online,
+        d.total_earnings, d.acceptance_rate, d.cancellation_rate,
+        v.id AS vehicle_id, v.make, v.model, v.year, v.plate,
+        v.color, v.vehicle_type, v.seats, v.is_wheelchair_accessible, v.is_active
+       FROM drivers d
+       LEFT JOIN vehicles v ON v.id = d.vehicle_id
+       WHERE d.user_id = $1`,
+      [userId]
+    );
+    driverInfo = driverResult.rows[0] || null;
+  }
+
+  // Fetch teen accounts if parent
+  let teenAccounts = [];
+  if (!user.is_teen_account) {
+    const teenResult = await db.query(
+      `SELECT id, full_name, phone, email, total_rides, created_at
+       FROM users WHERE parent_id = $1 AND is_teen_account = true`,
+      [userId]
+    );
+    teenAccounts = teenResult.rows;
+  }
+
+  // Fetch active subscription
+  const subResult = await db.query(
+    `SELECT id, plan, price, currency, started_at, expires_at
+     FROM subscriptions
+     WHERE user_id = $1 AND is_active = true AND expires_at > NOW()
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  const activeSubscription = subResult.rows[0] || null;
+
+  res.json({
+    success: true,
+    data: {
+      user,
+      driver: driverInfo,
+      teen_accounts: teenAccounts,
+      active_subscription: activeSubscription
+    }
+  });
+});
+
 
 /**
  * PUT /users/profile
+ * REFACTORED: Uses asyncHandler for consistency with getProfile.
  */
-const updateProfile = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { full_name, city, language, gender, date_of_birth, profile_picture } = req.body;
+const updateProfile = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
+  const { full_name, city, language, gender, date_of_birth, profile_picture, preferences } = req.body;
 
-    const validLanguages = ['en', 'fr', 'sw'];
-    if (language && !validLanguages.includes(language)) {
-      return res.status(400).json({ success: false, message: 'Language must be en, fr, or sw' });
-    }
-
-    const result = await db.query(
-      `UPDATE users SET
-        full_name = COALESCE($1, full_name),
-        city = COALESCE($2, city),
-        language = COALESCE($3, language),
-        gender = COALESCE($4, gender),
-        date_of_birth = COALESCE($5, date_of_birth),
-        profile_picture = COALESCE($6, profile_picture)
-       WHERE id = $7
-       RETURNING id, full_name, phone, email, city, language, gender,
-                 date_of_birth, profile_picture, updated_at`,
-      [full_name || null, city || null, language || null,
-       gender || null, date_of_birth || null, profile_picture || null, userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      data: { user: result.rows[0] }
-    });
-  } catch (err) {
-    console.error('[UpdateProfile Error]', err);
-    res.status(500).json({ success: false, message: 'Failed to update profile' });
+  const validLanguages = ['en', 'fr', 'sw'];
+  if (language && !validLanguages.includes(language)) {
+    return next(new AppError('Language must be en, fr, or sw', 400));
   }
-};
+
+  // Update base user profile
+  const result = await db.query(
+    `UPDATE users SET
+      full_name = COALESCE($1, full_name),
+      city = COALESCE($2, city),
+      language = COALESCE($3, language),
+      gender = COALESCE($4, gender),
+      date_of_birth = COALESCE($5, date_of_birth),
+      profile_picture = COALESCE($6, profile_picture)
+     WHERE id = $7
+     RETURNING id, full_name, phone, email, city, language, gender,
+               date_of_birth, profile_picture, updated_at`,
+    [full_name || null, city || null, language || null,
+     gender || null, date_of_birth || null, profile_picture || null, userId]
+  );
+
+  if (result.rows.length === 0) {
+    return next(new AppError('User not found', 404));
+  }
+
+  // If driver preferences were passed, update the driver record
+  if (preferences && req.user.role === 'driver') {
+    if (preferences.minRiderRating !== undefined) {
+      await db.query(
+        `UPDATE drivers SET min_rider_rating = $1 WHERE user_id = $2`,
+        [preferences.minRiderRating, userId]
+      );
+    }
+  }
+
+  res.json({
+    success: true,
+    message: 'Profile updated successfully',
+    data: { user: result.rows[0] }
+  });
+});
 
 /**
  * POST /users/teen-account
@@ -885,24 +893,35 @@ const uploadProfilePhoto = async (req, res) => {
     const userId = req.user.id;
     let photoDataUri = null;
 
+    let rawBuffer = null;
+
     if (req.file) {
       // multer uploaded file (multipart/form-data)
-      const mime = req.file.mimetype || 'image/jpeg';
-      const b64 = req.file.buffer.toString('base64');
-      photoDataUri = `data:${mime};base64,${b64}`;
+      rawBuffer = req.file.buffer;
     } else if (req.body?.image_base64) {
       // JSON body with pre-encoded base64
-      const mime = req.body.mime_type || 'image/jpeg';
       const raw = req.body.image_base64.replace(/^data:[^;]+;base64,/, '');
-      photoDataUri = `data:${mime};base64,${raw}`;
+      rawBuffer = Buffer.from(raw, 'base64');
     } else {
-      return res.status(400).json({ success: false, message: 'No image provided. Send a file upload (field: photo) or image_base64 in JSON body.' });
+      return next(new AppError('No image provided. Send a file upload (field: photo) or image_base64 in JSON body.', 400));
     }
 
-    // Rough size guard — base64 ≈ 4/3 × binary; limit to ~5 MB original
-    if (photoDataUri.length > 7 * 1024 * 1024) {
-      return res.status(413).json({ success: false, message: 'Image too large. Maximum 5 MB.' });
+    // ── Magic byte validation — prevents MIME spoofing ────────────────────
+    // Check actual file bytes, not the client-supplied Content-Type header.
+    if (!validateImageMagicBytes(rawBuffer)) {
+      return next(new AppError('File content does not match a supported image format (JPEG, PNG, GIF, WebP, HEIC).', 400));
     }
+
+    // ── Size guard — 5 MB binary limit ────────────────────────────────────
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (rawBuffer.length > MAX_BYTES) {
+      return next(new AppError('Image too large. Maximum 5 MB.', 413));
+    }
+
+    // Determine MIME type from magic bytes (do not trust client header)
+    const mime = req.file?.mimetype?.startsWith('image/') ? req.file.mimetype : 'image/jpeg';
+    const b64 = rawBuffer.toString('base64');
+    photoDataUri = `data:${mime};base64,${b64}`;
 
     const result = await db.query(
       `UPDATE users SET profile_picture = $1, updated_at = NOW()
@@ -972,6 +991,78 @@ const updateExpoPushToken = async (req, res) => {
   }
 };
 
+/**
+ * POST /users/block/:riderId
+ */
+const blockRider = async (req, res) => {
+  try {
+    const driverId = req.user.id;
+    const { riderId } = req.params;
+    const { reason, comment } = req.body;
+
+    if (req.user.role !== 'driver') {
+      return res.status(403).json({ success: false, message: 'Only drivers can block riders' });
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    
+    await db.query(
+      `INSERT INTO blocked_riders (id, driver_id, rider_id, reason, comment)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (driver_id, rider_id) DO NOTHING`,
+      [uuidv4(), driverId, riderId, reason || 'other', comment]
+    );
+
+    res.json({ success: true, message: 'Rider blocked successfully' });
+  } catch (err) {
+    console.error('[BlockRider Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to block rider' });
+  }
+};
+
+/**
+ * DELETE /users/block/:riderId
+ */
+const unblockRider = async (req, res) => {
+  try {
+    const driverId = req.user.id;
+    const { riderId } = req.params;
+
+    await db.query(`DELETE FROM blocked_riders WHERE driver_id = $1 AND rider_id = $2`, [driverId, riderId]);
+
+    res.json({ success: true, message: 'Rider unblocked successfully' });
+  } catch (err) {
+    console.error('[UnblockRider Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to unblock rider' });
+  }
+};
+
+/**
+ * POST /users/appeal
+ */
+const submitAppeal = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { reason } = req.body;
+
+    if (!reason || reason.length < 20) {
+      return res.status(400).json({ success: false, message: 'Please provide a detailed reason (at least 20 chars)' });
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    await db.query(
+      `INSERT INTO deactivation_appeals (id, user_id, appeal_text, status)
+       VALUES ($1, $2, $3, 'pending')`,
+      [uuidv4(), userId, reason]
+    );
+
+    res.json({ success: true, message: 'Appeal submitted for review' });
+  } catch (err) {
+    console.error('[SubmitAppeal Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to submit appeal' });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -990,4 +1081,7 @@ module.exports = {
   getCorporateRides,
   getSubscription,
   updateExpoPushToken,
+  blockRider,
+  unblockRider,
+  submitAppeal,
 };

@@ -20,6 +20,9 @@ const {
   getCorporateRides,
   getSubscription,
   updateExpoPushToken,
+  blockRider,
+  unblockRider,
+  submitAppeal,
 } = require('../controllers/profileController');
 
 // multer: memory storage, images only, max 5 MB
@@ -35,6 +38,7 @@ const photoUpload = multer({
 });
 const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
+const { validateProfileUpdate, validateCreateTeenAccount } = require('../middleware/validateProfile');
 
 // All profile routes require authentication
 router.use(authenticate);
@@ -46,16 +50,21 @@ router.get('/drivers/background-checks/expired', bgCtrl.getExpiredBackgroundChec
 router.patch('/drivers/:id/background-check',    bgCtrl.updateBackgroundCheck);
 
 router.get('/profile', getProfile);
-router.put('/profile', updateProfile);
+router.put('/profile', validateProfileUpdate, updateProfile);
 // Photo upload: accepts multipart/form-data (field: photo) OR JSON body (image_base64)
 router.post('/profile/photo', photoUpload.single('photo'), uploadProfilePhoto);
 
-router.post('/teen-account', createTeenAccount);
+router.post('/teen-account', validateCreateTeenAccount, createTeenAccount);
 router.get('/teen-accounts', getTeenAccounts);
 
 router.put('/language', updateLanguage);
 
 router.delete('/account', deleteAccount);
+
+// Driver specific rider-blocking & appeal
+router.post('/block/:riderId', blockRider);
+router.delete('/block/:riderId', unblockRider);
+router.post('/appeal', submitAppeal);
 
 router.get('/notifications', getNotifications);
 router.put('/notifications/:id/read', markNotificationRead);
@@ -76,15 +85,15 @@ router.get('/subscription', getSubscription);
 router.put('/push-token', updateExpoPushToken);
 
 // Trusted contacts
-router.get('/users/me/trusted-contacts', authenticate, tcCtrl.getTrustedContacts);
-router.post('/users/me/trusted-contacts', authenticate, tcCtrl.addTrustedContact);
-router.patch('/users/me/trusted-contacts/:id', authenticate, tcCtrl.updateTrustedContact);
-router.delete('/users/me/trusted-contacts/:id', authenticate, tcCtrl.removeTrustedContact);
+router.get('/users/me/trusted-contacts', tcCtrl.getTrustedContacts);
+router.post('/users/me/trusted-contacts', tcCtrl.addTrustedContact);
+router.patch('/users/me/trusted-contacts/:id', tcCtrl.updateTrustedContact);
+router.delete('/users/me/trusted-contacts/:id', tcCtrl.removeTrustedContact);
 
 // Saved places
-router.get('/users/me/saved-places', authenticate, require('../controllers/savedPlacesController').getSavedPlaces);
-router.post('/users/me/saved-places', authenticate, require('../controllers/savedPlacesController').createSavedPlace);
-router.delete('/users/me/saved-places/:id', authenticate, require('../controllers/savedPlacesController').deleteSavedPlace);
+router.get('/users/me/saved-places', require('../controllers/savedPlacesController').getSavedPlaces);
+router.post('/users/me/saved-places', require('../controllers/savedPlacesController').createSavedPlace);
+router.delete('/users/me/saved-places/:id', require('../controllers/savedPlacesController').deleteSavedPlace);
 
 // Biometric driver verification (Smile Identity)
 router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);

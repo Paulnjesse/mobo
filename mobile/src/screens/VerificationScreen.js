@@ -118,10 +118,11 @@ export default function VerificationScreen({ navigation, route }) {
           </View>
 
           {/* OTP boxes */}
-          <View style={styles.otpRow}>
+          <View testID="otp-input" style={styles.otpRow}>
             {otp.map((digit, idx) => (
               <TextInput
                 key={idx}
+                testID={`otp-input-${idx}`}
                 ref={(ref) => (inputRefs.current[idx] = ref)}
                 style={[
                   styles.otpBox,
@@ -160,6 +161,7 @@ export default function VerificationScreen({ navigation, route }) {
 
           {/* Verify button */}
           <TouchableOpacity
+            testID="verify-button"
             style={[styles.verifyBtn, loading && styles.verifyBtnDisabled]}
             onPress={() => handleVerify()}
             disabled={loading}

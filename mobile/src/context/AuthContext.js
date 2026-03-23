@@ -5,9 +5,14 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { authService } from '../services/auth';
 import { fleetService } from '../services/fleet';
-
-const TOKEN_KEY = '@mobo_token';
-const USER_KEY  = '@mobo_user';
+import {
+  saveAccessToken,
+  getAccessToken,
+  saveRefreshToken,
+  saveUserSafe,
+  getUserSafe,
+  clearAllSecureData,
+} from '../utils/secureStorage';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -90,14 +95,14 @@ export function AuthProvider({ children }) {
 
   const loadStoredAuth = async () => {
     try {
-      const [storedToken, storedUser] = await Promise.all([
-        AsyncStorage.getItem(TOKEN_KEY),
-        AsyncStorage.getItem(USER_KEY),
+      // Tokens from hardware-backed SecureStore; only safe subset from AsyncStorage
+      const [storedToken, safeUser] = await Promise.all([
+        getAccessToken(),
+        getUserSafe(),
       ]);
-      if (storedToken && storedUser) {
-        const parsedUser = JSON.parse(storedUser);
+      if (storedToken && safeUser) {
         setToken(storedToken);
-        setUser(parsedUser);
+        setUser(safeUser);
         setIsAuthenticated(true);
       }
     } catch (err) {
@@ -107,10 +112,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const persistAuth = async (authToken, authUser) => {
+  /**
+   * Persists auth credentials securely.
+   * - Access & refresh tokens → expo-secure-store (iOS Keychain / Android Keystore)
+   * - User profile → only non-PII subset in AsyncStorage
+   */
+  const persistAuth = async (authToken, authUser, authRefreshToken = null) => {
     await Promise.all([
-      AsyncStorage.setItem(TOKEN_KEY, authToken),
-      AsyncStorage.setItem(USER_KEY, JSON.stringify(authUser)),
+      saveAccessToken(authToken),
+      authRefreshToken ? saveRefreshToken(authRefreshToken) : Promise.resolve(),
+      saveUserSafe(authUser),   // strips PII before writing to AsyncStorage
     ]);
     setToken(authToken);
     setUser(authUser);
@@ -118,10 +129,7 @@ export function AuthProvider({ children }) {
   };
 
   const clearAuth = async () => {
-    await Promise.all([
-      AsyncStorage.removeItem(TOKEN_KEY),
-      AsyncStorage.removeItem(USER_KEY),
-    ]);
+    await clearAllSecureData();   // wipes SecureStore + AsyncStorage user entry
     setToken(null);
     setUser(null);
     setMyFleets([]);
@@ -149,9 +157,9 @@ export function AuthProvider({ children }) {
   // ── Login ──────────────────────────────────────────────────
   const login = useCallback(async (identifier, password) => {
     const response = await authService.login(identifier, password);
-    const { token: authToken, user: authUser, fleets } = response.data;
+    const { token: authToken, refresh_token: authRefreshToken, user: authUser, fleets } = response.data;
 
-    await persistAuth(authToken, authUser);
+    await persistAuth(authToken, authUser, authRefreshToken);
 
     // Pre-load fleet data if fleet owner
     if (authUser.role === 'fleet_owner' && fleets) {
@@ -187,10 +195,9 @@ export function AuthProvider({ children }) {
 
   const completeDriverRegistration = useCallback(async (driverData) => {
     const response = await authService.registerDriverComplete(driverData);
-    // Update stored user with completed registration step
     if (user) {
       const updatedUser = { ...user, registration_step: 'complete', registration_completed: true };
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+      await saveUserSafe(updatedUser);
       setUser(updatedUser);
     }
     return response;
@@ -210,7 +217,7 @@ export function AuthProvider({ children }) {
     }
     if (user) {
       const updatedUser = { ...user, registration_step: 'add_vehicles' };
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+      await saveUserSafe(updatedUser);
       setUser(updatedUser);
     }
     return response;
@@ -242,7 +249,7 @@ export function AuthProvider({ children }) {
   const updateProfile = useCallback(async (profileData) => {
     const updated = await authService.updateProfile(profileData);
     const newUser = { ...user, ...updated };
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    await saveUserSafe(newUser);   // only safe subset persisted
     setUser(newUser);
     return newUser;
   }, [user]);
@@ -251,7 +258,7 @@ export function AuthProvider({ children }) {
     try {
       const response = await authService.refreshToken(token);
       const newToken = response.data?.token || response.token;
-      await AsyncStorage.setItem(TOKEN_KEY, newToken);
+      await saveAccessToken(newToken);  // SecureStore
       setToken(newToken);
       return newToken;
     } catch (err) {

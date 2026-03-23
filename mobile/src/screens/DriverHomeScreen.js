@@ -74,6 +74,12 @@ const QUICK_ACTIONS = [
     color: '#0077CC',
   },
   {
+    icon: 'star-half-outline',
+    label: 'Rating\nFilter',
+    screen: 'DriverRatingFilter',
+    color: '#3B82F6',
+  },
+  {
     icon: 'shield-outline',
     label: 'Guarantee',
     screen: 'EarningsGuarantee',
@@ -279,20 +285,30 @@ export default function DriverHomeScreen({ navigation }) {
         },
       ]);
     } else {
-      // Check fatigue before going online
+      // Fatigue safety check — FAIL CLOSED.
+      // If the check cannot be completed for any reason, we do NOT allow the
+      // driver to go online. This is a safety-critical gate — err on the side
+      // of caution to prevent fatigued driving incidents and regulatory liability.
       try {
         const fatigueRes = await api.get('/safety/fatigue-check');
         if (fatigueRes.data?.should_break) {
           navigation.navigate('FatigueBreak', {
-            reason: fatigueRes.data.reason || 'hours',
+            reason:       fatigueRes.data.reason       || 'hours',
             hours_online: fatigueRes.data.hours_online || 0,
-            trips_today: fatigueRes.data.trips_today || 0,
+            trips_today:  fatigueRes.data.trips_today  || 0,
           });
-          return; // Don't go online yet
+          return; // Block going online
         }
+        // Only reach here on a clean, explicit "no break needed" response
       } catch (fatigueErr) {
-        // If fatigue check fails, allow going online (fail open)
-        console.warn('[Fatigue Check]', fatigueErr.message);
+        // Fail CLOSED — do not allow going online if check is unavailable.
+        console.warn('[Fatigue Check] Service unavailable:', fatigueErr.message);
+        Alert.alert(
+          'Safety Check Unavailable',
+          'We could not verify your driving hours right now. Please wait a moment and try again.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        return; // Block going online — setIsOnline(true) intentionally NOT called
       }
 
       setIsOnline(true);

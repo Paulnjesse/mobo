@@ -2,22 +2,58 @@ const { Pool } = require('pg');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+/**
+ * Build the SSL configuration for PostgreSQL connections.
+ *
+ * In production:
+ *   - rejectUnauthorized: true  → validates the server's certificate chain
+ *   - ca: DB_SSL_CA             → PEM-encoded CA cert provided by Render/Supabase/RDS
+ *
+ * To get DB_SSL_CA on Render:
+ *   Dashboard → PostgreSQL instance → Connection → Download CA Certificate
+ *   Store the PEM content as a single-line env var (replace newlines with \n).
+ *
+ * In development/test: SSL disabled (local Postgres has no cert).
+ */
+function buildSslConfig() {
+  if (!isProduction) return false;
+
+  const sslConfig = { rejectUnauthorized: true };
+
+  if (process.env.DB_SSL_CA) {
+    // Allow \n literals in env var to be converted back to actual newlines
+    sslConfig.ca = process.env.DB_SSL_CA.replace(/\\n/g, '\n');
+  } else {
+    // If no CA cert provided, still enforce validation using system trust store.
+    // This protects against MITM while trusting well-known CAs (e.g. Let's Encrypt).
+    console.warn('[DB] DB_SSL_CA not set — using system CA bundle. Set DB_SSL_CA for full pinning.');
+  }
+
+  return sslConfig;
+}
+
+const sslConfig = buildSslConfig();
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
+  ssl: sslConfig,
   max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 2_000,
+  statement_timeout: 10_000,       // kill queries running > 10s (prevents slow-query DoS)
+  query_timeout:     15_000,
 });
 
 // Read replica pool (falls back to primary if DATABASE_READ_URL not set)
 const readPool = process.env.DATABASE_READ_URL
   ? new Pool({
       connectionString: process.env.DATABASE_READ_URL,
-      ssl: isProduction ? { rejectUnauthorized: false } : false,
-      max: 20,  // higher limit for reads
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      ssl: sslConfig,
+      max: 30,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+      statement_timeout: 10_000,
+      query_timeout:     15_000,
     })
   : pool;
 

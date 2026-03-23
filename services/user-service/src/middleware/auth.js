@@ -1,9 +1,17 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mobo_jwt_secret_change_in_production';
+// Fail fast — never silently accept a weak fallback secret in any environment.
+// server.js already enforces this for production; this check catches test/dev misconfig.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  const msg = '[FATAL] JWT_SECRET must be set and at least 32 characters. Exiting.';
+  console.error(msg);
+  process.exit(1);
+}
 
 /**
  * Authenticate JWT token — attaches req.user
+ * Accepts tokens issued with HS256 only (prevents algorithm confusion attacks).
  */
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -15,7 +23,8 @@ const authenticate = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    // algorithms: ['HS256'] — prevents alg:none and RS256 confusion attacks
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     req.user = decoded;
     next();
   } catch (err) {

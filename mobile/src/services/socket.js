@@ -19,15 +19,18 @@
  */
 
 import { io } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { getAccessToken } from '../utils/secureStorage';
 
 // ---------------------------------------------------------------------------
-// Service URLs — override via environment / build config as needed
+// Service URLs driven by EAS build profile — never hardcoded
 // ---------------------------------------------------------------------------
-const RIDE_SOCKET_URL = 'https://mobo-ride-service.onrender.com';
-const LOCATION_SOCKET_URL = 'https://mobo-location-service.onrender.com';
-
-const TOKEN_KEY = '@mobo_token';
+const RIDE_SOCKET_URL =
+  Constants.expoConfig?.extra?.rideSocketUrl ??
+  'https://mobo-ride-service.onrender.com';
+const LOCATION_SOCKET_URL =
+  Constants.expoConfig?.extra?.locationSocketUrl ??
+  'https://mobo-location-service.onrender.com';
 
 // ---------------------------------------------------------------------------
 // Socket instances (created lazily on first connectSockets() call)
@@ -63,7 +66,7 @@ export function getCachedDriverLocation(rideId) {
  */
 async function getToken() {
   try {
-    return (await AsyncStorage.getItem(TOKEN_KEY)) || '';
+    return (await getAccessToken()) || '';
   } catch {
     return '';
   }

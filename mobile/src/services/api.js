@@ -1,10 +1,19 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import {
+  getAccessToken,
+  getRefreshToken,
+  saveAccessToken,
+  clearAllSecureData,
+} from '../utils/secureStorage';
 
-const TOKEN_KEY = '@mobo_token';
+// Base URL driven by EAS build profile env — never hardcoded
+const BASE_URL =
+  Constants.expoConfig?.extra?.apiUrl ??
+  'https://mobo-api-gateway.onrender.com/api/v1';
 
 const api = axios.create({
-  baseURL: 'https://mobo-api-gateway.onrender.com/api/v1',
+  baseURL: BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -12,11 +21,11 @@ const api = axios.create({
   },
 });
 
-// Request interceptor — attach JWT
+// Request interceptor — attach JWT from hardware-backed SecureStore
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const token = await getAccessToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -71,28 +80,28 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = await AsyncStorage.getItem('@mobo_refresh_token');
+        const refreshToken = await getRefreshToken();  // SecureStore
         if (refreshToken) {
           const response = await axios.post(
-            'https://mobo-api-gateway.onrender.com/api/v1/auth/refresh',
+            `${BASE_URL}/auth/refresh`,
             { refreshToken },
             { timeout: 15000 }
           );
           const newToken = response.data.token || response.data.data?.token;
-          await AsyncStorage.setItem(TOKEN_KEY, newToken);
+          await saveAccessToken(newToken);  // SecureStore
           processQueue(null, newToken);
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return api(originalRequest);
         } else {
           processQueue(new Error('Session expired'), null);
-          await AsyncStorage.multiRemove([TOKEN_KEY, '@mobo_user']);
+          await clearAllSecureData();
           const sessionError = new Error('Your session has expired. Please log in again.');
           sessionError.isAuthError = true;
           return Promise.reject(sessionError);
         }
       } catch (refreshError) {
         processQueue(refreshError, null);
-        await AsyncStorage.multiRemove([TOKEN_KEY, '@mobo_user']);
+        await clearAllSecureData();
         const sessionError = new Error('Your session has expired. Please log in again.');
         sessionError.isAuthError = true;
         return Promise.reject(sessionError);

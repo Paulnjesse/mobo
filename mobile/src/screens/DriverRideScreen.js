@@ -518,7 +518,15 @@ export default function DriverRideScreen({ navigation, route }) {
             <Text style={styles.riderAvatarText}>{(ride.rider?.name || 'R').charAt(0).toUpperCase()}</Text>
           </View>
           <View style={styles.riderInfo}>
-            <Text style={styles.riderName}>{ride.rider?.name || 'Rider'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <Text style={[styles.riderName, { marginBottom: 0 }]}>{ride.rider?.name || 'Rider'}</Text>
+              {ride.rider?.is_verified && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#eff6ff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe' }}>
+                  <Ionicons name="shield-checkmark" size={10} color="#3b82f6" />
+                  <Text style={{ fontSize: 9, fontWeight: '700', color: '#1e40af', textTransform: 'uppercase' }}>Verified</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.ratingRow}>
               <Ionicons name="star" size={13} color={colors.warning} />
               <Text style={styles.ratingText}>{ride.rider?.rating?.toFixed(1) || '–'}</Text>

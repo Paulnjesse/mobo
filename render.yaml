@@ -9,14 +9,23 @@ envVarGroups:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: INTERNAL_SERVICE_KEY
+        generateValue: true   # shared secret for inter-service auth (mTLS equivalent)
 
 services:
+  # ── User Service ──────────────────────────────────────────────────────────────
   - type: web
     name: mobo-user-service
     runtime: node
     rootDir: services/user-service
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /health
+    scaling:
+      minInstances: 2
+      maxInstances: 5
+      targetMemoryPercent: 75
+      targetCPUPercent: 70
     envVars:
       - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
@@ -35,13 +44,32 @@ services:
         sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: APPLE_TEAM_ID
+        sync: false
+      - key: APPLE_KEY_ID
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
 
+  # ── Ride Service ──────────────────────────────────────────────────────────────
   - type: web
     name: mobo-ride-service
     runtime: node
     rootDir: services/ride-service
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /health
+    scaling:
+      minInstances: 2
+      maxInstances: 6
+      targetMemoryPercent: 75
+      targetCPUPercent: 70
     envVars:
       - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
@@ -54,15 +82,26 @@ services:
         sync: false
       - key: DATABASE_READ_URL
         sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
+      - key: SOCKET_CORS_ORIGIN
+        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
 
+  # ── Payment Service ───────────────────────────────────────────────────────────
   - type: web
     name: mobo-payment-service
     runtime: node
     rootDir: services/payment-service
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /health
+    scaling:
+      minInstances: 2
+      maxInstances: 4
+      targetMemoryPercent: 70
+      targetCPUPercent: 65
     envVars:
       - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
@@ -73,17 +112,40 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: MTN_API_USER
+        sync: false
+      - key: MTN_API_KEY
+        sync: false
+      - key: MTN_SUBSCRIPTION_KEY
+        sync: false
+      - key: ORANGE_CLIENT_ID
+        sync: false
+      - key: ORANGE_CLIENT_SECRET
+        sync: false
       - key: DATABASE_READ_URL
         sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
+      - key: CORS_ORIGIN
+        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
 
+  # ── Location Service ──────────────────────────────────────────────────────────
   - type: web
     name: mobo-location-service
     runtime: node
     rootDir: services/location-service
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /health
+    scaling:
+      minInstances: 2
+      maxInstances: 5
+      targetMemoryPercent: 75
+      targetCPUPercent: 70
     envVars:
       - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
@@ -96,13 +158,22 @@ services:
         sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
+      - key: CORS_ORIGIN
+        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
 
+  # ── API Gateway ───────────────────────────────────────────────────────────────
   - type: web
     name: mobo-api-gateway
     runtime: node
     rootDir: api-gateway
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /health
+    scaling:
+      minInstances: 2
+      maxInstances: 8
+      targetMemoryPercent: 70
+      targetCPUPercent: 65
     envVars:
       - fromGroup: mobo-shared-secrets
       - key: NODE_ENV
@@ -119,11 +190,17 @@ services:
         sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
+      - key: CORS_ORIGIN
+        value: https://mobo.cm,https://app.mobo.cm,https://admin.mobo.cm
 
+  # ── Admin Dashboard ───────────────────────────────────────────────────────────
   - type: web
     name: mobo-admin
     runtime: docker
     rootDir: admin
+    healthCheckPath: /
     envVars:
       - key: REACT_APP_API_URL
         value: https://mobo-api-gateway.onrender.com/api
+      - key: REACT_APP_STRIPE_PUBLISHABLE_KEY
+        sync: false

@@ -26,6 +26,16 @@ if (!isKeySet) {
   );
 }
 
+// ─── Backend service URLs per build profile ──────────────────────────────────
+// Set these in .env.development / .env.staging / .env.production
+// and reference them via EXPO_PUBLIC_* (client-side) or EAS secrets (server-side).
+const apiUrl = process.env.EXPO_PUBLIC_API_URL
+  || 'https://mobo-api-gateway.onrender.com/api/v1';
+const rideSocketUrl = process.env.EXPO_PUBLIC_RIDE_SOCKET_URL
+  || 'https://mobo-ride-service.onrender.com';
+const locationSocketUrl = process.env.EXPO_PUBLIC_LOCATION_SOCKET_URL
+  || 'https://mobo-location-service.onrender.com';
+
 module.exports = ({ config }) => ({
   ...config,
 
@@ -50,5 +60,8 @@ module.exports = ({ config }) => ({
   extra: {
     ...config.extra,
     googleMapsKey,
+    apiUrl,
+    rideSocketUrl,
+    locationSocketUrl,
   },
 });

@@ -32,6 +32,7 @@ const RIDE_TYPES = [
   { id: 'delivery', label: 'Delivery', icon: 'cube-outline', eta: '6 min', price: '1,500 XAF' },
   { id: 'rental', label: 'Rental', icon: 'time-outline', eta: 'By hour', price: 'From 8k' },
   { id: 'outstation', label: 'Outstation', icon: 'map-outline', eta: 'Intercity', price: 'From 25k' },
+  { id: 'airport_transfer', label: 'Airport', icon: 'airplane-outline', eta: 'Pre-book', price: 'From 15k' },
   { id: 'wav', label: 'Accessible', icon: 'accessibility-outline', eta: '8 min', price: '1,500 XAF' },
   { id: 'ev', label: 'Green', icon: 'leaf-outline', eta: '6 min', price: '1,400 XAF' },
   { id: 'moto', label: 'Benskin', icon: 'bicycle-outline', eta: '2 min', price: '500 XAF' },
@@ -182,6 +183,7 @@ export default function HomeScreen({ navigation }) {
 
       {/* Full-screen map — Google Maps provider for better African city maps + traffic */}
       <MapView
+        testID="home-map-view"
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
@@ -263,9 +265,10 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.handleBar} />
 
         {/* "Where to?" search pill — Google Places autocomplete */}
-        <View style={[styles.searchPill, searchFocused && styles.searchPillFocused]}>
+        <View testID="where-to-pill" style={[styles.searchPill, searchFocused && styles.searchPillFocused]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} />
           <TextInput
+            testID="destination-search-input"
             style={styles.searchPillInput}
             placeholder={t('whereAreYouGoing')}
             placeholderTextColor={colors.textSecondary}
@@ -287,6 +290,7 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
+              testID="confirm-ride-button"
               style={styles.searchPillArrow}
               onPress={handleBookRide}
               activeOpacity={0.8}
@@ -303,8 +307,9 @@ export default function HomeScreen({ navigation }) {
               data={searchResults}
               keyExtractor={(item) => item.placeId}
               keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
+              renderItem={({ item, index }) => (
                 <TouchableOpacity
+                  testID={`search-result-${index}`}
                   style={styles.autocompleteItem}
                   onPress={() => handlePlaceSelect(item)}
                   activeOpacity={0.75}
@@ -342,6 +347,7 @@ export default function HomeScreen({ navigation }) {
             return (
               <TouchableOpacity
                 key={type.id}
+                testID={`ride-type-${type.id}`}
                 style={[styles.rideTypeCard, isSelected && styles.rideTypeCardSelected]}
                 onPress={() => setSelectedType(type.id)}
                 activeOpacity={0.8}

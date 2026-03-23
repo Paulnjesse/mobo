@@ -198,6 +198,7 @@ export default function LoginScreen({ navigation }) {
           {/* Form */}
           <View style={styles.form}>
             <Input
+              testID="phone-input"
               label={t('phoneOrEmail')}
               placeholder="+237 6XX XXX XXX or email"
               value={identifier}
@@ -228,6 +229,7 @@ export default function LoginScreen({ navigation }) {
 
             {/* Login button */}
             <TouchableOpacity
+              testID="continue-button"
               style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
               onPress={handleLogin}
               disabled={loading}

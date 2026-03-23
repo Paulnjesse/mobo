@@ -23,6 +23,8 @@ const METHOD_ICONS = {
   wave: { icon: 'wallet-outline', color: '#0A4BF0', label: 'Wave' },
   card: { icon: 'card-outline', color: colors.text, label: 'Card' },
   cash: { icon: 'cash-outline', color: colors.success, label: 'Cash' },
+  apple: { icon: 'logo-apple', color: '#000000', label: 'Apple Pay' },
+  google: { icon: 'logo-google', color: '#DB4437', label: 'Google Pay' },
 };
 
 const ADD_TYPES = [
@@ -30,6 +32,8 @@ const ADD_TYPES = [
   { id: 'orange', label: 'Orange Money', icon: 'phone-portrait-outline', color: '#FF6600' },
   { id: 'wave', label: 'Wave', icon: 'wallet-outline', color: '#0A4BF0' },
   { id: 'card', label: 'Card', icon: 'card-outline', color: colors.text },
+  { id: 'apple', label: 'Apple', icon: 'logo-apple', color: '#000000' },
+  { id: 'google', label: 'Google', icon: 'logo-google', color: '#DB4437' },
 ];
 
 export default function PaymentMethodsScreen({ navigation }) {
