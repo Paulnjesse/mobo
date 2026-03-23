@@ -1,11 +1,23 @@
 /**
  * Run all MOBO SQL migrations against Supabase in order.
+ *
+ * Usage:
+ *   DATABASE_URL="postgresql://..." node database/run_migrations.js
+ *
+ * Or create database/.env with DATABASE_URL set.
  */
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const { Client } = require('../services/ride-service/node_modules/pg');
 const fs = require('fs');
 const path = require('path');
 
-const CONNECTION_STRING = "postgresql://postgres:Douala@1234$@db.bkanmaljfqgsxnthqnmp.supabase.co:5432/postgres";
+const CONNECTION_STRING = process.env.DATABASE_URL;
+if (!CONNECTION_STRING) {
+  console.error('ERROR: DATABASE_URL environment variable is not set.');
+  console.error('Set it in database/.env or export it before running this script.');
+  process.exit(1);
+}
 
 const FILES = [
   'init.sql',
@@ -29,6 +41,8 @@ const FILES = [
   'migration_018.sql',
   'migration_019.sql',
   'seed.sql',
+  'migration_020.sql',
+  'migration_021.sql',
 ];
 
 async function run() {
