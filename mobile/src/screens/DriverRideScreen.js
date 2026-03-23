@@ -133,6 +133,15 @@ export default function DriverRideScreen({ navigation, route }) {
   const FREE_WAIT_SEC = 3 * 60;   // 3 minutes free
   const WAIT_RATE_XAF = 50 / 60;  // 50 XAF/min → per second
 
+  // Explicit unmount cleanup for all timers and intervals
+  useEffect(() => {
+    return () => {
+      if (waitTimerRef.current) clearInterval(waitTimerRef.current);
+      if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (stepIndex === 1) {
       // Start timer when driver marks "Arrived at Pickup"

@@ -44,6 +44,7 @@ const FILES = [
   'migration_020.sql',
   'migration_021.sql',
   'migration_022.sql',
+  'migration_023.sql',
 ];
 
 async function run() {

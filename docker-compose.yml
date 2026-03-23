@@ -101,6 +101,23 @@ services:
       db:
         condition: service_healthy
 
+  # ── ML Fraud Detection Service ─────────────────────────────────────────────
+  ml-service:
+    build: ./services/ml-service
+    container_name: mobo_ml
+    ports:
+      - "8000:8000"
+    environment:
+      INTERNAL_SERVICE_KEY: mobo_internal_key_change_in_production
+      MODEL_DIR: /tmp/models
+    volumes:
+      - ml_models:/tmp/models
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8000/health').raise_for_status()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # ── Unleash: self-hosted feature flags ────────────────────────────────────
   unleash-db:
     image: postgres:15-alpine
@@ -138,3 +155,4 @@ services:
 volumes:
   pgdata:
   unleash_pgdata:
+  ml_models:

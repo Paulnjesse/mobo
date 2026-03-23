@@ -1,55 +1,48 @@
 'use strict';
 
 /**
- * fraudDetection.js  —  MOBO Fraud Detection Engine
+ * fraudDetection.js — MOBO Fraud Detection Engine (ML-backed)
  *
- * Detects two primary fraud patterns:
+ * All scoring is delegated to the ML microservice (services/ml-service).
+ * This module handles:
+ *   - Calling ML service endpoints with retry + timeout
+ *   - Writing fraud_flags to DB based on ML verdict
+ *   - Auto-suspending users on critical verdicts
+ *   - Falling back to rule-based checks when ML service is unavailable
  *
- * 1. GPS Spoofing
- *    Drivers use fake GPS apps to appear in high-surge zones or to shorten
- *    trip distances. Detection:
- *      - Impossible speed (>250 km/h sustained across 3+ updates)
- *      - Teleportation (>50 km jump in <30 s — can't happen on any road)
- *      - Coordinate clamping outside Cameroon/CEMAC bounding box
- *
- * 2. Ride Collusion
- *    Driver and rider are the same person (or coordinating accounts) to
- *    generate fraudulent trip revenue or promotions. Detection:
- *      - Same device fingerprint (device_id) used for both accounts
- *      - Same IP address used to create/book rides on different accounts
- *      - Repeated mutual bookings: same driver/rider pair > threshold rides/week
- *      - Rapid consecutive bookings with no intervening driver movement
- *
- * Results are written to `fraud_flags` table (created in migration_022.sql).
- * High-severity flags auto-suspend the user pending admin review.
+ * ML Service endpoints:
+ *   POST /score/gps        — GPS spoofing detection (Isolation Forest)
+ *   POST /score/payment    — Payment fraud (Gradient Boosting)
+ *   POST /score/collusion  — Ride collusion (Random Forest)
  */
+
+const axios = require('axios');
+
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://ml-service:8000';
+const ML_TIMEOUT_MS  = parseInt(process.env.ML_TIMEOUT_MS || '800', 10);  // fast path — reject if >800ms
 
 // Lazy-load pg pool — each service provides DATABASE_URL in its env
 let _pool = null;
 function getPool() {
   if (!_pool) {
     const { Pool } = require('pg');
-    _pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false } });
+    _pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+    });
   }
   return _pool;
 }
 const db = { query: (...args) => getPool().query(...args) };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const MAX_SPEED_KMH            = 250;   // absolute max for any legitimate road vehicle
-const TELEPORT_DISTANCE_KM     = 50;    // max plausible jump in under TELEPORT_WINDOW_SEC
-const TELEPORT_WINDOW_SEC      = 30;
-const COLLUSION_PAIR_THRESHOLD = 5;     // mutual rides per 7-day window → flag
-const SPEED_VIOLATION_STREAK   = 3;     // consecutive violations before raising flag
-
-// Cameroon + wider CEMAC bounding box (degrees)
+// ─── Constants (fallback rule-based) ─────────────────────────────────────────
+const MAX_SPEED_KMH        = 250;
+const TELEPORT_DISTANCE_KM = 50;
+const TELEPORT_WINDOW_SEC  = 30;
 const BOUNDS = { minLat: 1.6, maxLat: 13.1, minLng: 8.4, maxLng: 16.2 };
 
-// ─── Haversine distance (km) ──────────────────────────────────────────────────
-
 function haversineKm(lat1, lng1, lat2, lng2) {
-  const R    = 6371;
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
@@ -58,6 +51,27 @@ function haversineKm(lat1, lng1, lat2, lng2) {
     Math.cos((lat2 * Math.PI) / 180) *
     Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── ML Service caller ────────────────────────────────────────────────────────
+
+async function callML(endpoint, payload) {
+  try {
+    const res = await axios.post(`${ML_SERVICE_URL}${endpoint}`, payload, {
+      timeout: ML_TIMEOUT_MS,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Service-Key': process.env.INTERNAL_SERVICE_KEY || '',
+      },
+    });
+    return res.data;
+  } catch (err) {
+    // ML service unavailable — fall back to rule-based
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(`[FraudDetection] ML service unavailable (${endpoint}):`, err.message);
+    }
+    return null;
+  }
 }
 
 // ─── Flag writer ──────────────────────────────────────────────────────────────
@@ -71,231 +85,201 @@ async function writeFraudFlag({ userId, rideId, flagType, severity, details }) {
       [userId, rideId || null, flagType, severity, JSON.stringify(details)]
     );
     const flagId = result.rows[0]?.id;
-    console.warn(`[FraudDetection] Flag raised: ${flagType} severity=${severity} user=${userId} flag_id=${flagId}`, details);
+    console.warn(`[FraudDetection] Flag: ${flagType} severity=${severity} user=${userId} flag_id=${flagId}`);
 
-    // Auto-suspend for critical severity
     if (severity === 'critical') {
       await db.query(
         `UPDATE users SET status = 'suspended', suspension_reason = $1 WHERE id = $2 AND status = 'active'`,
         [`Auto-suspended: fraud flag ${flagType} (flag_id=${flagId})`, userId]
       );
-      console.warn(`[FraudDetection] User ${userId} auto-suspended due to critical fraud flag ${flagId}`);
     }
-
     return flagId;
   } catch (err) {
-    console.error('[FraudDetection] Failed to write fraud flag:', err.message, { userId, flagType });
+    console.error('[FraudDetection] Failed to write flag:', err.message);
     return null;
   }
 }
 
+function verdictToSeverity(verdict) {
+  return verdict === 'block' ? 'critical' : verdict === 'review' ? 'high' : 'low';
+}
+
 // ─── 1. GPS Spoofing ──────────────────────────────────────────────────────────
 
-/**
- * checkGpsSpoofing(update)
- *
- * Call on every location update before persisting it.
- * Returns { ok: boolean, reason?: string } — if ok=false, reject the update.
- *
- * @param {object} update
- *   userId, lat, lng, timestampMs,
- *   prevLat?, prevLng?, prevTimestampMs?,
- *   speedViolationStreak? (caller maintains this counter per driver session)
- */
+const _gpsState = new Map(); // userId → { lat, lng, ts, streak }
+
 async function checkGpsSpoofing(update) {
-  const { userId, lat, lng, timestampMs, prevLat, prevLng, prevTimestampMs, rideId } = update;
+  const { userId, lat, lng, timestampMs, rideId } = update;
+  const prev = _gpsState.get(userId);
 
-  // ── Out-of-bounds check ──────────────────────────────────────────────────
-  const outOfBounds =
-    lat < BOUNDS.minLat || lat > BOUNDS.maxLat ||
-    lng < BOUNDS.minLng || lng > BOUNDS.maxLng;
+  // Try ML service first
+  const mlResult = await callML('/score/gps', {
+    user_id:           userId,
+    ride_id:           rideId || null,
+    lat, lng,
+    timestamp_ms:      timestampMs,
+    prev_lat:          prev?.lat || null,
+    prev_lng:          prev?.lng || null,
+    prev_timestamp_ms: prev?.ts  || null,
+    speed_kmh:         update.speedKmh || null,
+    accuracy_m:        update.accuracyM || null,
+  });
 
-  if (outOfBounds) {
-    // Warn only — could be cross-border trip
-    await writeFraudFlag({
-      userId,
-      rideId,
-      flagType: 'gps_spoofing',
-      severity: 'low',
-      details:  { reason: 'out_of_bounds', lat, lng, bounds: BOUNDS },
-    });
-    // Don't block — let it through with a low flag
+  if (mlResult) {
+    _gpsState.set(userId, { lat, lng, ts: timestampMs, streak: mlResult.verdict !== 'clean' ? (prev?.streak || 0) + 1 : 0 });
+
+    if (mlResult.verdict !== 'clean') {
+      await writeFraudFlag({
+        userId, rideId,
+        flagType: 'gps_spoofing',
+        severity: verdictToSeverity(mlResult.verdict),
+        details:  { ml_score: mlResult.fraud_score, signals: mlResult.signals, model: mlResult.model_version },
+      });
+      if (mlResult.verdict === 'block') {
+        return { ok: false, reason: mlResult.signals[0] || 'ml_fraud_detected' };
+      }
+    }
+    return { ok: true };
   }
 
-  if (!prevLat || !prevLng || !prevTimestampMs) return { ok: true };
+  // ── Rule-based fallback ───────────────────────────────────────────────────
+  if (!prev) {
+    _gpsState.set(userId, { lat, lng, ts: timestampMs, streak: 0 });
+    return { ok: true };
+  }
 
-  const distKm    = haversineKm(prevLat, prevLng, lat, lng);
-  const deltaSec  = Math.max((timestampMs - prevTimestampMs) / 1000, 0.001);
-  const speedKmh  = (distKm / deltaSec) * 3600;
+  const distKm   = haversineKm(prev.lat, prev.lng, lat, lng);
+  const deltaSec = Math.max((timestampMs - prev.ts) / 1000, 0.001);
+  const speedKmh = (distKm / deltaSec) * 3600;
 
-  // ── Teleportation check ──────────────────────────────────────────────────
   if (distKm > TELEPORT_DISTANCE_KM && deltaSec < TELEPORT_WINDOW_SEC) {
-    await writeFraudFlag({
-      userId,
-      rideId,
-      flagType: 'gps_spoofing',
-      severity: 'high',
-      details:  {
-        reason:     'teleportation',
-        distKm:     Math.round(distKm * 10) / 10,
-        deltaSec:   Math.round(deltaSec),
-        from:       [prevLat, prevLng],
-        to:         [lat, lng],
-      },
-    });
+    await writeFraudFlag({ userId, rideId, flagType: 'gps_spoofing', severity: 'high',
+      details: { reason: 'teleportation', distKm, deltaSec } });
+    _gpsState.set(userId, { lat, lng, ts: timestampMs, streak: (prev.streak || 0) + 1 });
     return { ok: false, reason: 'teleportation_detected' };
   }
-
-  // ── Impossible speed check ───────────────────────────────────────────────
   if (speedKmh > MAX_SPEED_KMH) {
-    const streak = (update.speedViolationStreak || 0) + 1;
-    if (streak >= SPEED_VIOLATION_STREAK) {
-      await writeFraudFlag({
-        userId,
-        rideId,
-        flagType: 'gps_spoofing',
-        severity: streak >= 5 ? 'critical' : 'medium',
-        details:  {
-          reason:   'impossible_speed',
-          speedKmh: Math.round(speedKmh),
-          streak,
-          distKm:   Math.round(distKm * 10) / 10,
-          deltaSec: Math.round(deltaSec),
-        },
-      });
+    const streak = (prev.streak || 0) + 1;
+    if (streak >= 3) {
+      await writeFraudFlag({ userId, rideId, flagType: 'gps_spoofing', severity: streak >= 5 ? 'critical' : 'medium',
+        details: { reason: 'impossible_speed', speedKmh, streak } });
     }
+    _gpsState.set(userId, { lat, lng, ts: timestampMs, streak });
     return { ok: false, reason: 'impossible_speed', streak };
   }
 
+  _gpsState.set(userId, { lat, lng, ts: timestampMs, streak: 0 });
   return { ok: true };
 }
 
 // ─── 2. Ride Collusion ────────────────────────────────────────────────────────
 
-/**
- * checkRideCollusion(rideId, driverId, riderId, meta)
- *
- * Call when a driver accepts a ride.
- * meta: { driverDeviceId?, riderDeviceId?, driverIp?, riderIp? }
- */
 async function checkRideCollusion(rideId, driverId, riderId, meta = {}) {
-  const flags = [];
-
-  // ── Same device fingerprint ──────────────────────────────────────────────
-  if (
-    meta.driverDeviceId &&
-    meta.riderDeviceId  &&
-    meta.driverDeviceId === meta.riderDeviceId
-  ) {
-    flags.push({
-      flagType: 'ride_collusion',
-      severity: 'critical',
-      details:  {
-        reason:        'same_device',
-        device_id:     meta.driverDeviceId,
-        driver_id:     driverId,
-        rider_id:      riderId,
-      },
-    });
-  }
-
-  // ── Same IP ──────────────────────────────────────────────────────────────
-  if (
-    meta.driverIp &&
-    meta.riderIp  &&
-    meta.driverIp === meta.riderIp &&
-    meta.driverIp !== '127.0.0.1'
-  ) {
-    flags.push({
-      flagType: 'ride_collusion',
-      severity: 'high',
-      details:  {
-        reason:    'same_ip',
-        ip:        meta.driverIp,
-        driver_id: driverId,
-        rider_id:  riderId,
-      },
-    });
-  }
-
-  // ── Repeated mutual bookings (past 7 days) ───────────────────────────────
+  // Get historical pair data from DB
+  let pair7d = 0, pair30d = 0;
   try {
-    const pairCount = await db.query(
-      `SELECT COUNT(*) AS cnt FROM rides
-       WHERE driver_id = $1 AND rider_id = $2
-         AND created_at > NOW() - INTERVAL '7 days'
-         AND status IN ('completed','in_progress')`,
+    const r7  = await db.query(
+      `SELECT COUNT(*) FROM rides WHERE driver_id=(SELECT id FROM drivers WHERE user_id=$1) AND rider_id=$2 AND created_at>NOW()-INTERVAL '7 days'`,
       [driverId, riderId]
     );
-    const cnt = parseInt(pairCount.rows[0]?.cnt || 0, 10);
-    if (cnt >= COLLUSION_PAIR_THRESHOLD) {
-      flags.push({
-        flagType: 'ride_collusion',
-        severity: cnt >= COLLUSION_PAIR_THRESHOLD * 2 ? 'critical' : 'high',
-        details:  {
-          reason:     'repeated_pair',
-          pair_rides_7d: cnt,
-          threshold:  COLLUSION_PAIR_THRESHOLD,
-          driver_id:  driverId,
-          rider_id:   riderId,
-        },
-      });
-    }
+    const r30 = await db.query(
+      `SELECT COUNT(*) FROM rides WHERE driver_id=(SELECT id FROM drivers WHERE user_id=$1) AND rider_id=$2 AND created_at>NOW()-INTERVAL '30 days'`,
+      [driverId, riderId]
+    );
+    pair7d  = parseInt(r7.rows[0]?.count || 0, 10);
+    pair30d = parseInt(r30.rows[0]?.count || 0, 10);
   } catch (err) {
-    console.error('[FraudDetection] Collusion DB query failed:', err.message);
+    console.error('[FraudDetection] Pair query failed:', err.message);
   }
 
-  // Write all flags
-  for (const flag of flags) {
-    await writeFraudFlag({ userId: driverId, rideId, ...flag });
-  }
+  const mlResult = await callML('/score/collusion', {
+    ride_id:          rideId,
+    driver_id:        driverId,
+    rider_id:         riderId,
+    driver_device_id: meta.driverDeviceId || null,
+    rider_device_id:  meta.riderDeviceId  || null,
+    driver_ip:        meta.driverIp       || null,
+    rider_ip:         meta.riderIp        || null,
+    pair_rides_7d:    pair7d,
+    pair_rides_30d:   pair30d,
+  });
 
-  const highestSeverity = flags.reduce((acc, f) => {
-    const order = { low: 1, medium: 2, high: 3, critical: 4 };
-    return (order[f.severity] || 0) > (order[acc] || 0) ? f.severity : acc;
-  }, null);
-
-  return { flagged: flags.length > 0, severity: highestSeverity, count: flags.length };
-}
-
-// ─── 3. Fare Manipulation ─────────────────────────────────────────────────────
-
-/**
- * checkFareManipulation(rideId, driverId, estimatedFare, finalFare)
- *
- * Flags rides where the final fare deviates significantly from the estimate.
- * Drivers manually editing fare fields, or exploiting fare calculation bugs.
- */
-async function checkFareManipulation(rideId, driverId, estimatedFare, finalFare) {
-  if (!estimatedFare || estimatedFare <= 0 || !finalFare) return { flagged: false };
-
-  const ratio = finalFare / estimatedFare;
-
-  // More than 3× the estimate or more than 5000 XAF absolute difference
-  const absDiff = Math.abs(finalFare - estimatedFare);
-  if (ratio > 3.0 || (absDiff > 5000 && ratio > 2.0)) {
-    const severity = ratio > 5.0 ? 'high' : 'medium';
+  if (mlResult && mlResult.verdict !== 'clean') {
     await writeFraudFlag({
       userId:   driverId,
       rideId,
-      flagType: 'fare_manipulation',
-      severity,
-      details:  {
-        estimated_fare: estimatedFare,
-        final_fare:     finalFare,
-        ratio:          Math.round(ratio * 100) / 100,
-        abs_diff_xaf:   absDiff,
-      },
+      flagType: 'ride_collusion',
+      severity: verdictToSeverity(mlResult.verdict),
+      details:  { ml_score: mlResult.fraud_score, signals: mlResult.signals },
     });
-    return { flagged: true, severity, ratio };
+    return { flagged: true, severity: verdictToSeverity(mlResult.verdict) };
   }
 
+  // Rule-based fallback
+  if (meta.driverDeviceId && meta.riderDeviceId && meta.driverDeviceId === meta.riderDeviceId) {
+    await writeFraudFlag({ userId: driverId, rideId, flagType: 'ride_collusion', severity: 'critical',
+      details: { reason: 'same_device', device_id: meta.driverDeviceId } });
+    return { flagged: true, severity: 'critical' };
+  }
+  if (pair7d >= 5) {
+    await writeFraudFlag({ userId: driverId, rideId, flagType: 'ride_collusion', severity: 'high',
+      details: { reason: 'repeated_pair', pair7d } });
+    return { flagged: true, severity: 'high' };
+  }
+
+  return { flagged: false };
+}
+
+// ─── 3. Payment Fraud (ML-scored) ────────────────────────────────────────────
+
+async function checkPaymentFraud(userId, rideId, paymentData) {
+  const mlResult = await callML('/score/payment', {
+    user_id:              userId,
+    ride_id:              rideId || null,
+    amount_xaf:           paymentData.amount,
+    method:               paymentData.method,
+    device_fingerprint:   paymentData.deviceFingerprint || null,
+    ip_address:           paymentData.ipAddress || null,
+    payments_last_1h:     paymentData.paymentsLast1h || 0,
+    payments_last_24h:    paymentData.paymentsLast24h || 0,
+    failed_attempts_last_1h: paymentData.failedLast1h || 0,
+    avg_amount_30d:       paymentData.avgAmount30d || null,
+    new_device:           paymentData.newDevice || false,
+    new_location:         paymentData.newLocation || false,
+    account_age_days:     paymentData.accountAgeDays || 365,
+  });
+
+  if (mlResult && mlResult.verdict !== 'clean') {
+    await writeFraudFlag({
+      userId, rideId,
+      flagType: 'payment_fraud',
+      severity: verdictToSeverity(mlResult.verdict),
+      details:  { ml_score: mlResult.fraud_score, signals: mlResult.signals },
+    });
+    return { flagged: true, verdict: mlResult.verdict, score: mlResult.fraud_score, signals: mlResult.signals };
+  }
+  return { flagged: false };
+}
+
+// ─── 4. Fare Manipulation (rule-based — no ML needed) ────────────────────────
+
+async function checkFareManipulation(rideId, driverId, estimatedFare, finalFare) {
+  if (!estimatedFare || estimatedFare <= 0 || !finalFare) return { flagged: false };
+  const ratio   = finalFare / estimatedFare;
+  const absDiff = Math.abs(finalFare - estimatedFare);
+  if (ratio > 3.0 || (absDiff > 5000 && ratio > 2.0)) {
+    const severity = ratio > 5.0 ? 'high' : 'medium';
+    await writeFraudFlag({ userId: driverId, rideId, flagType: 'fare_manipulation', severity,
+      details: { estimated_fare: estimatedFare, final_fare: finalFare, ratio: Math.round(ratio * 100) / 100, abs_diff_xaf: absDiff } });
+    return { flagged: true, severity, ratio };
+  }
   return { flagged: false };
 }
 
 module.exports = {
   checkGpsSpoofing,
   checkRideCollusion,
+  checkPaymentFraud,
   checkFareManipulation,
   writeFraudFlag,
   haversineKm,

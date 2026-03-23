@@ -107,6 +107,8 @@ services:
         sync: false
       - key: PAYMENT_SERVICE_URL
         sync: false
+      - key: ML_SERVICE_URL
+        sync: false
       - key: DATABASE_READ_URL
         sync: false
       - key: GOOGLE_MAPS_API_KEY
@@ -183,6 +185,8 @@ services:
         value: 3004
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+      - key: ML_SERVICE_URL
+        sync: false
       - key: DATABASE_READ_URL
         sync: false
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -222,6 +226,21 @@ services:
         sync: false
       - key: CORS_ORIGIN
         value: https://mobo.cm,https://app.mobo.cm,https://admin.mobo.cm
+
+  # ── ML Fraud Detection Service ────────────────────────────────────────────────
+  - name: mobo-ml-service
+    type: web
+    env: python
+    region: oregon
+    plan: standard
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
+    rootDir: services/ml-service
+    envVars:
+      - key: INTERNAL_SERVICE_KEY
+        fromGroup: mobo-shared-secrets
+      - key: MODEL_DIR
+        value: /tmp/models
 
   # ── Admin Dashboard ───────────────────────────────────────────────────────────
   - type: web

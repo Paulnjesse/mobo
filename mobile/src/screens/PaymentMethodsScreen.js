@@ -154,6 +154,10 @@ export default function PaymentMethodsScreen({ navigation }) {
           keyExtractor={(item, idx) => item._id || item.id || String(idx)}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
+          windowSize={5}
+          maxToRenderPerBatch={10}
+          initialNumToRender={5}
+          removeClippedSubviews={true}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <View style={styles.emptyIcon}>

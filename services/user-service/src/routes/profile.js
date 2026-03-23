@@ -40,6 +40,7 @@ const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
 const { validateProfileUpdate, validateCreateTeenAccount } = require('../middleware/validateProfile');
 const { getDataExport } = require('../controllers/dataExportController');
+const { requestErasure } = require('../controllers/gdprController');
 
 // All profile routes require authentication
 router.use(authenticate);
@@ -102,5 +103,8 @@ router.delete('/users/me/saved-places/:id', require('../controllers/savedPlacesC
 // Biometric driver verification (Smile Identity)
 router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);
 router.get('/drivers/me/biometric-status',  require('../controllers/biometricController').getVerificationStatus);
+
+// GDPR Article 17 — Right to Erasure
+router.post('/me/erase', requestErasure);
 
 module.exports = router;

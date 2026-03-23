@@ -144,7 +144,7 @@ export const useRideStore = create((set, get) => ({
   },
 
   startLocationTracking: (rideId) => {
-    if (locationInterval) clearInterval(locationInterval);
+    if (locationInterval) return; // already tracking
     locationInterval = setInterval(() => {
       get().updateLocation(rideId);
     }, 5000);

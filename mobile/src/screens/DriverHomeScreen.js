@@ -102,6 +102,7 @@ export default function DriverHomeScreen({ navigation }) {
   const [rideRequest, setRideRequest] = useState(null);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const countdownRef = useRef(null);
+  const ringAnimRef = useRef(null);
   const ringAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(300)).current;
 
@@ -143,6 +144,7 @@ export default function DriverHomeScreen({ navigation }) {
         rideSocket.off('ride_request_expired');
       }
       if (countdownRef.current) clearInterval(countdownRef.current);
+      if (ringAnimRef.current) ringAnimRef.current.stop();
     };
   }, []);
 
@@ -186,8 +188,12 @@ export default function DriverHomeScreen({ navigation }) {
       slideAnim.setValue(300);
       ringAnim.setValue(0);
       if (countdownRef.current) clearInterval(countdownRef.current);
+      if (ringAnimRef.current) { ringAnimRef.current.stop(); ringAnimRef.current = null; }
     }
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      if (ringAnimRef.current) { ringAnimRef.current.stop(); ringAnimRef.current = null; }
+    };
   }, [rideRequest]);
 
   const startCountdown = () => {
@@ -206,9 +212,11 @@ export default function DriverHomeScreen({ navigation }) {
 
   const startRing = () => {
     ringAnim.setValue(0);
-    Animated.loop(
+    if (ringAnimRef.current) ringAnimRef.current.stop();
+    ringAnimRef.current = Animated.loop(
       Animated.timing(ringAnim, { toValue: 1, duration: COUNTDOWN_SECONDS * 1000, useNativeDriver: false })
-    ).start();
+    );
+    ringAnimRef.current.start();
   };
 
   // -------------------------------------------------------------------------
@@ -511,6 +519,10 @@ export default function DriverHomeScreen({ navigation }) {
               keyExtractor={(item) => String(item._id || item.id)}
               style={styles.deliverySheetList}
               showsVerticalScrollIndicator={false}
+              windowSize={5}
+              maxToRenderPerBatch={5}
+              initialNumToRender={4}
+              removeClippedSubviews={true}
               renderItem={({ item }) => {
                 const fare = item.fare != null ? `${Number(item.fare).toLocaleString()} XAF` : '–';
                 return (

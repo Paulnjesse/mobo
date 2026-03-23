@@ -63,7 +63,8 @@ export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [searchDebounce, setSearchDebounce] = useState(null);
+  const searchDebounceRef = useRef(null);
+  const blurTimeoutRef = useRef(null);
   const mapRef = useRef(null);
 
   const firstName = user?.name?.split(' ')[0] || 'there';
@@ -85,23 +86,30 @@ export default function HomeScreen({ navigation }) {
     initLocation();
   }, []);
 
+  // Cleanup debounce and blur timers on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
+
   // Google Places autocomplete with debounce
   const handleSearchChange = useCallback((text) => {
     setSearchQuery(text);
-    if (searchDebounce) clearTimeout(searchDebounce);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     if (!text || text.trim().length < 2) {
       setSearchResults([]);
       return;
     }
-    const timer = setTimeout(async () => {
+    searchDebounceRef.current = setTimeout(async () => {
       const bias = location
         ? { lat: location.latitude, lng: location.longitude }
         : null;
       const results = await searchPlaces(text, bias);
       setSearchResults(results);
     }, 350);
-    setSearchDebounce(timer);
-  }, [location, searchDebounce]);
+  }, [location]);
 
   const handlePlaceSelect = async (place) => {
     setSearchQuery(place.description);
@@ -277,7 +285,7 @@ export default function HomeScreen({ navigation }) {
             onFocus={() => setSearchFocused(true)}
             onBlur={() => {
               // Small delay so place tap registers
-              setTimeout(() => setSearchFocused(false), 200);
+              blurTimeoutRef.current = setTimeout(() => setSearchFocused(false), 200);
             }}
             returnKeyType="search"
           />
@@ -307,6 +315,11 @@ export default function HomeScreen({ navigation }) {
               data={searchResults}
               keyExtractor={(item) => item.placeId}
               keyboardShouldPersistTaps="handled"
+              windowSize={5}
+              maxToRenderPerBatch={8}
+              initialNumToRender={6}
+              removeClippedSubviews={true}
+              getItemLayout={(_, index) => ({ length: 56, offset: 56 * index, index })}
               renderItem={({ item, index }) => (
                 <TouchableOpacity
                   testID={`search-result-${index}`}
