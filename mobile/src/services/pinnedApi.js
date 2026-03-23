@@ -31,6 +31,17 @@ const CERT_HASHES = [
   process.env.EXPO_PUBLIC_API_CERT_SHA256_BACKUP || 'REPLACE_WITH_ACTUAL_CERT_HASH_2',
 ].filter(h => !h.startsWith('REPLACE'));  // remove placeholder hashes in dev
 
+// PRODUCTION ENFORCEMENT: cert pinning is mandatory in production builds.
+// __DEV__ is false in EAS production/preview builds, true in Expo Go and metro dev server.
+const IS_PRODUCTION_BUILD = !__DEV__;
+if (IS_PRODUCTION_BUILD && CERT_HASHES.length === 0) {
+  throw new Error(
+    '[Security] Certificate pinning is required in production builds. ' +
+    'Set EXPO_PUBLIC_API_CERT_SHA256 in your .env.production file. ' +
+    'See mobile/src/services/pinnedApi.js for setup instructions.'
+  );
+}
+
 const BASE_URL =
   Constants.expoConfig?.extra?.apiUrl ??
   'https://mobo-api-gateway.onrender.com/api/v1';
@@ -81,8 +92,12 @@ export async function pinnedFetch(path, options = {}, token = null) {
     }
   }
 
-  // Fallback: standard fetch (Expo Go / simulator only)
-  console.warn('[pinnedFetch] Certificate pinning not active — using standard fetch.');
+  // Fallback: standard fetch — ONLY permitted in Expo Go / local dev (IS_PRODUCTION_BUILD=false)
+  // This branch is unreachable in production builds (enforced by the startup check above).
+  if (IS_PRODUCTION_BUILD) {
+    throw new Error('[Security] Certificate pinning bypass is not allowed in production builds.');
+  }
+  console.warn('[pinnedFetch] Certificate pinning not active — using standard fetch (dev/Expo Go only).');
   const response = await fetch(url, { method: options.method || 'GET', headers, body: options.body });
   return response;
 }

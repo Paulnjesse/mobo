@@ -2,6 +2,40 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 
+// ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
+async function writePaymentAudit(fields) {
+  try {
+    await db.query(
+      `INSERT INTO payment_audit_logs
+         (payment_id, ride_id, user_id, event_type, amount_xaf, currency,
+          method, provider, provider_ref, status_before, status_after,
+          ip_address, user_agent, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        fields.payment_id   || null,
+        fields.ride_id      || null,
+        fields.user_id      || null,
+        fields.event_type,
+        fields.amount       || null,
+        fields.currency     || 'XAF',
+        fields.method       || null,
+        fields.provider     || null,
+        fields.provider_ref || null,
+        fields.status_before || null,
+        fields.status_after  || null,
+        fields.ip_address   || null,
+        fields.user_agent   || null,
+        JSON.stringify(fields.metadata || {}),
+      ]
+    );
+  } catch (err) {
+    // Audit failures are non-fatal but must be visible in logs
+    console.error('[PaymentAudit] Failed to write audit record:', err.message, {
+      event_type: fields.event_type, payment_id: fields.payment_id,
+    });
+  }
+}
+
 // ============================================================
 // SUBSCRIPTION PLANS (XAF)
 // ============================================================
@@ -352,6 +386,12 @@ async function processStripe(amount, currency, paymentMethodToken) {
 
 /** Resolve a pending mobile-money payment once the provider confirms. */
 async function resolvePendingPayment(paymentId, status, transactionId, failureReason) {
+  // Fetch current state for audit delta
+  const { rows: before } = await db.query(
+    'SELECT ride_id, user_id, method, amount, provider_ref FROM payments WHERE id = $1',
+    [paymentId]
+  );
+
   await db.query(
     `UPDATE payments
      SET status = $1, transaction_id = $2, failure_reason = $3
@@ -359,17 +399,27 @@ async function resolvePendingPayment(paymentId, status, transactionId, failureRe
     [status, transactionId || null, failureReason || null, paymentId]
   );
 
-  if (status === 'completed') {
-    const { rows } = await db.query(
-      'SELECT ride_id, method FROM payments WHERE id = $1',
-      [paymentId]
+  const p = before[0] || {};
+
+  // Audit: payment_completed or payment_failed
+  await writePaymentAudit({
+    payment_id:    paymentId,
+    ride_id:       p.ride_id,
+    user_id:       p.user_id,
+    event_type:    status === 'completed' ? 'payment_completed' : 'payment_failed',
+    amount:        p.amount,
+    method:        p.method,
+    provider_ref:  transactionId || p.provider_ref,
+    status_before: 'pending',
+    status_after:  status,
+    metadata:      failureReason ? { failure_reason: failureReason } : {},
+  });
+
+  if (status === 'completed' && p.ride_id) {
+    await db.query(
+      "UPDATE rides SET payment_status = 'paid', payment_method = $1 WHERE id = $2",
+      [p.method, p.ride_id]
     );
-    if (rows[0]?.ride_id) {
-      await db.query(
-        "UPDATE rides SET payment_status = 'paid', payment_method = $1 WHERE id = $2",
-        [rows[0].method, rows[0].ride_id]
-      );
-    }
   }
 }
 
@@ -688,9 +738,35 @@ const chargeRide = async (req, res) => {
         "UPDATE rides SET payment_status = 'paid', payment_method = $1 WHERE id = $2",
         [method, ride_id]
       );
+      await writePaymentAudit({
+        payment_id:    payment.rows[0].id,
+        ride_id,
+        user_id:       userId,
+        event_type:    'payment_completed',
+        amount,
+        method,
+        provider_ref:  paymentResult.transaction_id || paymentResult.provider_ref,
+        status_before: 'pending',
+        status_after:  'completed',
+        ip_address:    req.ip,
+        user_agent:    req.get('user-agent'),
+      });
     }
 
     if (!paymentResult.success) {
+      await writePaymentAudit({
+        payment_id:    payment.rows[0].id,
+        ride_id,
+        user_id:       userId,
+        event_type:    'payment_failed',
+        amount,
+        method,
+        status_before: 'pending',
+        status_after:  'failed',
+        ip_address:    req.ip,
+        user_agent:    req.get('user-agent'),
+        metadata:      { reason: paymentResult.message },
+      });
       return res.status(402).json({
         success: false,
         message: paymentResult.message,
@@ -999,12 +1075,25 @@ const refundPayment = async (req, res) => {
       );
     }
 
-    console.log(`[Refund] Payment ${paymentId} — ${payment.amount} XAF — ${payment.method}`);
-
     await db.query(
       `UPDATE payments SET status = 'refunded', metadata = metadata || $1 WHERE id = $2`,
       [JSON.stringify({ refund_reason: reason, refunded_at: new Date().toISOString() }), paymentId]
     );
+
+    await writePaymentAudit({
+      payment_id:    paymentId,
+      ride_id:       payment.ride_id,
+      user_id:       userId,
+      event_type:    'payment_refunded',
+      amount:        payment.amount,
+      method:        payment.method,
+      provider_ref:  payment.provider_ref,
+      status_before: 'completed',
+      status_after:  'refunded',
+      ip_address:    req.ip,
+      user_agent:    req.get('user-agent'),
+      metadata:      { refund_reason: reason },
+    });
 
     if (payment.ride_id) {
       await db.query(

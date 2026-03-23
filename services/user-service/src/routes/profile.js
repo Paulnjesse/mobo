@@ -39,6 +39,7 @@ const photoUpload = multer({
 const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
 const { validateProfileUpdate, validateCreateTeenAccount } = require('../middleware/validateProfile');
+const { getDataExport } = require('../controllers/dataExportController');
 
 // All profile routes require authentication
 router.use(authenticate);
@@ -60,6 +61,9 @@ router.get('/teen-accounts', getTeenAccounts);
 router.put('/language', updateLanguage);
 
 router.delete('/account', deleteAccount);
+
+// GDPR Article 20 — Right to Data Portability (rate-limited: 1/24h)
+router.get('/data-export', getDataExport);
 
 // Driver specific rider-blocking & appeal
 router.post('/block/:riderId', blockRider);

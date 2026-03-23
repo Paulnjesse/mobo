@@ -1,13 +1,14 @@
 const router = require('express').Router();
 const { authenticate, requireFleetOwner, requireAdmin } = require('../middleware/auth');
 const fleetController = require('../controllers/fleetController');
+const { auditAdmin } = require('../middleware/adminAudit');
 
 // ── Admin-only routes (must be before /:id to avoid conflicts) ─────────────────
 router.get('/admin/all', authenticate, requireAdmin, fleetController.getAllFleets);
-router.post('/:id/approve', authenticate, requireAdmin, fleetController.approveFleet);
-router.post('/:id/suspend', authenticate, requireAdmin, fleetController.suspendFleet);
-router.post('/:id/vehicles/:vehicleId/approve', authenticate, requireAdmin, fleetController.approveVehicle);
-router.post('/:id/vehicles/:vehicleId/reject', authenticate, requireAdmin, fleetController.rejectVehicle);
+router.post('/:id/approve',  authenticate, requireAdmin, auditAdmin('fleet.approve',  'fleet',  (req) => req.params.id), fleetController.approveFleet);
+router.post('/:id/suspend',  authenticate, requireAdmin, auditAdmin('fleet.suspend',  'fleet',  (req) => req.params.id), fleetController.suspendFleet);
+router.post('/:id/vehicles/:vehicleId/approve', authenticate, requireAdmin, auditAdmin('vehicle.approve', 'vehicle', (req) => req.params.vehicleId), fleetController.approveVehicle);
+router.post('/:id/vehicles/:vehicleId/reject',  authenticate, requireAdmin, auditAdmin('vehicle.reject',  'vehicle', (req) => req.params.vehicleId), fleetController.rejectVehicle);
 
 // ── Fleet owner routes ─────────────────────────────────────────────────────────
 router.post('/', authenticate, requireFleetOwner, fleetController.createFleet);

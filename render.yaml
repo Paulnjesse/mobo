@@ -1,3 +1,20 @@
+databases:
+  # ── Primary PostgreSQL (Oregon — US West) ──────────────────────────────────────
+  - name: mobo-db-primary
+    region: oregon
+    plan: standard          # 2 vCPU, 4 GB RAM, 256 GB SSD
+    postgresMajorVersion: 16
+    ipAllowList: []         # Allow all Render private network IPs (services use internal URLs)
+
+  # ── Read Replica (Frankfurt — EU West) for GDPR data residency compliance ─────
+  # Promote to primary manually via Render dashboard if Oregon becomes unavailable.
+  # RTO target: 30 minutes (manual promotion) | RPO target: < 60 seconds
+  - name: mobo-db-replica-eu
+    region: frankfurt
+    plan: standard
+    postgresMajorVersion: 16
+    ipAllowList: []
+
 envVarGroups:
   - name: mobo-shared-secrets
     envVars:
@@ -8,14 +25,23 @@ envVarGroups:
       - key: REDIS_URL
         sync: false
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: mobo-db-primary
+          property: connectionString
+      - key: DATABASE_READ_URL
+        fromDatabase:
+          name: mobo-db-replica-eu
+          property: connectionString
       - key: INTERNAL_SERVICE_KEY
-        generateValue: true   # shared secret for inter-service auth (mTLS equivalent)
+        generateValue: true   # shared secret for inter-service auth + mTLS bearer token
+      - key: SERVICE_CA_CERT
+        sync: false           # Base64-encoded internal CA cert (for mTLS client validation)
 
 services:
   # ── User Service ──────────────────────────────────────────────────────────────
   - type: web
     name: mobo-user-service
+    region: oregon            # primary region — matches mobo-db-primary
     runtime: node
     rootDir: services/user-service
     buildCommand: npm install
@@ -60,6 +86,7 @@ services:
   # ── Ride Service ──────────────────────────────────────────────────────────────
   - type: web
     name: mobo-ride-service
+    region: oregon
     runtime: node
     rootDir: services/ride-service
     buildCommand: npm install
@@ -92,6 +119,7 @@ services:
   # ── Payment Service ───────────────────────────────────────────────────────────
   - type: web
     name: mobo-payment-service
+    region: oregon
     runtime: node
     rootDir: services/payment-service
     buildCommand: npm install
@@ -136,6 +164,7 @@ services:
   # ── Location Service ──────────────────────────────────────────────────────────
   - type: web
     name: mobo-location-service
+    region: oregon
     runtime: node
     rootDir: services/location-service
     buildCommand: npm install
@@ -164,6 +193,7 @@ services:
   # ── API Gateway ───────────────────────────────────────────────────────────────
   - type: web
     name: mobo-api-gateway
+    region: oregon
     runtime: node
     rootDir: api-gateway
     buildCommand: npm install
