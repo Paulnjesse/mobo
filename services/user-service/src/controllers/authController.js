@@ -5,6 +5,7 @@ const { randomInt } = require('crypto');
 const db = require('../config/database');
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
+const { encrypt, hashForLookup } = require('../../../../shared/fieldEncryption');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mobo_jwt_secret_change_in_production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -212,6 +213,25 @@ const signup = async (req, res) => {
     );
 
     const user = result.rows[0];
+
+    // 5. Store field-level encrypted PII (non-blocking — don't fail signup on encryption error)
+    try {
+      const encUpdates = [
+        db.query(
+          `UPDATE users SET phone_encrypted=$1, phone_hash=$2 WHERE id=$3`,
+          [encrypt(phone), hashForLookup(phone), id]
+        ),
+      ];
+      if (date_of_birth) {
+        encUpdates.push(db.query(
+          `UPDATE users SET dob_encrypted=$1 WHERE id=$2`,
+          [encrypt(date_of_birth), id]
+        ));
+      }
+      await Promise.all(encUpdates);
+    } catch (encErr) {
+      console.error('[signup] Field encryption failed (non-fatal):', encErr.message);
+    }
 
     // 8. Award signup loyalty points transaction
     await db.query(

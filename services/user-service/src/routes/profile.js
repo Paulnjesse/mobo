@@ -40,7 +40,8 @@ const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
 const { validateProfileUpdate, validateCreateTeenAccount } = require('../middleware/validateProfile');
 const { getDataExport } = require('../controllers/dataExportController');
-const { requestErasure } = require('../controllers/gdprController');
+const { requestErasure, executeErasure, listErasureRequests } = require('../controllers/gdprController');
+const { requirePermission } = require('../middleware/rbac');
 
 // All profile routes require authentication
 router.use(authenticate);
@@ -104,7 +105,11 @@ router.delete('/users/me/saved-places/:id', require('../controllers/savedPlacesC
 router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);
 router.get('/drivers/me/biometric-status',  require('../controllers/biometricController').getVerificationStatus);
 
-// GDPR Article 17 — Right to Erasure
+// GDPR Article 17 — Right to Erasure (self-service)
 router.post('/me/erase', requestErasure);
+
+// ── Admin GDPR routes (require admin:erasure_execute permission) ─────────────
+router.get('/admin/erasure-requests', requirePermission('admin:erasure_execute'), listErasureRequests);
+router.post('/admin/erasure/:id/execute', requirePermission('admin:erasure_execute'), executeErasure);
 
 module.exports = router;

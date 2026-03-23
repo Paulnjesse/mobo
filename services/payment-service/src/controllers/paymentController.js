@@ -1,6 +1,7 @@
 const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
+const { checkPaymentFraud } = require('../../../../shared/fraudDetection');
 
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {
@@ -604,6 +605,34 @@ const chargeRide = async (req, res) => {
         [payment_method_id, userId]
       );
       paymentPhone = pmRow.rows[0]?.phone || null;
+    }
+
+    // ── FRAUD CHECK (ML-backed) ───────────────────────────────────────────────
+    try {
+      const [vel1h, vel24h, failed1h, avg30d, acctAge] = await Promise.all([
+        db.query(`SELECT COUNT(*) FROM payments WHERE user_id=$1 AND created_at>NOW()-INTERVAL '1 hour'`, [userId]),
+        db.query(`SELECT COUNT(*) FROM payments WHERE user_id=$1 AND created_at>NOW()-INTERVAL '24 hours'`, [userId]),
+        db.query(`SELECT COUNT(*) FROM payments WHERE user_id=$1 AND status='failed' AND created_at>NOW()-INTERVAL '1 hour'`, [userId]),
+        db.query(`SELECT AVG(amount) FROM payments WHERE user_id=$1 AND status='completed' AND created_at>NOW()-INTERVAL '30 days'`, [userId]),
+        db.query(`SELECT EXTRACT(EPOCH FROM (NOW()-created_at))/86400 AS age FROM users WHERE id=$1`, [userId]),
+      ]);
+      const fraudCheck = await checkPaymentFraud(userId, ride_id, {
+        amount,
+        method,
+        paymentsLast1h:  parseInt(vel1h.rows[0]?.count  || 0, 10),
+        paymentsLast24h: parseInt(vel24h.rows[0]?.count || 0, 10),
+        failedLast1h:    parseInt(failed1h.rows[0]?.count || 0, 10),
+        avgAmount30d:    parseFloat(avg30d.rows[0]?.avg  || 0),
+        accountAgeDays:  Math.floor(parseFloat(acctAge.rows[0]?.age || 365)),
+        ipAddress:       req.ip,
+        deviceFingerprint: req.headers['x-device-id'] || null,
+      });
+      if (fraudCheck.flagged && fraudCheck.verdict === 'block') {
+        return res.status(403).json({ success: false, message: 'Payment declined due to fraud risk', code: 'fraud_block' });
+      }
+    } catch (fraudErr) {
+      // Non-blocking — log and continue
+      console.warn('[chargeRide] Fraud check error:', fraudErr.message);
     }
 
     // ── MOBILE MONEY (async) ──────────────────────────────────────────────────
