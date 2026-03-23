@@ -31,6 +31,7 @@ const rateLimit = require('express-rate-limit');
 
 const paymentRoutes = require('./src/routes/payments');
 const requestId = require('./src/middleware/requestId');
+const { webhookStripe } = require('./src/controllers/paymentController');
 
 const app = express();
 app.use(requestId);
@@ -42,6 +43,15 @@ process.env.SERVICE_NAME = process.env.SERVICE_NAME || 'mobo-payment-service';
 const CORS_ORIGINS = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['http://localhost:3000', 'http://localhost:8081', 'exp://localhost:8081'];
+
+// ── Stripe webhook MUST be registered before express.json() ──────────────────
+// Stripe signature verification requires the raw request body (Buffer), not the
+// parsed JSON object. express.raw() captures it without parsing.
+app.post(
+  '/payments/webhook/stripe',
+  express.raw({ type: 'application/json' }),
+  webhookStripe
+);
 
 app.use(helmet());
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));

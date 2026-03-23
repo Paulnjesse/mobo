@@ -34,6 +34,7 @@ const { Server } = require('socket.io');
 const locationRoutes = require('./src/routes/location');
 const { initLocationSocket } = require('./src/socket/locationSocket');
 const requestId = require('./src/middleware/requestId');
+const { startLocationPurgeJob } = require('./src/jobs/locationPurgeJob');
 
 const app = express();
 app.use(requestId);
@@ -126,6 +127,8 @@ app.set('io', io);
 if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, () => {
     logger.info(`[MOBO Location Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
+    // GDPR: purge location data older than 90 days, runs daily at 02:00 UTC
+    startLocationPurgeJob();
   });
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);

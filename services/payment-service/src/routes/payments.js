@@ -18,7 +18,9 @@ const {
   getSubscriptionStatus,
 } = require('../controllers/paymentController');
 
-// ── Public webhook endpoints (no auth — called by MTN / Orange servers) ────────
+// ── Public webhook endpoints (no auth — called by payment providers) ───────────
+// NOTE: /webhook/stripe is registered in server.js BEFORE express.json()
+//       because Stripe requires the raw request body for signature verification.
 router.post('/webhook/mtn',    webhookMtn);
 router.post('/webhook/orange', webhookOrange);
 

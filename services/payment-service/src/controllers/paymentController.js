@@ -1370,19 +1370,26 @@ const createStripePaymentIntent = async (req, res) => {
 
     const stripe = require('stripe')(stripeKey);
 
+    // Idempotency key prevents duplicate PaymentIntents on client retry
+    const idempotencyKey = uuidv4();
+
     // XAF is a zero-decimal currency — Stripe expects the amount as-is (not ×100)
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount:   Math.round(amount),
-      currency: currency.toLowerCase(),
-      metadata: { user_id: userId, ride_id: ride_id || '' },
-      automatic_payment_methods: { enabled: true },
-    });
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount:   Math.round(amount),
+        currency: currency.toLowerCase(),
+        metadata: { user_id: userId, ride_id: ride_id || '', idempotency_key: idempotencyKey },
+        automatic_payment_methods: { enabled: true },
+      },
+      { idempotencyKey }
+    );
 
     res.json({
-      success:         true,
-      client_secret:   paymentIntent.client_secret,
+      success:           true,
+      client_secret:     paymentIntent.client_secret,
       payment_intent_id: paymentIntent.id,
-      publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
+      idempotency_key:   idempotencyKey,
+      publishable_key:   process.env.STRIPE_PUBLISHABLE_KEY,
       amount,
       currency,
     });
@@ -1390,6 +1397,138 @@ const createStripePaymentIntent = async (req, res) => {
     console.error('[CreateStripePaymentIntent Error]', err.message);
     res.status(500).json({ success: false, message: `Failed to create payment intent: ${err.message}` });
   }
+};
+
+/**
+ * POST /payments/webhook/stripe
+ * Handles Stripe webhook events. Must receive the raw request body (not JSON-parsed)
+ * so that signature verification works. Registered in server.js before express.json().
+ *
+ * Handles:
+ *   payment_intent.succeeded       → mark payment completed
+ *   payment_intent.payment_failed  → mark payment failed
+ */
+const webhookStripe = async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('[StripeWebhook] STRIPE_WEBHOOK_SECRET not configured');
+    return res.status(500).json({ error: 'Webhook secret not configured' });
+  }
+
+  let event;
+  try {
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    // req.body is a raw Buffer (express.raw middleware applied in server.js)
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.error('[StripeWebhook] Signature verification failed:', err.message);
+    return res.status(400).json({ error: `Webhook signature invalid: ${err.message}` });
+  }
+
+  // Idempotency: skip if we already processed this event
+  const existing = await db.query(
+    'SELECT id FROM stripe_webhook_events WHERE stripe_event_id = $1',
+    [event.id]
+  );
+  if (existing.rows.length > 0) {
+    // Already processed — return 200 so Stripe stops retrying
+    return res.json({ received: true, duplicate: true });
+  }
+
+  // Record the event first (before processing) to prevent concurrent duplicates
+  await db.query(
+    `INSERT INTO stripe_webhook_events
+       (stripe_event_id, event_type, payment_intent_id, raw_payload)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (stripe_event_id) DO NOTHING`,
+    [
+      event.id,
+      event.type,
+      event.data?.object?.id || null,
+      JSON.stringify(event),
+    ]
+  );
+
+  const pi = event.data?.object; // PaymentIntent object
+
+  if (event.type === 'payment_intent.succeeded') {
+    // Find the payment row by provider_ref (PaymentIntent ID) or metadata idempotency_key
+    const paymentRow = await db.query(
+      `SELECT id, ride_id, user_id, amount, status FROM payments
+       WHERE provider_ref = $1 OR metadata->>'idempotency_key' = $2
+       LIMIT 1`,
+      [pi.id, pi.metadata?.idempotency_key || '']
+    );
+
+    if (paymentRow.rows.length > 0) {
+      const payment = paymentRow.rows[0];
+      if (payment.status !== 'completed') {
+        await db.query(
+          `UPDATE payments SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+          [payment.id]
+        );
+        // Mark ride as paid
+        await db.query(
+          `UPDATE rides SET payment_status = 'paid' WHERE id = $1`,
+          [payment.ride_id]
+        );
+        await writePaymentAudit({
+          payment_id:   payment.id,
+          ride_id:      payment.ride_id,
+          user_id:      payment.user_id,
+          event_type:   'payment_completed',
+          amount:       payment.amount,
+          method:       'card',
+          provider:     'stripe',
+          provider_ref: pi.id,
+          status_before: payment.status,
+          status_after:  'completed',
+          metadata:     { stripe_event_id: event.id, payment_method: pi.payment_method },
+        });
+      }
+    } else {
+      console.warn('[StripeWebhook] payment_intent.succeeded: no matching payment row for PI', pi.id);
+    }
+
+  } else if (event.type === 'payment_intent.payment_failed') {
+    const paymentRow = await db.query(
+      `SELECT id, ride_id, user_id, amount, status FROM payments
+       WHERE provider_ref = $1 OR metadata->>'idempotency_key' = $2
+       LIMIT 1`,
+      [pi.id, pi.metadata?.idempotency_key || '']
+    );
+
+    if (paymentRow.rows.length > 0) {
+      const payment = paymentRow.rows[0];
+      if (payment.status !== 'failed') {
+        await db.query(
+          `UPDATE payments SET status = 'failed', updated_at = NOW() WHERE id = $1`,
+          [payment.id]
+        );
+        await writePaymentAudit({
+          payment_id:   payment.id,
+          ride_id:      payment.ride_id,
+          user_id:      payment.user_id,
+          event_type:   'payment_failed',
+          amount:       payment.amount,
+          method:       'card',
+          provider:     'stripe',
+          provider_ref: pi.id,
+          status_before: payment.status,
+          status_after:  'failed',
+          metadata:     {
+            stripe_event_id:   event.id,
+            failure_code:      pi.last_payment_error?.code,
+            failure_message:   pi.last_payment_error?.message,
+          },
+        });
+      }
+    }
+  }
+
+  res.json({ received: true });
 };
 
 module.exports = {
@@ -1402,6 +1541,7 @@ module.exports = {
   createStripePaymentIntent,
   webhookMtn,
   webhookOrange,
+  webhookStripe,
   getPaymentHistory,
   refundPayment,
   getWalletBalance,

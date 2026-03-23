@@ -2,6 +2,8 @@ const { Pool } = require('pg');
 const pool = require('../config/database');
 const axios = require('axios');
 const cache = require('../utils/cache');
+const { checkRideCollusion, checkFareManipulation } = require('../../../shared/fraudDetection');
+const { isEnabled } = require('../../../shared/featureFlags');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -710,6 +712,23 @@ const acceptRide = async (req, res) => {
       [driverId]
     );
 
+    // ── Fraud: collusion check (async, non-blocking) ──────────────────────
+    const acceptedRide = result.rows[0];
+    if (isEnabled('fraud_detection_v1')) {
+      setImmediate(async () => {
+        try {
+          const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+          await checkRideCollusion(acceptedRide.id, driverUserId, acceptedRide.rider_id, {
+            driverIp: clientIp,
+            // device IDs come from mobile app headers when available
+            driverDeviceId: req.headers['x-device-id'] || null,
+          });
+        } catch (fraudErr) {
+          console.error('[AcceptRide FraudCheck]', fraudErr.message);
+        }
+      });
+    }
+
     // Push notification to rider: driver accepted
     try {
       const ride = result.rows[0];
@@ -932,6 +951,18 @@ const updateRideStatus = async (req, res) => {
         `UPDATE rides SET final_fare = $1 WHERE id = $2`,
         [finalFare, id]
       );
+
+      // ── Fraud: fare manipulation check (async, non-blocking) ─────────────
+      if (isEnabled('fraud_detection_v1')) {
+        setImmediate(async () => {
+          try {
+            await checkFareManipulation(id, ride.driver_id, ride.estimated_fare, finalFare);
+          } catch (fraudErr) {
+            console.error('[UpdateRideStatus FareCheck]', fraudErr.message);
+          }
+        });
+      }
+
       // Give loyalty points: 1 point per 100 XAF
       const points = Math.floor(finalFare / 100);
       await pool.query(

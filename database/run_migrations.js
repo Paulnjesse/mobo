@@ -43,6 +43,7 @@ const FILES = [
   'seed.sql',
   'migration_020.sql',
   'migration_021.sql',
+  'migration_022.sql',
 ];
 
 async function run() {

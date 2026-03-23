@@ -1,6 +1,12 @@
 const db = require('../config/database');
 const googleMaps = require('../services/googleMaps');
 const cache = require('../utils/cache');
+const { checkGpsSpoofing } = require('../../../shared/fraudDetection');
+const { isEnabled } = require('../../../shared/featureFlags');
+
+// In-memory per-user GPS state (speed violation streak, last known position)
+// Evicted on process restart — acceptable for this use case
+const _gpsState = new Map(); // userId → { lat, lng, ts, streak }
 
 // Average city speed for ETA estimation (km/h) — used as fallback
 const AVG_SPEED_KMH = 25;
@@ -27,6 +33,37 @@ const updateLocation = async (req, res) => {
 
     if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
       return res.status(400).json({ success: false, message: 'Coordinates out of valid range' });
+    }
+
+    // ── GPS spoofing check (drivers only — riders have lower fraud surface) ──
+    if (req.user.role === 'driver' && isEnabled('fraud_detection_v1')) {
+      const prev = _gpsState.get(userId);
+      const spoofCheck = await checkGpsSpoofing({
+        userId,
+        lat:                latitude,
+        lng:                longitude,
+        timestampMs:        Date.now(),
+        prevLat:            prev?.lat,
+        prevLng:            prev?.lng,
+        prevTimestampMs:    prev?.ts,
+        speedViolationStreak: prev?.streak || 0,
+      });
+
+      // Update in-memory state regardless of outcome
+      _gpsState.set(userId, {
+        lat: latitude,
+        lng: longitude,
+        ts:  Date.now(),
+        streak: spoofCheck.ok ? 0 : (prev?.streak || 0) + 1,
+      });
+
+      if (!spoofCheck.ok) {
+        return res.status(422).json({
+          success: false,
+          message: 'Location update rejected — anomalous GPS data detected',
+          reason:  spoofCheck.reason,
+        });
+      }
     }
 
     // Insert into location history

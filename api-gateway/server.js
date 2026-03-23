@@ -31,6 +31,8 @@ const morgan = require('morgan');
 const { globalLimiter } = require('./src/middleware/rateLimit');
 const routes = require('./src/routes/index');
 const requestId = require('./src/middleware/requestId');
+const { getAllServiceHealth } = require('./src/middleware/serviceCircuitBreaker');
+const { initFeatureFlags, destroyFeatureFlags } = require('../services/shared/featureFlags');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./src/swagger');
 
@@ -156,6 +158,7 @@ app.get('/health/deep', async (req, res) => {
     timestamp: new Date().toISOString(),
     uptime:    process.uptime(),
     dependencies: results,
+    circuit_breakers: getAllServiceHealth(),
   });
 });
 
@@ -216,11 +219,13 @@ app.use(errorHandler);
 // Start Server
 // ============================================================
 if (process.env.NODE_ENV !== 'test') {
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, async () => {
     logger.info(`[MOBO API Gateway] Running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
+    await initFeatureFlags();
   });
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
+    destroyFeatureFlags();
     server.close(() => {
       logger.info(`${process.env.SERVICE_NAME} HTTP server closed`);
       process.exit(0);
