@@ -1,0 +1,155 @@
+# Dependabot — automated dependency updates + CVE patching
+# Checks weekly for new versions and security advisories.
+# Opens PRs automatically; CI blocks merge if new CVEs introduced.
+
+version: 2
+
+updates:
+  # ── API Gateway ──────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /api-gateway
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    reviewers:
+      - Paulnjesse
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+
+  # ── User Service ─────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /services/user-service
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    reviewers:
+      - Paulnjesse
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+
+  # ── Ride Service ─────────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /services/ride-service
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+
+  # ── Payment Service ───────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /services/payment-service
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+
+  # ── Location Service ──────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /services/location-service
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+
+  # ── Mobile (Expo / React Native) ──────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mobile
+      - security
+    groups:
+      expo-sdk:
+        patterns: ["expo*", "@expo/*"]
+        update-types: [patch]
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+    # Block major React Native / Expo SDK upgrades (need manual migration)
+    ignore:
+      - dependency-name: "expo"
+        update-types: [version-update:semver-major]
+      - dependency-name: "react-native"
+        update-types: [version-update:semver-major, version-update:semver-minor]
+
+  # ── Admin Dashboard ───────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /admin
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+    groups:
+      security-patches:
+        applies-to: security-updates
+        update-types: [patch, minor]
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "06:00"
+      timezone: "Africa/Douala"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci

@@ -1,12 +1,31 @@
 global:
-  scrape_interval: 15s
+  scrape_interval:     15s
   evaluation_interval: 15s
+  external_labels:
+    environment: production
+    region:      oregon
 
+# ── Alerting rules ────────────────────────────────────────────────────────────
+rule_files:
+  - "alerting-rules.yml"
+
+# ── Alertmanager (Grafana OnCall or PagerDuty) ────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# ── Scrape targets ────────────────────────────────────────────────────────────
 scrape_configs:
   - job_name: 'mobo-api-gateway'
     static_configs:
       - targets: ['api-gateway:3000']
     metrics_path: /metrics
+    # Also scrape deep health for dependency status
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
 
   - job_name: 'mobo-user-service'
     static_configs:
@@ -27,3 +46,33 @@ scrape_configs:
     static_configs:
       - targets: ['location-service:3004']
     metrics_path: /metrics
+
+  # ── Deep health check probes (Blackbox Exporter pattern) ───────────────────
+  - job_name: 'mobo-health-deep'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://api-gateway:3000/health/deep
+          - http://user-service:3001/health
+          - http://ride-service:3002/health
+          - http://payment-service:3003/health
+          - http://location-service:3004/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ── Redis exporter ─────────────────────────────────────────────────────────
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # ── PostgreSQL exporter ────────────────────────────────────────────────────
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']

@@ -1,0 +1,229 @@
+# MOBO — Prometheus Alerting Rules
+# SLO definitions and operational alerts for Grafana Alertmanager.
+#
+# SLOs:
+#   Availability:   99.5% uptime per month  (21.9 minutes downtime budget)
+#   Latency P99:    < 2s for ride booking, < 500ms for profile reads
+#   Payment success: > 98% of payment attempts succeed
+#   Error rate:     < 1% 5xx responses on API gateway
+
+groups:
+  # ── SLO: Availability ──────────────────────────────────────────────────────
+  - name: mobo.slo.availability
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"mobo-.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} is DOWN"
+          description: "{{ $labels.job }} has been unreachable for > 1 minute. SLO breach imminent."
+          runbook: "https://github.com/Paulnjesse/mobo/blob/main/docs/incident-response-playbook.md"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5..",job="mobo-api-gateway"}[5m]))
+          /
+          sum(rate(http_requests_total{job="mobo-api-gateway"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API Gateway error rate > 1% (SLO breach)"
+          description: "5xx error rate is {{ $value | humanizePercentage }} over last 5 minutes."
+
+      - alert: SloAvailabilityBudgetBurning
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{status!~"5..",job="mobo-api-gateway"}[1h]))
+            /
+            sum(rate(http_requests_total{job="mobo-api-gateway"}[1h]))
+          ) > 0.005
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Availability SLO error budget burning fast"
+          description: "Error rate {{ $value | humanizePercentage }} exceeds 0.5% monthly budget burn rate."
+
+  # ── SLO: Latency ───────────────────────────────────────────────────────────
+  - name: mobo.slo.latency
+    rules:
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="mobo-api-gateway"}[5m])) by (le, route)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "P99 latency > 2s on {{ $labels.route }}"
+          description: "99th percentile response time is {{ $value | humanizeDuration }} on route {{ $labels.route }}."
+
+      - alert: RideBookingSlowdown
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="mobo-ride-service",route=~"/rides.*"}[5m])) by (le)
+          ) > 3.0
+        for: 3m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Ride booking P95 latency critical (> 3s)"
+          description: "Ride service is severely degraded. P95 = {{ $value | humanizeDuration }}."
+
+  # ── SLO: Payment success rate ──────────────────────────────────────────────
+  - name: mobo.slo.payments
+    rules:
+      - alert: PaymentSuccessRateLow
+        expr: |
+          sum(rate(payment_events_total{event_type="payment_completed"}[10m]))
+          /
+          (
+            sum(rate(payment_events_total{event_type="payment_completed"}[10m]))
+            + sum(rate(payment_events_total{event_type="payment_failed"}[10m]))
+          ) < 0.98
+        for: 5m
+        labels:
+          severity: critical
+          team: payments
+        annotations:
+          summary: "Payment success rate below 98% SLO"
+          description: "Payment success rate is {{ $value | humanizePercentage }}. Check Stripe/MTN/Orange provider status."
+          runbook: "https://github.com/Paulnjesse/mobo/blob/main/docs/incident-response-playbook.md#payment-outage"
+
+      - alert: PaymentQueueBacklog
+        expr: bullmq_queue_size{queue="payments"} > 500
+        for: 5m
+        labels:
+          severity: warning
+          team: payments
+        annotations:
+          summary: "Payment queue backlog > 500 jobs"
+          description: "BullMQ payments queue has {{ $value }} pending jobs. Worker may be stalled."
+
+  # ── Load spikes / autoscaling ──────────────────────────────────────────────
+  - name: mobo.scaling
+    rules:
+      - alert: HighRequestRate
+        expr: sum(rate(http_requests_total{job="mobo-api-gateway"}[1m])) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "API Gateway handling > 1000 req/s — autoscaling may be triggered"
+          description: "Current rate: {{ $value | humanize }} req/s. Monitor Render autoscaling."
+
+      - alert: MemoryPressure
+        expr: |
+          process_resident_memory_bytes{job=~"mobo-.*"}
+          / (1024 * 1024 * 1024) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} memory > 1.5 GB"
+          description: "{{ $labels.job }} is using {{ $value | humanize }}GB RSS. Consider scaling up."
+
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Circuit breaker OPEN on {{ $labels.breaker }}"
+          description: "{{ $labels.breaker }} circuit is open — downstream service is unhealthy. Requests are failing fast."
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  - name: mobo.database
+    rules:
+      - alert: DatabaseConnectionPoolExhausted
+        expr: pg_stat_database_numbackends{datname="postgres"} > 80
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL connection pool near limit ({{ $value }}/100)"
+          description: "Active DB connections: {{ $value }}. Risk of connection exhaustion and 503 errors."
+
+      - alert: SlowQueries
+        expr: pg_stat_statements_mean_exec_time_seconds > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Slow DB queries detected (mean > 1s)"
+          description: "Mean query execution time {{ $value | humanizeDuration }}. Check for missing indexes."
+
+  # ── Security ────────────────────────────────────────────────────────────────
+  - name: mobo.security
+    rules:
+      - alert: AuthFailureSpike
+        expr: |
+          sum(rate(http_requests_total{status="401",job="mobo-user-service"}[5m])) > 20
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Spike in 401 auth failures (> 20/s) — possible brute force"
+          description: "{{ $value | humanize }} auth failures/second. Rate limiter should be active."
+
+      - alert: AdminBulkActions
+        expr: |
+          sum(increase(admin_audit_log_total{action=~"user\\..*|driver\\..*"}[5m])) > 50
+        for: 1m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Unusual volume of admin actions ({{ $value }} in 5 min)"
+          description: "Possible insider threat or compromised admin account. Review admin_audit_logs immediately."
+
+      - alert: PaymentAnomalyLargeTransaction
+        expr: |
+          histogram_quantile(0.999,
+            sum(rate(payment_amount_xaf_bucket[10m])) by (le)
+          ) > 5000000
+        for: 1m
+        labels:
+          severity: warning
+          team: payments
+        annotations:
+          summary: "Unusually large payment detected (> 5,000,000 XAF)"
+          description: "P99.9 transaction amount is {{ $value | humanize }} XAF. Manual review recommended."
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  - name: mobo.redis
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis is DOWN"
+          description: "Redis unavailable — rate limiting, session caching, and BullMQ queues degraded."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage > 85%"
+          description: "Redis is at {{ $value | humanizePercentage }} capacity. Risk of eviction."

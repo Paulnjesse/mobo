@@ -62,17 +62,10 @@ export default function BiometricVerificationScreen({ navigation, route }) {
         setStep('failed');
       }
     } catch (err) {
-      // Fallback: accept in dev/test if API unavailable
-      if (__DEV__) {
-        setVerified(true);
-        setStep('success');
-        setTimeout(() => {
-          if (onContinueAfterVerify) onContinueAfterVerify();
-          else navigation.goBack();
-        }, 2000);
-      } else {
-        setStep('failed');
-      }
+      // Fail closed: API error does NOT grant verification.
+      // The driver cannot go online if biometric verification fails.
+      console.warn('[BiometricVerification] API error:', err?.message);
+      setStep('failed');
     } finally {
       setScanning(false);
     }
