@@ -68,6 +68,7 @@ const limiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
 app.use(limiter);

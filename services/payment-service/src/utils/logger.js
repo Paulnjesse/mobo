@@ -27,10 +27,4 @@ const logger = createLogger({
   rejectionHandlers: [new transports.Console()],
 });
 
-/**
- * Creates a child logger with a request-scoped requestId.
- * Usage: const reqLogger = logger.child({ requestId: req.id });
- */
-logger.child = (meta) => logger.child(meta);
-
 module.exports = logger;

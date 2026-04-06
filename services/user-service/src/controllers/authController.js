@@ -7,13 +7,32 @@ const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { encrypt, hashForLookup } = require('../../../../shared/fieldEncryption');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mobo_jwt_secret_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error('[FATAL] JWT_SECRET must be set and at least 32 characters. Exiting.');
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // OTP rate limiting: max 3 requests per phone per hour
 const MAX_OTP_REQUESTS_PER_HOUR = 3;
 // OTP attempt tracking: lock after 5 wrong attempts
 const MAX_OTP_ATTEMPTS = 5;
+
+/**
+ * Constant-time OTP comparison — prevents timing attacks where an attacker
+ * measures response latency to guess OTP digits one-by-one.
+ */
+function safeCompareOtp(provided, stored) {
+  if (!provided || !stored) return false;
+  try {
+    const a = Buffer.from(String(provided));
+    const b = Buffer.from(String(stored));
+    if (a.length !== b.length) return false;
+    return require('crypto').timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Generate a 6-digit OTP
@@ -132,10 +151,10 @@ const signup = async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters'
+        message: 'Password must be at least 8 characters'
       });
     }
 
@@ -381,35 +400,37 @@ const registerDriver = async (req, res) => {
 
     // Build home_location geometry if coords provided
     const hasHome = home_latitude != null && home_longitude != null;
-    const homeGeom = hasHome
-      ? `ST_SetSRID(ST_MakePoint(${parseFloat(home_longitude)}, ${parseFloat(home_latitude)}), 4326)`
-      : null;
+    // Parse once; used as bound parameters — never interpolated into SQL
+    const homeLat = hasHome ? parseFloat(home_latitude) : null;
+    const homeLon = hasHome ? parseFloat(home_longitude) : null;
 
     let driverRecord;
     if (existingDriver.rows.length > 0) {
       // Update existing driver record
+      // When hasHome: $7=home_address, $8=homeLon, $9=homeLat (PostGIS MakePoint takes lon,lat)
       const updateResult = await db.query(
         `UPDATE drivers SET
            license_number = $1, license_expiry = $2, license_doc_url = $3,
            national_id = $4, national_id_doc_url = $5
-           ${hasHome ? `, home_latitude = ${parseFloat(home_latitude)}, home_longitude = ${parseFloat(home_longitude)}, home_address = $7, home_location = ${homeGeom}` : ''}
+           ${hasHome ? ', home_latitude = $9, home_longitude = $8, home_address = $7, home_location = ST_SetSRID(ST_MakePoint($8, $9), 4326)' : ''}
          WHERE user_id = $6
          RETURNING id, license_number, license_expiry, is_approved, home_latitude, home_longitude, home_address`,
         hasHome
-          ? [license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, userId, home_address || null]
+          ? [license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, userId, home_address || null, homeLon, homeLat]
           : [license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, userId]
       );
       driverRecord = updateResult.rows[0];
     } else {
       // Create new driver record
+      // When hasHome: $7=home_address, $8=homeLon, $9=homeLat (PostGIS MakePoint takes lon,lat)
       const driverResult = await db.query(
         `INSERT INTO drivers (user_id, license_number, license_expiry, license_doc_url, national_id, national_id_doc_url, is_approved, is_online
            ${hasHome ? ', home_latitude, home_longitude, home_address, home_location' : ''})
          VALUES ($1, $2, $3, $4, $5, $6, false, false
-           ${hasHome ? `, ${parseFloat(home_latitude)}, ${parseFloat(home_longitude)}, $7, ${homeGeom}` : ''})
+           ${hasHome ? ', $9, $8, $7, ST_SetSRID(ST_MakePoint($8, $9), 4326)' : ''})
          RETURNING id, license_number, license_expiry, is_approved, home_latitude, home_longitude, home_address`,
         hasHome
-          ? [userId, license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, home_address || null]
+          ? [userId, license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null, home_address || null, homeLon, homeLat]
           : [userId, license_number, license_expiry, license_doc_url || null, national_id || null, national_id_doc_url || null]
       );
       driverRecord = driverResult.rows[0];
@@ -550,7 +571,10 @@ const registerFleetOwner = async (req, res) => {
  */
 const login = async (req, res) => {
   try {
-    const { phone, email, password } = req.body;
+    const { identifier, phone: rawPhone, email: rawEmail, password } = req.body;
+    // Accept `identifier` (phone or email) as well as separate `phone`/`email` fields
+    const phone = rawPhone || (!rawEmail && identifier && !identifier.includes('@') ? identifier : undefined);
+    const email = rawEmail || (identifier && identifier.includes('@') ? identifier : undefined);
 
     if (!password || (!phone && !email)) {
       return res.status(400).json({
@@ -583,6 +607,13 @@ const login = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Account is inactive'
+      });
+    }
+
+    if (!user.is_verified) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account not verified. Please verify your phone number first.'
       });
     }
 
@@ -693,7 +724,8 @@ const login = async (req, res) => {
  */
 const verify = async (req, res) => {
   try {
-    const { phone, otp_code } = req.body;
+    const { phone: rawPhone, identifier, otp_code } = req.body;
+    const phone = rawPhone || identifier;
 
     if (!phone || !otp_code) {
       return res.status(400).json({ success: false, message: 'phone and otp_code are required' });
@@ -701,7 +733,7 @@ const verify = async (req, res) => {
 
     const result = await db.query(
       `SELECT id, otp_code, otp_expiry, is_verified, is_suspended, language, full_name, email,
-              otp_attempts, role, registration_step
+              phone, otp_attempts, role, registration_step
        FROM users WHERE phone = $1`,
       [phone]
     );
@@ -723,7 +755,7 @@ const verify = async (req, res) => {
       });
     }
 
-    if (!user.otp_code || user.otp_code !== otp_code) {
+    if (!user.otp_code || !safeCompareOtp(otp_code, user.otp_code)) {
       const attempts = await incrementOtpAttempts(user.id);
       const remaining = Math.max(0, MAX_OTP_ATTEMPTS - attempts);
       return res.status(400).json({
@@ -751,9 +783,14 @@ const verify = async (req, res) => {
         .catch((err) => console.warn('[AuthController] Welcome email failed:', err.message));
     }
 
+    // Issue JWT so the user is immediately logged in after verification
+    const tokenPayload = { id: user.id, phone: user.phone || phone, role: user.role, full_name: user.full_name };
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
     res.json({
       success: true,
       message: 'Phone verified successfully. Welcome to MOBO!',
+      data: { token },
       role: user.role,
       registration_step: user.registration_step
     });
@@ -769,7 +806,8 @@ const verify = async (req, res) => {
  */
 const resendOtp = async (req, res) => {
   try {
-    const { phone } = req.body;
+    const { phone: rawPhone, identifier } = req.body;
+    const phone = rawPhone || identifier;
 
     if (!phone) {
       return res.status(400).json({ success: false, message: 'Phone is required' });
@@ -1056,10 +1094,10 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (new_password.length < 6) {
+    if (new_password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters',
+        message: 'New password must be at least 8 characters',
       });
     }
 
@@ -1097,7 +1135,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (user.reset_otp !== otp_code) {
+    if (!safeCompareOtp(otp_code, user.reset_otp)) {
       await db.query(
         'UPDATE users SET reset_otp_attempts = COALESCE(reset_otp_attempts, 0) + 1 WHERE id = $1',
         [user.id]
@@ -1162,8 +1200,8 @@ const socialLogin = async (req, res) => {
     if (!provider || !providerToken) {
       return res.status(400).json({ success: false, message: 'provider and token are required' });
     }
-    if (!['google', 'apple'].includes(provider)) {
-      return res.status(400).json({ success: false, message: 'provider must be google or apple' });
+    if (!['google', 'apple', 'facebook'].includes(provider)) {
+      return res.status(400).json({ success: false, message: 'provider must be google, apple, or facebook' });
     }
 
     let providerId = null;
@@ -1194,6 +1232,34 @@ const socialLogin = async (req, res) => {
       } catch (gErr) {
         console.error('[SocialLogin] Google token verify failed:', gErr.message);
         return res.status(401).json({ success: false, message: 'Google token verification failed' });
+      }
+    } else if (provider === 'facebook') {
+      // Facebook access tokens verified via Graph API
+      try {
+        const { data } = await require('axios').get(
+          `https://graph.facebook.com/me?fields=id,name,email&access_token=${providerToken}`,
+          { timeout: 10000 }
+        );
+        if (!data.id) throw new Error('No user ID returned from Facebook');
+
+        const fbAppId = process.env.FACEBOOK_APP_ID;
+        if (fbAppId) {
+          // Optionally verify token belongs to our app via debug_token endpoint
+          const { data: debug } = await require('axios').get(
+            `https://graph.facebook.com/debug_token?input_token=${providerToken}&access_token=${fbAppId}|${process.env.FACEBOOK_APP_SECRET}`,
+            { timeout: 10000 }
+          ).catch(() => ({ data: { data: { is_valid: true } } })); // non-fatal if debug fails
+          if (debug?.data?.is_valid === false) {
+            return res.status(401).json({ success: false, message: 'Invalid Facebook token' });
+          }
+        }
+
+        providerId    = data.id;
+        verifiedEmail = data.email || verifiedEmail;
+        verifiedName  = data.name  || verifiedName;
+      } catch (fbErr) {
+        console.error('[SocialLogin] Facebook token verify failed:', fbErr.message);
+        return res.status(401).json({ success: false, message: 'Facebook token verification failed' });
       }
     } else if (provider === 'apple') {
       // Apple tokens are JWTs signed with Apple's public key

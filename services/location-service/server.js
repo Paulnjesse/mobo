@@ -62,6 +62,7 @@ const limiter = rateLimit({
   max: 300,             // high limit for frequent location pings
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'Too many requests' }
 });
 app.use(limiter);

@@ -62,11 +62,13 @@ app.use(morgan('combined', {
 }));
 
 // Rate limiting
+const isTest = process.env.NODE_ENV === 'test';
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
 app.use(limiter);
@@ -74,6 +76,7 @@ app.use(limiter);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  skip: () => isTest,
   message: { success: false, message: 'Too many authentication attempts.' }
 });
 

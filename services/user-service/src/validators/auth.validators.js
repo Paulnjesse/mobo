@@ -21,11 +21,15 @@ const signupValidator = [
 ];
 
 const loginValidator = [
-  body('phone')
-    .if((value, { req }) => !req.body.email)
-    .notEmpty().withMessage('Phone or email is required'),
+  body().custom((value, { req }) => {
+    const { phone, email, identifier } = req.body;
+    if (!phone && !email && !identifier) {
+      throw new Error('Phone, email, or identifier is required');
+    }
+    return true;
+  }),
   body('email')
-    .if((value, { req }) => !req.body.phone)
+    .if((value, { req }) => !req.body.phone && !req.body.identifier)
     .optional({ checkFalsy: true })
     .isEmail().withMessage('Invalid email address'),
   body('password')
@@ -33,7 +37,12 @@ const loginValidator = [
 ];
 
 const verifyOtpValidator = [
-  body('phone').notEmpty().withMessage('Phone is required'),
+  body().custom((value, { req }) => {
+    if (!req.body.phone && !req.body.identifier) {
+      throw new Error('Phone or identifier is required');
+    }
+    return true;
+  }),
   body('otp_code')
     .notEmpty().withMessage('OTP code is required')
     .isLength({ min: 6, max: 6 }).withMessage('OTP must be exactly 6 digits')
