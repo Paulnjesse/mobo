@@ -200,8 +200,99 @@ def trigger_retrain(request: Request):
     key = request.headers.get("X-Internal-Service-Key")
     if key != os.getenv("INTERNAL_SERVICE_KEY", ""):
         raise HTTPException(status_code=403, detail="Forbidden")
-    # In production: enqueue a background retraining job
     gps_model.load_or_train(force=True)
     payment_model.load_or_train(force=True)
     fraud_model.load_or_train(force=True)
-    return {"retrained": True}
+    feedback_store.clear()
+    logger.info("[ML Service] Retrain complete. Feedback store cleared.")
+    return {"retrained": True, "feedback_consumed": 0}
+
+# ── Feedback store & auto-retrain loop ───────────────────────────────────────
+# Labeled samples submitted by ride/payment services after human review.
+# When enough accumulate the models are retrained automatically.
+
+import json
+from pydantic import field_validator
+
+FEEDBACK_FILE = os.getenv("FEEDBACK_STORE_PATH", "/tmp/mobo_ml_feedback.jsonl")
+RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", "50"))  # auto-retrain after N labeled samples
+
+# In-memory accumulator — persisted to FEEDBACK_FILE for crash recovery
+feedback_store: list = []
+
+try:
+    if os.path.exists(FEEDBACK_FILE):
+        with open(FEEDBACK_FILE) as f:
+            feedback_store = [json.loads(l) for l in f if l.strip()]
+        logger.info(f"[ML Service] Loaded {len(feedback_store)} existing feedback samples.")
+except Exception as e:
+    logger.warning(f"[ML Service] Could not load feedback store: {e}")
+
+class FeedbackSample(BaseModel):
+    """Labeled sample submitted after human review of a flagged event."""
+    event_type: str          # 'gps' | 'payment' | 'collusion'
+    event_id: str            # ride_id or payment_id
+    features: dict           # raw features used during original scoring
+    label: str               # 'fraud' | 'legitimate' | 'uncertain'
+    reviewer_id: Optional[str] = None
+    notes: Optional[str] = None
+
+    @field_validator("event_type")
+    @classmethod
+    def valid_event_type(cls, v):
+        if v not in ("gps", "payment", "collusion"):
+            raise ValueError("event_type must be gps, payment, or collusion")
+        return v
+
+    @field_validator("label")
+    @classmethod
+    def valid_label(cls, v):
+        if v not in ("fraud", "legitimate", "uncertain"):
+            raise ValueError("label must be fraud, legitimate, or uncertain")
+        return v
+
+@app.post("/feedback", status_code=202)
+def submit_feedback(sample: FeedbackSample, request: Request):
+    """
+    Accept a labeled fraud sample for inclusion in the next retraining run.
+    Protected by internal service key.
+    Auto-triggers retraining when RETRAIN_THRESHOLD samples accumulate.
+    """
+    key = request.headers.get("X-Internal-Service-Key")
+    if key != os.getenv("INTERNAL_SERVICE_KEY", ""):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    record = sample.model_dump()
+    record["submitted_at"] = time.time()
+    feedback_store.append(record)
+
+    # Persist to disk for crash recovery
+    try:
+        with open(FEEDBACK_FILE, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        logger.warning(f"[Feedback] Could not persist sample: {e}")
+
+    pending = len(feedback_store)
+    logger.info(f"[Feedback] Accepted sample for {sample.event_type}/{sample.event_id}. Pending: {pending}")
+
+    # Auto-retrain when threshold reached
+    if pending >= RETRAIN_THRESHOLD:
+        logger.info(f"[Feedback] Threshold {RETRAIN_THRESHOLD} reached — triggering retraining.")
+        try:
+            gps_model.load_or_train(force=True)
+            payment_model.load_or_train(force=True)
+            fraud_model.load_or_train(force=True)
+            feedback_store.clear()
+            # Truncate persisted store
+            open(FEEDBACK_FILE, "w").close()
+            logger.info("[Feedback] Auto-retrain complete.")
+        except Exception as e:
+            logger.error(f"[Feedback] Auto-retrain failed: {e}")
+
+    return {
+        "accepted": True,
+        "pending_samples": len(feedback_store),
+        "threshold": RETRAIN_THRESHOLD,
+        "will_retrain_at": RETRAIN_THRESHOLD,
+    }

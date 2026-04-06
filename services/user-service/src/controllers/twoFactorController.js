@@ -23,10 +23,7 @@ try {
   speakeasy = null;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  throw new Error('[FATAL] JWT_SECRET must be set and at least 32 characters. Exiting.');
-}
+const { signToken } = require('../../../shared/jwtUtil');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -264,7 +261,7 @@ const validate2FA = async (req, res) => {
       role:      user.role,
       full_name: user.full_name
     };
-    const jwtToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const jwtToken = signToken(tokenPayload, { expiresIn: JWT_EXPIRES_IN });
 
     return res.json({
       success: true,

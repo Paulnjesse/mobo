@@ -28,6 +28,8 @@ module.exports = {
     '.*shared/locationRateLimit.*': '<rootDir>/tests/functional/__mocks__/locationRateLimit.js',
     '.*shared/redis.*':           '<rootDir>/tests/functional/__mocks__/redis.js',
     '.*shared/logger.*':          '<rootDir>/tests/functional/__mocks__/logger.js',
+    '.*shared/jwtUtil.*':         '<rootDir>/tests/functional/__mocks__/jwtUtil.js',
+    '.*shared/auditLog.*':        '<rootDir>/tests/functional/__mocks__/auditLog.js',
     // Per-service db convenience re-exports (matched by the raw ../db require string)
     '.*user-service/src/db$':     '<rootDir>/tests/functional/__mocks__/userDb.js',
     '.*ride-service/src/db$':     '<rootDir>/tests/functional/__mocks__/rideDb.js',

@@ -1,15 +1,9 @@
-const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  // Crash at startup — a missing or weak secret must never silently fall through
-  throw new Error('[FATAL] JWT_SECRET must be set and at least 32 characters. Set it in your environment and restart.');
-}
+const { verifyJwt } = require('../../../services/shared/jwtUtil');
 
 /**
- * Gateway-level JWT verification.
- * Verifies the token and injects user info into request headers
- * so downstream services can trust them without re-verifying.
+ * Gateway-level JWT verification (RS256 in production, HS256 in dev/test).
+ * Verifies the token, enforces device binding, and injects user info into
+ * request headers so downstream services can trust them without re-verifying.
  */
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -24,7 +18,21 @@ const verifyToken = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const decoded = verifyJwt(token);
+
+    // Device binding: if the token carries a device_id claim, the request
+    // MUST present the matching X-Device-ID header. Mismatch indicates the
+    // token is being used from an unrecognised device (possible theft).
+    if (decoded.device_id) {
+      const requestDeviceId = req.headers['x-device-id'] || '';
+      if (requestDeviceId !== decoded.device_id) {
+        return res.status(401).json({
+          success: false,
+          code: 'DEVICE_BINDING_FAILED',
+          message: 'Device mismatch. Please log in again from this device.',
+        });
+      }
+    }
 
     // Inject user info as trusted headers for downstream services
     req.headers['x-user-id'] = decoded.id;
@@ -55,7 +63,7 @@ const optionalAuth = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    const decoded = verifyJwt(token);
     req.headers['x-user-id'] = decoded.id;
     req.headers['x-user-role'] = decoded.role;
     req.headers['x-user-phone'] = decoded.phone || '';

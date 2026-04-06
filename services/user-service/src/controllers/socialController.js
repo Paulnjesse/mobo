@@ -40,6 +40,8 @@ const applyReferralCode = async (req, res) => {
   try {
     const userId = req.user.id;
     const { code } = req.body;
+    // Device fingerprint supplied by the mobile client (JWT device_id or explicit header)
+    const deviceId = req.user.device_id || req.headers['x-device-id'] || null;
 
     // Referred account must be new (prevent old-account shill farms)
     const accountAge = await pool.query(
@@ -61,6 +63,19 @@ const applyReferralCode = async (req, res) => {
     const existing = await pool.query('SELECT id FROM referrals WHERE referred_id = $1', [userId]);
     if (existing.rows[0]) return res.status(400).json({ error: 'Referral code already applied' });
 
+    // Device fingerprint check: block same device claiming referral on multiple accounts
+    if (deviceId) {
+      const deviceCheck = await pool.query(
+        `SELECT r.id FROM referrals r
+         JOIN users u ON r.referred_id = u.id
+         WHERE u.device_id = $1 AND r.created_at > NOW() - INTERVAL '90 days'`,
+        [deviceId]
+      );
+      if (deviceCheck.rows[0]) {
+        return res.status(400).json({ error: 'This device has already claimed a referral reward' });
+      }
+    }
+
     // Velocity check: cap referrer to MAX_REFERRALS_PER_REFERRER_PER_DAY per day
     const velocityCheck = await pool.query(
       `SELECT COUNT(*) FROM referrals
@@ -76,7 +91,10 @@ const applyReferralCode = async (req, res) => {
       `INSERT INTO referrals (referrer_id, referred_id) VALUES ($1, $2)`,
       [referrer.rows[0].id, userId]
     );
-    await pool.query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrer.rows[0].id, userId]);
+    await pool.query(
+      'UPDATE users SET referred_by = $1' + (deviceId ? ', device_id = $3' : '') + ' WHERE id = $2',
+      deviceId ? [referrer.rows[0].id, userId, deviceId] : [referrer.rows[0].id, userId]
+    );
 
     // Give referee immediate credit
     await pool.query(

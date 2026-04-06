@@ -7,10 +7,8 @@ const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { encrypt, hashForLookup } = require('../../../../shared/fieldEncryption');
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  throw new Error('[FATAL] JWT_SECRET must be set and at least 32 characters. Exiting.');
-}
+const { signToken, decodeIgnoreExpiry } = require('../../../shared/jwtUtil');
+const audit = require('../../../shared/auditLog');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // OTP rate limiting: max 3 requests per phone per hour
@@ -622,6 +620,9 @@ const login = async (req, res) => {
 
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
+      await audit.log(db, { actor_id: user.id, actor_role: user.role, action: 'auth.login.fail',
+        resource_type: 'user', resource_id: user.id, ip: req.ip,
+        user_agent: req.headers['user-agent'], outcome: 'failure', detail: { reason: 'bad_password' } });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -649,12 +650,15 @@ const login = async (req, res) => {
       fleetInfo = fleetResult.rows;
     }
 
+    // Bind token to device if the client supplies one
+    const deviceId = req.headers['x-device-id'] || req.body.device_id || null;
     const tokenPayload = {
       id: user.id,
       phone: user.phone,
       email: user.email,
       role: user.role,
-      full_name: user.full_name
+      full_name: user.full_name,
+      ...(deviceId ? { device_id: deviceId } : {}),
     };
 
     // 2FA enforcement:
@@ -684,7 +688,11 @@ const login = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = signToken(tokenPayload, { expiresIn: JWT_EXPIRES_IN });
+
+    await audit.log(db, { actor_id: user.id, actor_role: user.role, action: 'auth.login',
+      resource_type: 'user', resource_id: user.id, ip: req.ip,
+      user_agent: req.headers['user-agent'], outcome: 'success' });
 
     res.json({
       success: true,
@@ -788,7 +796,7 @@ const verify = async (req, res) => {
 
     // Issue JWT so the user is immediately logged in after verification
     const tokenPayload = { id: user.id, phone: user.phone || phone, role: user.role, full_name: user.full_name };
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = signToken(tokenPayload, { expiresIn: JWT_EXPIRES_IN });
 
     res.json({
       success: true,
@@ -900,7 +908,7 @@ const refreshToken = async (req, res) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+      decoded = decodeIgnoreExpiry(token);
     } catch (err) {
       return res.status(401).json({ success: false, message: 'Invalid token' });
     }
@@ -926,9 +934,8 @@ const refreshToken = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Account not active' });
     }
 
-    const newToken = jwt.sign(
+    const newToken = signToken(
       { id: user.id, phone: user.phone, email: user.email, role: user.role, full_name: user.full_name },
-      JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
@@ -1389,7 +1396,7 @@ const socialLogin = async (req, res) => {
       role: user.role,
       full_name: user.full_name,
     };
-    const jwtToken = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const jwtToken = signToken(tokenPayload, { expiresIn: JWT_EXPIRES_IN });
 
     res.json({
       success: true,
