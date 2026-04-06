@@ -948,17 +948,19 @@ describe('4 · Real-time Tracking (Socket.IO)', () => {
 
     const uninvitedRider = ioClient(serverAddress, {
       transports: ['websocket'],
-      auth: { role: 'rider', userId: 'rider-3', watchingDriver: 'driver-99' }, // different driver
-    });
-
-    const otherDriver = ioClient(serverAddress, {
-      transports: ['websocket'],
-      auth: { role: 'driver', userId: 'driver-3' }, // driver-3, not driver-99
+      auth: { role: 'rider', userId: 'rider-3', watchingDriver: 'driver-99' }, // watching driver-99
     });
 
     uninvitedRider.on('driver_location', () => { received = true; });
 
     uninvitedRider.on('connect', () => {
+      // Create otherDriver only after rider is connected so we can guarantee
+      // the otherDriver.on('connect') handler is registered before it fires
+      const otherDriver = ioClient(serverAddress, {
+        transports: ['websocket'],
+        auth: { role: 'driver', userId: 'driver-3' }, // driver-3, not driver-99 — should not reach rider
+      });
+
       otherDriver.on('connect', () => {
         otherDriver.emit('update_location', { latitude: 3.88, longitude: 11.51, heading: 0, speed: 20 });
         setTimeout(() => {
@@ -1120,10 +1122,10 @@ describe('5 · In-App Payments', () => {
 
   // ── 5.3 Refund flow ──────────────────────────────────────────────────────
   test('POST /payments/refund/:id — admin can refund a completed payment', async () => {
-    // Role is checked via JWT (req.user.role), not a DB query — 4 actual DB queries:
-    // 1) SELECT payment, 2) UPDATE payment status, 3) INSERT audit log, 4) UPDATE ride
+    // Admin path: 1) SELECT payment (no user_id filter), 2) UPDATE payment status,
+    // 3) INSERT audit log, 4) UPDATE ride payment_status
     mockPaymentDb.query
-      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'completed', user_id: RIDER_ID, ride_id: RIDE_ID, amount: 2350 }] }) // get payment
+      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'completed', user_id: RIDER_ID, ride_id: RIDE_ID, amount: 2350, method: 'cash' }] })
       .mockResolvedValueOnce({ rows: [] })  // update payment status
       .mockResolvedValueOnce({ rows: [] })  // insert audit log
       .mockResolvedValueOnce({ rows: [] }); // update ride payment_status
@@ -1135,17 +1137,16 @@ describe('5 · In-App Payments', () => {
       .set('x-user-role', 'admin')
       .send({ reason: 'Driver no-show' });
 
-    expect([200, 400, 404, 500]).toContain(res.status);
-    if (res.status === 200) {
-      expect(res.body.success).toBe(true);
-    }
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   test('POST /payments/refund/:id — rider cannot refund someone else\'s payment', async () => {
     const strangerToken = makeToken({ id: 'stranger-uuid', role: 'rider' });
+    // Non-admin path: SELECT uses user_id filter; mock returns payment owned by RIDER_ID
+    // Controller detects ownership mismatch and returns 403
     mockPaymentDb.query
-      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'completed', user_id: RIDER_ID, ride_id: RIDE_ID }] })
-      .mockResolvedValueOnce({ rows: [{ role: 'rider' }] }); // non-admin
+      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'completed', user_id: RIDER_ID, ride_id: RIDE_ID, amount: 2350 }] });
 
     const res = await request(paymentApp)
       .post(`/payments/refund/${PAYMENT_ID}`)
@@ -1154,12 +1155,12 @@ describe('5 · In-App Payments', () => {
       .set('x-user-role', 'rider')
       .send({ reason: 'I want my money' });
 
-    expect([403, 500]).toContain(res.status);
+    expect(res.status).toBe(403);
   });
 
   test('POST /payments/refund/:id — cannot refund an already-refunded payment', async () => {
     mockPaymentDb.query
-      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'refunded', user_id: RIDER_ID }] });
+      .mockResolvedValueOnce({ rows: [{ id: PAYMENT_ID, status: 'refunded', user_id: RIDER_ID, amount: 2350 }] });
 
     const res = await request(paymentApp)
       .post(`/payments/refund/${PAYMENT_ID}`)
@@ -1168,7 +1169,7 @@ describe('5 · In-App Payments', () => {
       .set('x-user-role', 'admin')
       .send({ reason: 'Double refund attempt' });
 
-    expect([400, 500]).toContain(res.status);
+    expect(res.status).toBe(400);
   });
 
   test('GET /payments/history — returns paginated payment records', async () => {

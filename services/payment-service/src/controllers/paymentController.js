@@ -1103,19 +1103,25 @@ const getPaymentHistory = async (req, res) => {
 const refundPayment = async (req, res) => {
   try {
     const userId    = req.user.id;
+    const isAdmin   = req.user.role === 'admin';
     const { id: paymentId } = req.params;
     const { reason } = req.body;
 
-    const paymentResult = await db.query(
-      'SELECT * FROM payments WHERE id = $1 AND user_id = $2',
-      [paymentId, userId]
-    );
+    // Admins can refund any payment; riders can only refund their own
+    const paymentResult = isAdmin
+      ? await db.query('SELECT * FROM payments WHERE id = $1', [paymentId])
+      : await db.query('SELECT * FROM payments WHERE id = $1 AND user_id = $2', [paymentId, userId]);
 
     if (paymentResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Payment not found' });
     }
 
     const payment = paymentResult.rows[0];
+
+    // Non-admins can only refund their own payments (double-check ownership)
+    if (!isAdmin && payment.user_id !== userId) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
 
     if (payment.status === 'refunded') {
       return res.status(400).json({ success: false, message: 'Payment already refunded' });
@@ -1128,7 +1134,7 @@ const refundPayment = async (req, res) => {
     if (payment.method === 'wallet') {
       await db.query(
         'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
-        [payment.amount, userId]
+        [payment.amount, payment.user_id]
       );
     }
 
@@ -1161,7 +1167,7 @@ const refundPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Refund of ${payment.amount.toLocaleString()} XAF processed`,
+      message: `Refund of ${Number(payment.amount || 0).toLocaleString()} XAF processed`,
       data: { payment_id: paymentId, amount: payment.amount, method: payment.method },
     });
   } catch (err) {
