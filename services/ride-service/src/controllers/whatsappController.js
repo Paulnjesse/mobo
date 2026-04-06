@@ -233,9 +233,22 @@ exports.handleWhatsApp = async (req, res) => {
 
 // ── Webhook signature validation (Twilio) ─────────────────────────────────────
 exports.validateTwilio = (req, res, next) => {
-  // In production, verify X-Twilio-Signature header using TWILIO_AUTH_TOKEN
-  // For now, allow all requests (add validation before go-live)
-  // const twilio = require('twilio');
-  // const valid = twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, ...);
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    // Refuse to serve the endpoint if the secret is not configured
+    return res.status(503).json({ error: 'Webhook not configured' });
+  }
+
+  const twilio = require('twilio');
+  // Reconstruct the full URL Twilio signed — must match what Twilio sees exactly
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const host  = req.headers['x-forwarded-host']  || req.headers.host;
+  const url   = `${proto}://${host}${req.originalUrl}`;
+  const signature = req.headers['x-twilio-signature'] || '';
+
+  const valid = twilio.validateRequest(authToken, signature, url, req.body);
+  if (!valid) {
+    return res.status(403).json({ error: 'Invalid Twilio signature' });
+  }
   next();
 };

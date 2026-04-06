@@ -42,7 +42,6 @@ const generateShareToken = async (req, res) => {
       success: true,
       data: {
         share_url: shareUrl,
-        token,
         expires_at: expiresAt
       }
     });
