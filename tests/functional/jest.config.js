@@ -30,6 +30,7 @@ module.exports = {
     '.*shared/logger.*':          '<rootDir>/tests/functional/__mocks__/logger.js',
     '.*shared/jwtUtil.*':         '<rootDir>/tests/functional/__mocks__/jwtUtil.js',
     '.*shared/auditLog.*':        '<rootDir>/tests/functional/__mocks__/auditLog.js',
+    '.*shared/certRotation.*':    '<rootDir>/tests/functional/__mocks__/certRotation.js',
     // Per-service db convenience re-exports (matched by the raw ../db require string)
     '.*user-service/src/db$':     '<rootDir>/tests/functional/__mocks__/userDb.js',
     '.*ride-service/src/db$':     '<rootDir>/tests/functional/__mocks__/rideDb.js',

@@ -31,97 +31,92 @@
  *   SERVICE_CA_CERT=$(base64 -w0 ca.crt)
  */
 'use strict';
+/**
+ * MOBO Mutual TLS (mTLS) HTTP Client — with zero-touch cert rotation.
+ *
+ * Integrates with certRotation.js to hot-reload the TLS agent whenever
+ * certificates are renewed by an external cert manager (cert-manager, Vault
+ * Agent, ACME, etc.) — no service restart required.
+ *
+ * Environment variables:
+ *   SERVICE_CERT_FILE    — path to PEM cert file (watched for changes)
+ *   SERVICE_KEY_FILE     — path to PEM key file  (watched for changes)
+ *   SERVICE_CA_CERT_FILE — path to PEM CA file   (watched for changes)
+ *   SERVICE_CERT         — base64/PEM cert (fallback if no file path set)
+ *   SERVICE_KEY          — base64/PEM key  (fallback)
+ *   SERVICE_CA_CERT      — base64/PEM CA   (fallback)
+ *   CERT_WARN_DAYS       — warn N days before expiry (default: 14)
+ *   CERT_CRITICAL_DAYS   — critical alert N days before expiry (default: 3)
+ *   CERT_CHECK_INTERVAL_MS — expiry check frequency (default: 3600000)
+ */
 
 const https  = require('https');
 const axios  = require('axios');
-const crypto = require('crypto');
 const { internalHeaders } = require('./internalAuth');
+const { manager: certManager } = require('./certRotation');
 
-// ─── Load certs from env ───────────────────────────────────────────────────────
-
-function decodePem(envVar) {
-  const val = process.env[envVar];
-  if (!val) return null;
-  // Support both raw PEM and base64-encoded PEM (for env var storage)
-  if (val.includes('-----BEGIN')) return val.replace(/\\n/g, '\n');
-  try {
-    return Buffer.from(val, 'base64').toString('utf8');
-  } catch {
-    return null;
-  }
-}
-
-const CLIENT_CERT = decodePem('SERVICE_CERT');
-const CLIENT_KEY  = decodePem('SERVICE_KEY');
-const CA_CERT     = decodePem('SERVICE_CA_CERT');
-
-const MTLS_AVAILABLE = !!(CLIENT_CERT && CLIENT_KEY && CA_CERT);
-
-if (process.env.NODE_ENV === 'production' && !MTLS_AVAILABLE) {
-  console.warn(
-    '[mTLS] WARNING: SERVICE_CERT / SERVICE_KEY / SERVICE_CA_CERT not set. ' +
-    'Service-to-service calls use bearer-token auth only (no mutual TLS). ' +
-    'See services/shared/mtlsClient.js for setup instructions.'
-  );
-} else if (MTLS_AVAILABLE) {
-  // Log cert fingerprint at startup for audit trail
-  try {
-    const cert = new crypto.X509Certificate(CLIENT_CERT);
-    console.info('[mTLS] Client certificate loaded:', {
-      subject: cert.subject,
-      validTo: cert.validTo,
-      fingerprint: cert.fingerprint256,
-    });
-  } catch { /* ignore parse errors */ }
-}
-
-// ─── HTTPS agent ───────────────────────────────────────────────────────────────
+// ─── Live-reloadable TLS agent ────────────────────────────────────────────────
 
 /**
- * Creates an HTTPS agent that presents our client certificate to the server
- * and validates the server's certificate against our internal CA.
+ * Build an https.Agent from current cert material.
+ * Falls back to a plain TLS agent (server-cert validation only) when no
+ * client certs are configured.
  */
-function createMtlsAgent() {
-  if (!MTLS_AVAILABLE) {
-    // Standard TLS agent — validates server cert, no client cert presented
-    return new https.Agent({ rejectUnauthorized: true });
+function _buildAgent(certs) {
+  const { cert, key, ca } = certs;
+  if (cert && key && ca) {
+    return new https.Agent({ cert, key, ca, rejectUnauthorized: true });
   }
-  return new https.Agent({
-    cert: CLIENT_CERT,
-    key:  CLIENT_KEY,
-    ca:   CA_CERT,
-    rejectUnauthorized: true,
-  });
+  return new https.Agent({ rejectUnauthorized: true });
 }
 
-const _agent = createMtlsAgent();
+// Agent reference — replaced in-place on cert rotation
+let _currentAgent = _buildAgent(certManager.getCerts());
+
+// Start the rotation manager; rebuild the agent whenever certs rotate
+certManager.start((newCerts) => {
+  console.info('[mTLS] Cert rotation detected — rebuilding TLS agent.');
+  _currentAgent = _buildAgent(newCerts);
+});
+
+if (process.env.NODE_ENV === 'production' && !certManager.isAvailable()) {
+  console.warn(
+    '[mTLS] WARNING: No client certificates configured. ' +
+    'Set SERVICE_CERT_FILE / SERVICE_KEY_FILE / SERVICE_CA_CERT_FILE ' +
+    '(or SERVICE_CERT / SERVICE_KEY / SERVICE_CA_CERT) for mutual TLS. ' +
+    'Service-to-service calls will use bearer-token auth only.'
+  );
+}
 
 // ─── Axios instance ────────────────────────────────────────────────────────────
 
 /**
- * Axios instance pre-configured for internal service-to-service calls.
- * - Presents client certificate (mTLS) when certs are configured
- * - Includes X-Internal-Service-Key bearer token (always, as defence-in-depth)
- * - Rejects unverified server certs
- * - 10-second timeout
+ * Axios instance for internal service-to-service calls.
+ *   - Uses the current live-rotated TLS agent (re-read on every request)
+ *   - Includes X-Internal-Service-Key bearer token (defence-in-depth)
+ *   - Rejects unverified server certs
+ *   - 10-second timeout
  */
 const internalAxios = axios.create({
-  httpsAgent: _agent,
   timeout: 10_000,
   headers: internalHeaders(),
 });
 
-// Refresh internal auth headers on every request (in case secret rotates at runtime)
+// Inject the latest agent and auth headers on every request — picks up
+// any cert rotation that happened since the last request
 internalAxios.interceptors.request.use((config) => {
+  config.httpsAgent = _currentAgent;
   Object.assign(config.headers, internalHeaders());
   return config;
 });
 
-/**
- * Check whether mTLS is active (both client cert and CA cert loaded).
- */
 function isMtlsActive() {
-  return MTLS_AVAILABLE;
+  return certManager.isAvailable();
 }
 
-module.exports = { internalAxios, isMtlsActive, createMtlsAgent };
+/** Exposed for testing — returns the currently active agent. */
+function createMtlsAgent() {
+  return _currentAgent;
+}
+
+module.exports = { internalAxios, isMtlsActive, createMtlsAgent, certManager };

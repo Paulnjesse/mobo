@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import os
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger("mobo.ml.fraud")
@@ -73,12 +74,16 @@ def _generate_collusion_data(n_clean=6000, n_fraud=600):
     y = np.concatenate([y_clean, y_fraud])
     return X, y
 
+ONLINE_MODEL_PATH = Path(os.getenv("MODEL_DIR", "/tmp/models")) / "collusion_online_sgd.joblib"
+
 class FraudDetector:
-    version = "1.0.0-rf"
+    version = "1.0.0-rf+online"
 
     def __init__(self):
-        self.model  = None
-        self.scaler = None
+        self.model        = None   # batch: RandomForest
+        self.scaler       = None
+        self.online_model = None   # online: SGDClassifier — supports partial_fit
+        self._online_samples = 0
 
     def load_or_train(self, force=False):
         MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -86,23 +91,42 @@ class FraudDetector:
             self.model  = joblib.load(MODEL_PATH)
             self.scaler = joblib.load(SCALER_PATH)
             logger.info("[FraudDetector] Loaded from disk.")
+        else:
+            logger.info("[FraudDetector] Training Random Forest...")
+            X, y = _generate_collusion_data()
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
+            self.model = RandomForestClassifier(
+                n_estimators=200,
+                max_depth=8,
+                min_samples_leaf=5,
+                class_weight="balanced",
+                random_state=42,
+                n_jobs=-1,
+            )
+            self.model.fit(X_scaled, y)
+            joblib.dump(self.model,  MODEL_PATH)
+            joblib.dump(self.scaler, SCALER_PATH)
+            logger.info("[FraudDetector] Trained and saved.")
+        # Load or initialise SGD online model
+        if not force and ONLINE_MODEL_PATH.exists():
+            self.online_model = joblib.load(ONLINE_MODEL_PATH)
+        else:
+            self.online_model = SGDClassifier(
+                loss="log_loss", penalty="l2", random_state=42, warm_start=True
+            )
+
+    def partial_fit(self, features: np.ndarray, label: int):
+        """Incrementally update the online classifier with a single labeled sample."""
+        if self.scaler is None:
             return
-        logger.info("[FraudDetector] Training Random Forest...")
-        X, y = _generate_collusion_data()
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        self.model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=8,
-            min_samples_leaf=5,
-            class_weight="balanced",
-            random_state=42,
-            n_jobs=-1,
-        )
-        self.model.fit(X_scaled, y)
-        joblib.dump(self.model,  MODEL_PATH)
-        joblib.dump(self.scaler, SCALER_PATH)
-        logger.info("[FraudDetector] Trained and saved.")
+        X_scaled = self.scaler.transform(features.reshape(1, -1))
+        self.online_model.partial_fit(X_scaled, [label], classes=[0, 1])
+        self._online_samples += 1
+        try:
+            joblib.dump(self.online_model, ONLINE_MODEL_PATH)
+        except Exception as e:
+            logger.warning(f"[FraudDetector] Could not save online model: {e}")
 
     def score_collusion(self, data: dict) -> tuple[float, list]:
         signals = []
@@ -119,13 +143,26 @@ class FraudDetector:
         if feats[0] > 0.5:
             return 0.97, signals
 
+        # Batch RF score
         if self.model and self.scaler:
             X = self.scaler.transform(feats.reshape(1, -1))
-            prob = float(self.model.predict_proba(X)[0][1])
+            batch_prob = float(self.model.predict_proba(X)[0][1])
         else:
-            prob = 0.0
-            if feats[1] > 0.5: prob += 0.4
-            if feats[2] > 5:   prob += 0.3
-            if feats[3] > 15:  prob += 0.2
+            batch_prob = 0.0
+            if feats[1] > 0.5: batch_prob += 0.4
+            if feats[2] > 5:   batch_prob += 0.3
+            if feats[3] > 15:  batch_prob += 0.2
+
+        # Online SGD score — blended in progressively as it accumulates labels
+        online_prob = 0.0
+        if self.online_model and self._online_samples >= 5 and self.scaler:
+            try:
+                X = self.scaler.transform(feats.reshape(1, -1))
+                online_prob = float(self.online_model.predict_proba(X)[0][1])
+            except Exception:
+                pass
+
+        online_weight = min(0.4, self._online_samples / 100 * 0.4)
+        prob = (1 - online_weight) * batch_prob + online_weight * online_prob
 
         return float(np.clip(prob, 0, 1)), signals

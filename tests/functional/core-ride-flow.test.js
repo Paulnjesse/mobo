@@ -915,16 +915,19 @@ describe('4 · Real-time Tracking (Socket.IO)', () => {
   test('Driver location update includes all required fields', (done) => {
     const payload = { latitude: 3.8700, longitude: 11.5050, heading: 180, speed: 0, accuracy: 5 };
 
+    // Create rider first; only connect driver once rider is fully connected so
+    // the room join is guaranteed before the driver emits.
     const rider = ioClient(serverAddress, {
       transports: ['websocket'],
       auth: { role: 'rider', userId: 'rider-2', watchingDriver: 'driver-2' },
     });
-    const driver = ioClient(serverAddress, {
-      transports: ['websocket'],
-      auth: { role: 'driver', userId: 'driver-2' },
-    });
 
     rider.on('connect', () => {
+      const driver = ioClient(serverAddress, {
+        transports: ['websocket'],
+        auth: { role: 'driver', userId: 'driver-2' },
+      });
+
       driver.on('connect', () => {
         rider.on('driver_location', (data) => {
           expect(typeof data.latitude).toBe('number');

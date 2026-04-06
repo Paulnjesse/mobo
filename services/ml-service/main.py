@@ -9,10 +9,12 @@ FastAPI microservice providing real-time fraud scoring for:
 
 import os
 import time
+import asyncio
+import threading
 import numpy as np
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -215,7 +217,10 @@ import json
 from pydantic import field_validator
 
 FEEDBACK_FILE = os.getenv("FEEDBACK_STORE_PATH", "/tmp/mobo_ml_feedback.jsonl")
-RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", "50"))  # auto-retrain after N labeled samples
+RETRAIN_THRESHOLD = int(os.getenv("RETRAIN_THRESHOLD", "50"))  # full batch retrain every N samples
+
+# Prevent concurrent full retraining runs
+_retrain_lock = threading.Lock()
 
 # In-memory accumulator — persisted to FEEDBACK_FILE for crash recovery
 feedback_store: list = []
@@ -251,12 +256,57 @@ class FeedbackSample(BaseModel):
             raise ValueError("label must be fraud, legitimate, or uncertain")
         return v
 
+def _extract_features_for_type(event_type: str, features: dict):
+    """Extract numpy feature vector from raw features dict for a given model type."""
+    import numpy as np
+    from models.gps_anomaly import extract_features as gps_extract
+    from models.fraud_detector import extract_collusion_features
+    from models.payment_scorer import extract_features as pay_extract
+    try:
+        if event_type == "gps":
+            return gps_extract(features)
+        elif event_type == "collusion":
+            return extract_collusion_features(features)
+        elif event_type == "payment":
+            return pay_extract(features)
+    except Exception as e:
+        logger.warning(f"[Feedback] Feature extraction failed for {event_type}: {e}")
+    return None
+
+def _background_full_retrain():
+    """Full batch retrain — run in a thread so it never blocks the API."""
+    if not _retrain_lock.acquire(blocking=False):
+        logger.info("[Feedback] Retrain already in progress — skipping.")
+        return
+    try:
+        logger.info("[Feedback] Starting full batch retrain...")
+        gps_model.load_or_train(force=True)
+        payment_model.load_or_train(force=True)
+        fraud_model.load_or_train(force=True)
+        feedback_store.clear()
+        open(FEEDBACK_FILE, "w").close()
+        logger.info("[Feedback] Full batch retrain complete. Feedback store cleared.")
+    except Exception as e:
+        logger.error(f"[Feedback] Full batch retrain failed: {e}")
+    finally:
+        _retrain_lock.release()
+
 @app.post("/feedback", status_code=202)
-def submit_feedback(sample: FeedbackSample, request: Request):
+async def submit_feedback(
+    sample: FeedbackSample,
+    background_tasks: BackgroundTasks,
+    request: Request,
+):
     """
-    Accept a labeled fraud sample for inclusion in the next retraining run.
+    Accept a labeled fraud sample.
     Protected by internal service key.
-    Auto-triggers retraining when RETRAIN_THRESHOLD samples accumulate.
+
+    Behaviour (Uber-style near-real-time loop):
+      1. Immediately calls partial_fit on the matching model's online learner —
+         the model is updated before this response is returned (sub-millisecond).
+      2. Persists the sample to disk for crash recovery.
+      3. When RETRAIN_THRESHOLD samples accumulate, schedules a full batch
+         retrain as a FastAPI BackgroundTask (non-blocking, runs after response).
     """
     key = request.headers.get("X-Internal-Service-Key")
     if key != os.getenv("INTERNAL_SERVICE_KEY", ""):
@@ -266,7 +316,25 @@ def submit_feedback(sample: FeedbackSample, request: Request):
     record["submitted_at"] = time.time()
     feedback_store.append(record)
 
-    # Persist to disk for crash recovery
+    # ── 1. Immediate online update (partial_fit) ──────────────────────────────
+    label_int = 1 if sample.label == "fraud" else 0
+    feats = _extract_features_for_type(sample.event_type, sample.features)
+    if feats is not None:
+        try:
+            if sample.event_type == "gps":
+                gps_model.partial_fit(feats, label_int)
+            elif sample.event_type == "collusion":
+                fraud_model.partial_fit(feats, label_int)
+            elif sample.event_type == "payment":
+                payment_model.partial_fit(feats, label_int)
+            logger.info(
+                f"[Feedback] partial_fit applied — {sample.event_type}/{sample.event_id} "
+                f"label={sample.label}"
+            )
+        except Exception as e:
+            logger.warning(f"[Feedback] partial_fit failed: {e}")
+
+    # ── 2. Persist to disk ────────────────────────────────────────────────────
     try:
         with open(FEEDBACK_FILE, "a") as f:
             f.write(json.dumps(record) + "\n")
@@ -274,25 +342,21 @@ def submit_feedback(sample: FeedbackSample, request: Request):
         logger.warning(f"[Feedback] Could not persist sample: {e}")
 
     pending = len(feedback_store)
-    logger.info(f"[Feedback] Accepted sample for {sample.event_type}/{sample.event_id}. Pending: {pending}")
+    logger.info(f"[Feedback] Accepted {sample.event_type}/{sample.event_id}. Pending: {pending}")
 
-    # Auto-retrain when threshold reached
+    # ── 3. Schedule full batch retrain in background when threshold reached ───
+    will_retrain = False
     if pending >= RETRAIN_THRESHOLD:
-        logger.info(f"[Feedback] Threshold {RETRAIN_THRESHOLD} reached — triggering retraining.")
-        try:
-            gps_model.load_or_train(force=True)
-            payment_model.load_or_train(force=True)
-            fraud_model.load_or_train(force=True)
-            feedback_store.clear()
-            # Truncate persisted store
-            open(FEEDBACK_FILE, "w").close()
-            logger.info("[Feedback] Auto-retrain complete.")
-        except Exception as e:
-            logger.error(f"[Feedback] Auto-retrain failed: {e}")
+        background_tasks.add_task(
+            asyncio.get_event_loop().run_in_executor, None, _background_full_retrain
+        )
+        will_retrain = True
+        logger.info(f"[Feedback] Threshold {RETRAIN_THRESHOLD} reached — background retrain scheduled.")
 
     return {
         "accepted": True,
-        "pending_samples": len(feedback_store),
+        "online_updated": feats is not None,
+        "pending_samples": pending,
         "threshold": RETRAIN_THRESHOLD,
-        "will_retrain_at": RETRAIN_THRESHOLD,
+        "full_retrain_scheduled": will_retrain,
     }

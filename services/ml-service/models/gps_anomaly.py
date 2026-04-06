@@ -20,6 +20,7 @@ import math
 import logging
 from pathlib import Path
 from sklearn.ensemble import IsolationForest
+from sklearn.linear_model import SGDOneClassSVM
 from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger("mobo.ml.gps")
@@ -118,9 +119,13 @@ def _generate_training_data(n_clean=5000, n_fraud=500) -> np.ndarray:
 class GPSAnomalyDetector:
     version = "1.0.0-iforest"
 
+    ONLINE_MODEL_PATH = Path(os.getenv("MODEL_DIR", "/tmp/models")) / "gps_online_sgd.joblib"
+
     def __init__(self):
-        self.model  = None
-        self.scaler = None
+        self.model        = None   # batch: IsolationForest
+        self.scaler       = None
+        self.online_model = None   # online: SGDOneClassSVM — supports partial_fit
+        self._online_samples = 0
 
     def load_or_train(self, force=False):
         MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -128,22 +133,47 @@ class GPSAnomalyDetector:
             self.model  = joblib.load(MODEL_PATH)
             self.scaler = joblib.load(SCALER_PATH)
             logger.info("[GPSAnomalyDetector] Loaded from disk.")
+        else:
+            logger.info("[GPSAnomalyDetector] Training Isolation Forest...")
+            X = _generate_training_data()
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
+            self.model = IsolationForest(
+                n_estimators=200,
+                contamination=0.08,
+                max_features=0.8,
+                random_state=42,
+                n_jobs=-1,
+            )
+            self.model.fit(X_scaled)
+            joblib.dump(self.model,  MODEL_PATH)
+            joblib.dump(self.scaler, SCALER_PATH)
+            logger.info("[GPSAnomalyDetector] Trained and saved.")
+        # Load or initialise online model
+        if not force and self.ONLINE_MODEL_PATH.exists():
+            self.online_model = joblib.load(self.ONLINE_MODEL_PATH)
+        else:
+            self.online_model = SGDOneClassSVM(nu=0.08, random_state=42)
+
+    def partial_fit(self, features: np.ndarray, label: int):
+        """Incrementally update the online model with a single labeled sample.
+        label: 1=fraud (anomaly), 0=legitimate.
+        SGDOneClassSVM.partial_fit expects X only (unsupervised), so we feed
+        confirmed anomalies to push the decision boundary.
+        """
+        if self.scaler is None:
             return
-        logger.info("[GPSAnomalyDetector] Training Isolation Forest...")
-        X = _generate_training_data()
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
-        self.model = IsolationForest(
-            n_estimators=200,
-            contamination=0.08,   # ~8% fraud rate assumption
-            max_features=0.8,
-            random_state=42,
-            n_jobs=-1,
-        )
-        self.model.fit(X_scaled)
-        joblib.dump(self.model,  MODEL_PATH)
-        joblib.dump(self.scaler, SCALER_PATH)
-        logger.info("[GPSAnomalyDetector] Trained and saved.")
+        X_scaled = self.scaler.transform(features.reshape(1, -1))
+        # Initialise online model on first sample using batch scaler's feature count
+        if self._online_samples == 0:
+            self.online_model.fit(X_scaled)
+        else:
+            self.online_model.partial_fit(X_scaled)
+        self._online_samples += 1
+        try:
+            joblib.dump(self.online_model, self.ONLINE_MODEL_PATH)
+        except Exception as e:
+            logger.warning(f"[GPSAnomalyDetector] Could not save online model: {e}")
 
     def score(self, data: dict) -> tuple[float, list]:
         feats = extract_features(data)
@@ -158,14 +188,24 @@ class GPSAnomalyDetector:
         if feats[6] > 0.5:   # out_of_bounds
             signals.append("coordinates_out_of_bounds")
 
-        # ML anomaly score (-1=anomaly, 1=normal) → convert to [0,1]
+        # Batch ML score (IsolationForest)
         if self.model and self.scaler:
             X = self.scaler.transform(feats.reshape(1, -1))
-            raw = self.model.decision_function(X)[0]   # negative=anomalous
-            # Normalise: typical range is roughly [-0.5, 0.5]
-            ml_score = float(np.clip(0.5 - raw, 0, 1))
+            raw = self.model.decision_function(X)[0]
+            batch_score = float(np.clip(0.5 - raw, 0, 1))
         else:
-            ml_score = 0.0
+            batch_score = 0.0
+
+        # Online model score (SGDOneClassSVM) — blended in when warmed up
+        online_score = 0.0
+        if self.online_model and self._online_samples >= 5 and self.scaler:
+            X = self.scaler.transform(feats.reshape(1, -1))
+            raw_online = self.online_model.decision_function(X)[0]
+            online_score = float(np.clip(0.5 - raw_online, 0, 1))
+
+        # Blend: weight online model more as it accumulates real labels
+        online_weight = min(0.4, self._online_samples / 100 * 0.4)
+        ml_score = (1 - online_weight) * batch_score + online_weight * online_score
 
         if ml_score > 0.6:
             signals.append(f"ml_anomaly_score_{ml_score:.2f}")
