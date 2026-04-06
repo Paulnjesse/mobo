@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mobo_jwt_secret_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  // Crash at startup — a missing or weak secret must never silently fall through
+  throw new Error('[FATAL] JWT_SECRET must be set and at least 32 characters. Set it in your environment and restart.');
+}
 
 /**
  * Gateway-level JWT verification.
@@ -20,7 +24,7 @@ const verifyToken = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
 
     // Inject user info as trusted headers for downstream services
     req.headers['x-user-id'] = decoded.id;
@@ -51,7 +55,7 @@ const optionalAuth = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     req.headers['x-user-id'] = decoded.id;
     req.headers['x-user-role'] = decoded.role;
     req.headers['x-user-phone'] = decoded.phone || '';

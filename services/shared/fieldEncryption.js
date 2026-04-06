@@ -48,11 +48,11 @@ const KEYS = {
 function getActiveKey(version = KEY_VERSION) {
   const key = KEYS[version];
   if (!key) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(`[FieldEncryption] FIELD_ENCRYPTION_KEY (v${version}) not configured`);
+    if (process.env.NODE_ENV !== 'test') {
+      throw new Error(`[FieldEncryption] FIELD_ENCRYPTION_KEY (v${version}) not configured — set FIELD_ENCRYPTION_KEY in your environment`);
     }
-    // Dev fallback — deterministic key (NOT for production)
-    return Buffer.alloc(32, 'mobo_dev_key_placeholder_not_production');
+    // Test-only fallback — deterministic key (NOT for development, staging, or production)
+    return Buffer.alloc(32, 'mobo_test_key_placeholder_not_production');
   }
   return key;
 }
@@ -105,7 +105,10 @@ function decrypt(blob) {
  */
 function hashForLookup(value) {
   if (!value) return null;
-  const key = process.env.FIELD_LOOKUP_HMAC_KEY || process.env.FIELD_ENCRYPTION_KEY || 'mobo_hmac_dev';
+  const key = process.env.FIELD_LOOKUP_HMAC_KEY || process.env.FIELD_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error('[FATAL] FIELD_LOOKUP_HMAC_KEY or FIELD_ENCRYPTION_KEY must be set. Exiting.');
+  }
   return crypto.createHmac('sha256', key).update(String(value).toLowerCase().trim()).digest('hex');
 }
 

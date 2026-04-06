@@ -6,7 +6,7 @@ const pool = require('../config/database');
 
 const getReferralInfo = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = req.user.id;
     const user = await pool.query(
       'SELECT referral_code, referral_credits FROM users WHERE id = $1', [userId]
     );
@@ -33,19 +33,43 @@ const getReferralInfo = async (req, res) => {
   }
 };
 
+const MAX_REFERRALS_PER_REFERRER_PER_DAY = 10;
+const ACCOUNT_AGE_MAX_DAYS = 7; // new account must apply code within 7 days
+
 const applyReferralCode = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = req.user.id;
     const { code } = req.body;
+
+    // Referred account must be new (prevent old-account shill farms)
+    const accountAge = await pool.query(
+      'SELECT created_at FROM users WHERE id = $1',
+      [userId]
+    );
+    if (!accountAge.rows[0]) return res.status(404).json({ error: 'User not found' });
+    const ageMs = Date.now() - new Date(accountAge.rows[0].created_at).getTime();
+    if (ageMs > ACCOUNT_AGE_MAX_DAYS * 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ error: 'Referral codes can only be applied to new accounts within 7 days of registration' });
+    }
 
     // Find referrer
     const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [code]);
     if (!referrer.rows[0]) return res.status(404).json({ error: 'Invalid referral code' });
-    if (referrer.rows[0].id === userId) return res.status(400).json({ error: 'Cannot use your own referral code' });
+    if (String(referrer.rows[0].id) === String(userId)) return res.status(400).json({ error: 'Cannot use your own referral code' });
 
     // Check if already used a referral
-    const existing = await pool.query('SELECT * FROM referrals WHERE referred_id = $1', [userId]);
+    const existing = await pool.query('SELECT id FROM referrals WHERE referred_id = $1', [userId]);
     if (existing.rows[0]) return res.status(400).json({ error: 'Referral code already applied' });
+
+    // Velocity check: cap referrer to MAX_REFERRALS_PER_REFERRER_PER_DAY per day
+    const velocityCheck = await pool.query(
+      `SELECT COUNT(*) FROM referrals
+       WHERE referrer_id = $1 AND created_at > NOW() - INTERVAL '1 day'`,
+      [referrer.rows[0].id]
+    );
+    if (parseInt(velocityCheck.rows[0].count) >= MAX_REFERRALS_PER_REFERRER_PER_DAY) {
+      return res.status(429).json({ error: 'Referral limit reached for this code today' });
+    }
 
     // Apply
     await pool.query(

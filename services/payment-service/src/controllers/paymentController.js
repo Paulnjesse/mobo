@@ -700,12 +700,6 @@ const chargeRide = async (req, res) => {
     }
 
     // ── SYNCHRONOUS METHODS ────────────────────────────────────────────────────
-    const userResult = await db.query(
-      'SELECT wallet_balance FROM users WHERE id = $1',
-      [userId]
-    );
-    const user = userResult.rows[0];
-
     let paymentResult;
 
     switch (method) {
@@ -738,17 +732,20 @@ const chargeRide = async (req, res) => {
         break;
       }
 
-      case 'wallet':
-        if (user.wallet_balance < amount) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient wallet balance. You have ${user.wallet_balance} XAF, need ${amount} XAF.`,
-          });
-        }
-        await db.query(
-          'UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2',
+      case 'wallet': {
+        // Atomic deduction: the WHERE guard prevents double-spending under concurrent requests
+        const walletUpdate = await db.query(
+          `UPDATE users SET wallet_balance = wallet_balance - $1
+           WHERE id = $2 AND wallet_balance >= $1
+           RETURNING wallet_balance`,
           [amount, userId]
         );
+        if (!walletUpdate.rows[0]) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient wallet balance. Need ${amount} XAF.`,
+          });
+        }
         paymentResult = {
           success: true,
           transaction_id: `WALLET-${Date.now()}`,
@@ -756,6 +753,7 @@ const chargeRide = async (req, res) => {
           message: 'Wallet payment successful',
         };
         break;
+      }
 
       default:
         paymentResult = { success: false, message: 'Unsupported payment method' };
@@ -951,7 +949,8 @@ const webhookMtn = async (req, res) => {
       const provided = signature.replace(/^sha256=/, '');
       try {
         const expectedBuf = Buffer.from(expected, 'hex');
-        const providedBuf = Buffer.from(provided.padEnd(expected.length * 2, '0').slice(0, expected.length * 2), 'hex');
+        const providedBuf = Buffer.from(provided, 'hex');
+        // Reject immediately if lengths differ — padding tricks cannot pass
         if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
           return res.sendStatus(401);
         }
@@ -1009,7 +1008,8 @@ const webhookOrange = async (req, res) => {
       const provided = signature.replace(/^sha256=/, '');
       try {
         const expectedBuf = Buffer.from(expected, 'hex');
-        const providedBuf = Buffer.from(provided.padEnd(expected.length * 2, '0').slice(0, expected.length * 2), 'hex');
+        const providedBuf = Buffer.from(provided, 'hex');
+        // Reject immediately if lengths differ — padding tricks cannot pass
         if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
           return res.sendStatus(401);
         }
@@ -1453,7 +1453,7 @@ const webhookStripe = async (req, res) => {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
     console.error('[StripeWebhook] Signature verification failed:', err.message);
-    return res.status(400).json({ error: `Webhook signature invalid: ${err.message}` });
+    return res.status(400).json({ error: 'Webhook signature invalid' });
   }
 
   // Idempotency: skip if we already processed this event

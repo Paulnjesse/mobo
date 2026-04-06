@@ -18,6 +18,9 @@ const MAX_OTP_REQUESTS_PER_HOUR = 3;
 // OTP attempt tracking: lock after 5 wrong attempts
 const MAX_OTP_ATTEMPTS = 5;
 
+// Apple JWKS cache — keys rotate rarely; refresh every hour
+const appleJwksCache = { keys: null, fetchedAt: 0 };
+
 /**
  * Constant-time OTP comparison — prevents timing attacks where an attacker
  * measures response latency to guess OTP digits one-by-one.
@@ -341,7 +344,7 @@ const signup = async (req, res) => {
         otp_sent: true,
         sms_sent: smsResult.success,
         email_sent: emailResult ? emailResult.success : false,
-        note: process.env.NODE_ENV === 'development' ? `DEV OTP: ${otp_code}` : undefined
+        note: process.env.NODE_ENV === 'test' ? `TEST OTP: ${otp_code}` : undefined
       }
     });
   } catch (err) {
@@ -861,7 +864,7 @@ const resendOtp = async (req, res) => {
       message: 'New OTP sent',
       sms_sent: smsResult.success,
       email_sent: emailResult ? emailResult.success : false,
-      note: process.env.NODE_ENV === 'development' ? `DEV OTP: ${otp_code}` : undefined
+      note: process.env.NODE_ENV === 'test' ? `TEST OTP: ${otp_code}` : undefined
     });
   } catch (err) {
     console.error('[ResendOtp Error]', err);
@@ -1069,8 +1072,8 @@ const forgotPassword = async (req, res) => {
       message: `A 6-digit reset code has been sent to your ${channel}. It expires in 10 minutes.`,
       email_sent: emailSent,
       sms_sent:   smsSent,
-      // Only expose OTP in development mode to simplify local testing
-      note: process.env.NODE_ENV === 'development' ? `DEV OTP: ${reset_otp}` : undefined,
+      // Only expose OTP in test mode (never development/staging/production)
+      note: process.env.NODE_ENV === 'test' ? `TEST OTP: ${reset_otp}` : undefined,
     });
   } catch (err) {
     console.error('[ForgotPassword Error]', err);
@@ -1262,28 +1265,46 @@ const socialLogin = async (req, res) => {
         return res.status(401).json({ success: false, message: 'Facebook token verification failed' });
       }
     } else if (provider === 'apple') {
-      // Apple tokens are JWTs signed with Apple's public key
-      // For simplicity, we trust the decoded payload sent by Expo (which already verified it)
-      // In strict production: fetch Apple's public keys and verify signature
+      // Verify Apple ID token signature against Apple's published JWKS
       try {
-        const parts  = providerToken.split('.');
-        if (parts.length < 2) throw new Error('Invalid Apple JWT format');
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+        const { createPublicKey } = require('crypto');
+        const appleAxios = require('axios');
 
+        const parts = providerToken.split('.');
+        if (parts.length !== 3) throw new Error('Invalid Apple JWT format');
+
+        // Decode header to get the key ID (kid) used for signing
+        const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf-8'));
+        if (!header.kid) throw new Error('Apple JWT missing kid header');
+
+        // Fetch Apple's public keys (cached at module level; TTL 1 h)
+        const now = Date.now();
+        if (!appleJwksCache.keys || now - appleJwksCache.fetchedAt > 3600000) {
+          const { data } = await appleAxios.get('https://appleid.apple.com/auth/keys', { timeout: 10000 });
+          appleJwksCache.keys = data.keys;
+          appleJwksCache.fetchedAt = now;
+        }
+
+        const jwk = appleJwksCache.keys.find(k => k.kid === header.kid);
+        if (!jwk) throw new Error(`Apple signing key ${header.kid} not found in JWKS`);
+
+        // Convert JWK → KeyObject using Node.js built-in crypto (Node 15+)
+        const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
+
+        // Verify signature, expiry, and issuer using jsonwebtoken
         const appleAud = process.env.APPLE_APP_BUNDLE_ID;
-        if (appleAud && payload.aud !== appleAud) {
-          return res.status(401).json({ success: false, message: 'Invalid Apple token audience' });
-        }
-
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          return res.status(401).json({ success: false, message: 'Apple token has expired' });
-        }
+        const verifyOpts = {
+          algorithms: ['RS256'],
+          issuer: 'https://appleid.apple.com',
+          ...(appleAud ? { audience: appleAud } : {}),
+        };
+        const payload = jwt.verify(providerToken, publicKey, verifyOpts);
 
         providerId    = payload.sub;
         verifiedEmail = payload.email || verifiedEmail;
         // Apple doesn't always include name in token; caller passes it from the first-time consent
       } catch (aErr) {
-        console.error('[SocialLogin] Apple token decode failed:', aErr.message);
+        console.error('[SocialLogin] Apple token verification failed:', aErr.message);
         return res.status(401).json({ success: false, message: 'Apple token verification failed' });
       }
     }

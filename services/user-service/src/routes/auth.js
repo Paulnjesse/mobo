@@ -1,7 +1,17 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+
+// Strict limiter for OTP, password reset — 5 attempts per 15 minutes per IP
+const sensitiveAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many attempts. Please wait 15 minutes.', code: 'RATE_LIMIT_EXCEEDED' },
+});
 const {
   signupValidator,
   loginValidator,
@@ -36,13 +46,14 @@ router.post('/social',          socialLogin);   // Google / Apple sign-in
 router.post('/signup',          signupValidator, validate, signup);
 router.post('/login',           loginValidator, validate, login);
 router.post('/verify',          verifyOtpValidator, validate, verify);
-router.post('/resend-otp',      resendOtp);
+router.post('/resend-otp',      sensitiveAuthLimiter, resendOtp);
 router.post('/logout',          logout);
-router.post('/forgot-password', forgotPasswordValidator, validate, forgotPassword);
-router.post('/reset-password',  resetPasswordValidator, validate, resetPassword);
+router.post('/forgot-password', sensitiveAuthLimiter, forgotPasswordValidator, validate, forgotPassword);
+router.post('/reset-password',  sensitiveAuthLimiter, resetPasswordValidator, validate, resetPassword);
 
 // 2FA — validate is public (called pre-login, before JWT is issued)
-router.post('/2fa/validate', validate2FA);
+// Rate-limited to prevent TOTP brute-force (6-digit = 1,000,000 possibilities)
+router.post('/2fa/validate', sensitiveAuthLimiter, validate2FA);
 
 // Protected routes
 router.post('/refresh-token', authenticate, refreshToken);

@@ -116,8 +116,7 @@ const getLocation = async (req, res) => {
       const rideCheck = await db.query(
         `SELECT r.id FROM rides r
          LEFT JOIN drivers d ON r.driver_id = d.id
-         WHERE (r.rider_id = $1 AND d.user_id = $2)
-            OR (r.rider_id = $2 AND d.user_id = $1)
+         WHERE ((r.rider_id = $1 AND d.user_id = $2) OR (r.rider_id = $2 AND d.user_id = $1))
            AND r.status NOT IN ('completed','cancelled')`,
         [requestingUserId, userId]
       );

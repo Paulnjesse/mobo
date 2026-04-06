@@ -418,14 +418,26 @@ describe('1 · User Registration & Authentication', () => {
 
   // ── 1.6 Social Login — Apple ─────────────────────────────────────────────
   describe('1.6 Social Login — Apple', () => {
-    test('POST /auth/social — Apple: decodes JWT and creates user', async () => {
-      // Build a fake Apple JWT (header.payload.signature)
-      const applePayload = Buffer.from(JSON.stringify({
-        sub: 'apple-sub-001',
-        email: 'jane@privaterelay.appleid.com',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      })).toString('base64');
-      const fakeAppleToken = `eyJhbGciOiJSUzI1NiJ9.${applePayload}.fakesig`;
+    test('POST /auth/social — Apple: verifies JWT signature via JWKS and creates user', async () => {
+      // Generate a real RSA key pair so we can produce a validly-signed Apple-style token
+      const { generateKeyPairSync } = require('crypto');
+      const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const testKid = 'test-apple-key-001';
+
+      // Sign a token that looks like a real Apple ID token
+      const appleToken = jwt.sign(
+        { sub: 'apple-sub-001', email: 'jane@privaterelay.appleid.com',
+          iss: 'https://appleid.apple.com', aud: 'com.mobo.app' },
+        privateKey,
+        { algorithm: 'RS256', keyid: testKid, expiresIn: '1h' }
+      );
+
+      // Export the public key as JWK and mock the Apple JWKS endpoint
+      const jwk = publicKey.export({ format: 'jwk' });
+      jwk.kid = testKid;
+      jwk.alg = 'RS256';
+      jwk.use = 'sig';
+      mockAxiosGet.mockResolvedValueOnce({ data: { keys: [jwk] } });
 
       mockUserDb.query
         .mockResolvedValueOnce({ rows: [] })  // social account lookup
@@ -437,7 +449,7 @@ describe('1 · User Registration & Authentication', () => {
 
       const res = await request(userApp)
         .post('/auth/social')
-        .send({ provider: 'apple', token: fakeAppleToken, name: 'Jane Doe', role: 'rider' });
+        .send({ provider: 'apple', token: appleToken, name: 'Jane Doe', role: 'rider' });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);

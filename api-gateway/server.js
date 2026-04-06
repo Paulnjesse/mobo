@@ -59,7 +59,7 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // In development, allow all; restrict in production
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
     }
   },
   credentials: true,
@@ -87,11 +87,16 @@ app.use(morgan('combined', {
 // ============================================================
 app.use(globalLimiter);
 
-// Prometheus metrics
+// Prometheus metrics — restricted to internal scraper IPs only
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
 app.get('/metrics', async (req, res) => {
+  const clientIp = req.ip || (req.connection && req.connection.remoteAddress) || '';
+  if (!METRICS_ALLOWED_IPS.includes(clientIp)) {
+    return res.status(403).end('Forbidden');
+  }
   try {
     res.set('Content-Type', promRegister.contentType);
     res.end(await promRegister.metrics());

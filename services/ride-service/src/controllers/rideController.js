@@ -57,6 +57,20 @@ const updateRideStops = async (req, res) => {
       return res.status(400).json({ error: 'Cannot modify stops after ride starts' });
     }
 
+    if (!Array.isArray(stops) || stops.length > 10) {
+      return res.status(400).json({ error: 'stops must be an array of at most 10 items' });
+    }
+    for (const stop of stops) {
+      if (!stop.address || typeof stop.address !== 'string' || stop.address.length > 255) {
+        return res.status(400).json({ error: 'Each stop must have a valid address (max 255 chars)' });
+      }
+      const lat = stop.location?.lat;
+      const lng = stop.location?.lng;
+      if (typeof lat !== 'number' || typeof lng !== 'number' || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return res.status(400).json({ error: 'Each stop must have valid lat/lng coordinates' });
+      }
+    }
+
     await pool.query('UPDATE rides SET stops = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(stops), id]);
     res.json({ success: true, stops });
   } catch (err) {
@@ -165,6 +179,25 @@ const respondToCheckin = async (req, res) => {
 const getCheckins = async (req, res) => {
   try {
     const { ride_id } = req.params;
+    const requestingUserId = req.headers['x-user-id'];
+    const userRole = req.headers['x-user-role'];
+
+    // Authorize: only the ride's rider, assigned driver, or admin
+    if (userRole !== 'admin') {
+      const rideResult = await pool.query(
+        `SELECT r.rider_id, d.user_id AS driver_user_id
+         FROM rides r
+         LEFT JOIN drivers d ON r.driver_id = d.id
+         WHERE r.id = $1`,
+        [ride_id]
+      );
+      if (!rideResult.rows[0]) return res.status(404).json({ error: 'Ride not found' });
+      const ride = rideResult.rows[0];
+      if (ride.rider_id !== requestingUserId && ride.driver_user_id !== requestingUserId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
     const result = await pool.query(
       'SELECT * FROM ride_checkins WHERE ride_id = $1 ORDER BY created_at DESC',
       [ride_id]
@@ -179,11 +212,17 @@ const getCheckins = async (req, res) => {
 const reportLostItem = async (req, res) => {
   try {
     const { ride_id, item_description, item_category } = req.body;
-    const reporterId = req.headers['x-user-id'];
+    const reporterId = req.user.id;
 
-    // Get driver from ride
-    const ride = await pool.query('SELECT driver_id FROM rides WHERE id = $1', [ride_id]);
+    // Get driver from ride and verify requester was the rider
+    const ride = await pool.query(
+      'SELECT driver_id, rider_id FROM rides WHERE id = $1',
+      [ride_id]
+    );
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
+    if (String(ride.rows[0].rider_id) !== String(reporterId)) {
+      return res.status(403).json({ error: 'Not authorised to report lost item for this ride' });
+    }
 
     const result = await pool.query(
       `INSERT INTO lost_and_found (ride_id, reporter_id, driver_id, item_description, item_category)
@@ -260,14 +299,26 @@ const updateLostAndFoundStatus = async (req, res) => {
     const { id } = req.params;
     const { status, driver_response } = req.body;
     const userId = req.headers['x-user-id'];
+    const userRole = req.headers['x-user-role'];
 
+    // Only the reporter or the driver on the associated ride may update the report
     const result = await pool.query(
-      `UPDATE lost_and_found
-       SET status = $1, driver_response = $2, resolved_at = CASE WHEN $1 IN ('returned','not_found','closed') THEN NOW() ELSE NULL END
-       WHERE id = $3 RETURNING *`,
-      [status, driver_response, id]
+      `UPDATE lost_and_found lf
+       SET status = $1, driver_response = $2,
+           resolved_at = CASE WHEN $1 IN ('returned','not_found','closed') THEN NOW() ELSE NULL END
+       WHERE lf.id = $3
+         AND (
+           lf.reporter_id = $4
+           OR EXISTS (
+             SELECT 1 FROM rides r JOIN drivers d ON d.id = r.driver_id
+             WHERE r.id = lf.ride_id AND d.user_id = $4
+           )
+           OR $5 = 'admin'
+         )
+       RETURNING *`,
+      [status, driver_response, id, userId, userRole]
     );
-
+    if (!result.rows[0]) return res.status(403).json({ error: 'Not authorised to update this report' });
     res.json({ report: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -493,7 +544,23 @@ const requestRide = async (req, res) => {
       } catch (passErr) { console.warn('[CommuterPass]', passErr.message); }
     }
 
-    const priceLockValid = use_price_lock && locked_fare && price_lock_expires_at && new Date(price_lock_expires_at) > new Date();
+    // Validate price lock server-side: look up the stored lock record rather than
+    // trusting the client-supplied locked_fare and price_lock_expires_at values.
+    let priceLockValid = false;
+    let serverLockedFare = null;
+    if (use_price_lock) {
+      const lockRow = await pool.query(
+        `SELECT fare, expires_at FROM price_locks
+         WHERE rider_id = $1 AND expires_at > NOW()
+         ORDER BY created_at DESC LIMIT 1`,
+        [riderId]
+      );
+      if (lockRow.rows[0]) {
+        priceLockValid = true;
+        serverLockedFare = lockRow.rows[0].fare;
+        fareCalc = calculateFare(0, 0, 1.0, user?.subscription_plan, true, serverLockedFare, ride_type);
+      }
+    }
 
     const rates = RIDE_TYPE_RATES[ride_type] || RIDE_TYPE_RATES.standard;
 
@@ -532,7 +599,7 @@ const requestRide = async (req, res) => {
         is_for_other, other_passenger_name, other_passenger_phone,
         child_seat_required, child_seat_count,
         split_payment, split_wallet_pct, split_momo_pct,
-        priceLockValid ? fareCalc.total : null,
+        priceLockValid ? serverLockedFare : null,
         priceLockValid ? new Date() : null,
         recurring_ride_id, booked_via_ussd, user_phone,
         // Ride preferences
@@ -776,6 +843,17 @@ const updateRideStatus = async (req, res) => {
     const userId = req.headers['x-user-id'];
     const validStatuses = ['arriving','in_progress','completed'];
     if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+    // Verify the caller is the driver assigned to this ride
+    const ownerCheck = await pool.query(
+      `SELECT r.id FROM rides r
+       JOIN drivers d ON d.id = r.driver_id
+       WHERE r.id = $1 AND d.user_id = $2 AND r.status NOT IN ('completed','cancelled')`,
+      [id, userId]
+    );
+    if (!ownerCheck.rows[0]) {
+      return res.status(403).json({ error: 'Not authorised to update this ride' });
+    }
 
     let extra = '';
     if (status === 'arriving')    extra = ', driver_arrived_at = NOW()';
@@ -1164,7 +1242,15 @@ const cancelRide = async (req, res) => {
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
     const r = ride.rows[0];
 
-    const cancelledBy = r.rider_id === userId ? 'rider' : 'driver';
+    // Only the rider or the assigned driver may cancel
+    const isRider = r.rider_id === userId;
+    const isDriver = r.driver_id
+      ? (await pool.query('SELECT 1 FROM drivers WHERE id = $1 AND user_id = $2', [r.driver_id, userId])).rows.length > 0
+      : false;
+    if (!isRider && !isDriver) {
+      return res.status(403).json({ error: 'Not authorised to cancel this ride' });
+    }
+    const cancelledBy = isRider ? 'rider' : 'driver';
 
     // ── Fee calculation ──────────────────────────────────────────────────────
     let cancellationFee = 0;
@@ -1303,6 +1389,9 @@ const cancelRide = async (req, res) => {
 const getRide = async (req, res) => {
   try {
     const { id } = req.params;
+    const requestingUserId = req.headers['x-user-id'];
+    const userRole = req.headers['x-user-role'];
+
     const result = await pool.query(
       `SELECT r.*,
         ST_X(r.pickup_location::geometry) as pickup_lng,
@@ -1311,7 +1400,8 @@ const getRide = async (req, res) => {
         ST_Y(r.dropoff_location::geometry) as dropoff_lat,
         u.full_name as rider_name, u.phone as rider_phone, u.profile_picture as rider_photo,
         du.full_name as driver_name, du.phone as driver_phone, du.profile_picture as driver_photo, du.rating as driver_rating,
-        v.make, v.model, v.color, v.plate, v.vehicle_type
+        v.make, v.model, v.color, v.plate, v.vehicle_type,
+        d.user_id as driver_user_id
        FROM rides r
        JOIN users u ON r.rider_id = u.id
        LEFT JOIN drivers d ON r.driver_id = d.id
@@ -1321,7 +1411,21 @@ const getRide = async (req, res) => {
       [id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Ride not found' });
-    res.json({ ride: result.rows[0] });
+
+    const ride = result.rows[0];
+
+    // Authorize: only the rider, the assigned driver, or an admin
+    if (userRole !== 'admin') {
+      const isRider  = ride.rider_id       === requestingUserId;
+      const isDriver = ride.driver_user_id === requestingUserId;
+      if (!isRider && !isDriver) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    // Strip the internal driver_user_id field before sending
+    const { driver_user_id, ...rideData } = ride;
+    res.json({ ride: rideData });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1448,15 +1552,21 @@ const rateRide = async (req, res) => {
 const addTip = async (req, res) => {
   try {
     const { id } = req.params;
+    const riderId = req.headers['x-user-id'];
     const amount = parseInt(req.body.tip_amount ?? req.body.amount ?? 0, 10);
     if (amount < 0) return res.status(400).json({ error: 'Tip amount cannot be negative' });
+    const MAX_TIP_XAF = 50000;
+    if (amount > MAX_TIP_XAF) {
+      return res.status(400).json({ error: `Tip cannot exceed ${MAX_TIP_XAF} XAF` });
+    }
 
+    // Only the rider who took this ride can add a tip
     const result = await pool.query(
       `UPDATE rides SET tip_amount = $1, tip_paid_at = NOW(), updated_at = NOW()
-       WHERE id = $2 AND status = 'completed' RETURNING *`,
-      [amount, id]
+       WHERE id = $2 AND status = 'completed' AND rider_id = $3 RETURNING *`,
+      [amount, id, riderId]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Completed ride not found' });
+    if (!result.rows[0]) return res.status(404).json({ error: 'Completed ride not found or not authorised' });
 
     // Credit tip to driver wallet + total_earnings
     const ride = result.rows[0];
@@ -1481,8 +1591,9 @@ const addTip = async (req, res) => {
 const roundUpFare = async (req, res) => {
   try {
     const { id } = req.params;
-    const ride = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
-    if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
+    const userId = req.headers['x-user-id'];
+    const ride = await pool.query('SELECT * FROM rides WHERE id = $1 AND rider_id = $2', [id, userId]);
+    if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found or not authorised' });
     const r = ride.rows[0];
     const nextHundred = Math.ceil((r.final_fare || r.estimated_fare) / 100) * 100;
     const roundUpAmount = nextHundred - (r.final_fare || r.estimated_fare);
@@ -1534,6 +1645,7 @@ const getSurgePricing = async (req, res) => {
 const applyPromoCode = async (req, res) => {
   try {
     const { code, fare } = req.body;
+    const userId = req.headers['x-user-id'];
     const result = await pool.query(
       `SELECT * FROM promo_codes WHERE code = $1 AND is_active = true
        AND (expires_at IS NULL OR expires_at > NOW()) AND used_count < max_uses`,
@@ -1541,6 +1653,26 @@ const applyPromoCode = async (req, res) => {
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Invalid or expired promo code' });
     const promo = result.rows[0];
+
+    // Prevent the same user from redeeming the same code more than once
+    const alreadyUsed = await pool.query(
+      `SELECT 1 FROM promo_redemptions WHERE promo_code_id = $1 AND user_id = $2`,
+      [promo.id, userId]
+    );
+    if (alreadyUsed.rows.length > 0) {
+      return res.status(409).json({ error: 'You have already used this promo code' });
+    }
+
+    // Atomically increment used_count and record this user's redemption
+    await pool.query(
+      `UPDATE promo_codes SET used_count = used_count + 1 WHERE id = $1`, [promo.id]
+    );
+    await pool.query(
+      `INSERT INTO promo_redemptions (promo_code_id, user_id) VALUES ($1, $2)
+       ON CONFLICT (promo_code_id, user_id) DO NOTHING`,
+      [promo.id, userId]
+    );
+
     const discount = promo.discount_type === 'percent'
       ? Math.round(fare * promo.discount_value / 100)
       : promo.discount_value;
@@ -1565,6 +1697,15 @@ const getActivePromos = async (req, res) => {
 const getMessages = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.headers['x-user-id'];
+    // Verify caller is the rider or driver of this ride
+    const access = await pool.query(
+      `SELECT 1 FROM rides r
+       LEFT JOIN drivers d ON d.id = r.driver_id
+       WHERE r.id = $1 AND (r.rider_id = $2 OR d.user_id = $2)`,
+      [id, userId]
+    );
+    if (!access.rows[0]) return res.status(403).json({ error: 'Not authorised to view messages for this ride' });
     const result = await pool.query(
       `SELECT m.*, u.full_name as sender_name FROM messages m
        JOIN users u ON m.sender_id = u.id
@@ -1582,6 +1723,14 @@ const sendMessage = async (req, res) => {
     const { id } = req.params;
     const { content, receiver_id } = req.body;
     const senderId = req.headers['x-user-id'];
+    // Verify sender is a party to this ride
+    const access = await pool.query(
+      `SELECT 1 FROM rides r
+       LEFT JOIN drivers d ON d.id = r.driver_id
+       WHERE r.id = $1 AND (r.rider_id = $2 OR d.user_id = $2)`,
+      [id, senderId]
+    );
+    if (!access.rows[0]) return res.status(403).json({ error: 'Not authorised to send messages on this ride' });
     const result = await pool.query(
       `INSERT INTO messages (ride_id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4) RETURNING *`,
       [id, senderId, receiver_id, content]
@@ -1619,14 +1768,14 @@ const getCancellationFeePreview = async (req, res) => {
 const createFareSplit = async (req, res) => {
   try {
     const { id } = req.params;
-    const initiatorId = req.headers['x-user-id'];
+    const initiatorId = req.user.id;
     const { participants, note } = req.body;
     // participants: [{ name, phone }]
     if (!participants || participants.length < 1) {
       return res.status(400).json({ error: 'At least 1 participant required' });
     }
 
-    const ride = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
+    const ride = await pool.query('SELECT * FROM rides WHERE id = $1 AND rider_id = $2', [id, initiatorId]);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
 
     const totalFare = ride.rows[0].final_fare || ride.rows[0].estimated_fare || 0;
@@ -1660,6 +1809,19 @@ const createFareSplit = async (req, res) => {
 const getFareSplit = async (req, res) => {
   try {
     const { id } = req.params;
+    const requestingUserId = req.user.id;
+
+    // Verify requester is the ride's rider or driver
+    const rideCheck = await pool.query(
+      `SELECT r.id FROM rides r
+       LEFT JOIN drivers d ON r.driver_id = d.id
+       WHERE r.id = $1 AND (r.rider_id = $2 OR d.user_id = $2)`,
+      [id, requestingUserId]
+    );
+    if (!rideCheck.rows[0]) {
+      return res.status(403).json({ error: 'Not authorised to view this fare split' });
+    }
+
     const split = await pool.query(
       `SELECT fs.*, u.full_name as initiator_name
        FROM fare_splits fs JOIN users u ON fs.initiator_id = u.id
@@ -1681,10 +1843,19 @@ const markSplitParticipantPaid = async (req, res) => {
   try {
     const { participantId } = req.params;
     const { payment_method } = req.body;
+    const userId = req.headers['x-user-id'];
+    // Caller must be the participant themselves, or the split initiator
     const result = await pool.query(
-      `UPDATE fare_split_participants SET paid = true, paid_at = NOW(), payment_method = $1
-       WHERE id = $2 RETURNING *`,
-      [payment_method || 'cash', participantId]
+      `UPDATE fare_split_participants fsp SET paid = true, paid_at = NOW(), payment_method = $1
+       WHERE fsp.id = $2
+         AND (
+           fsp.user_id = $3
+           OR EXISTS (
+             SELECT 1 FROM fare_splits fs WHERE fs.id = fsp.split_id AND fs.initiator_id = $3
+           )
+         )
+       RETURNING *`,
+      [payment_method || 'cash', participantId, userId]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Participant not found' });
 
@@ -1708,15 +1879,15 @@ const markSplitParticipantPaid = async (req, res) => {
 // ── DRIVER EARNINGS DASHBOARD ─────────────────────────────────────────────────
 const getDriverEarnings = async (req, res) => {
   try {
-    const driverUserId = req.headers['x-user-id'];
+    const driverUserId = req.user.id;
     const { period = 'week' } = req.query; // 'today' | 'week' | 'month' | 'year'
 
     const driverResult = await pool.query('SELECT id FROM drivers WHERE user_id = $1', [driverUserId]);
     if (!driverResult.rows[0]) return res.status(404).json({ error: 'Driver not found' });
     const driverId = driverResult.rows[0].id;
 
-    const intervals = { today: '1 day', week: '7 days', month: '30 days', year: '365 days' };
-    const interval = intervals[period] || '7 days';
+    // Whitelist period to a safe interval value; pass as a typed parameter to avoid injection
+    const intervalDays = { today: 1, week: 7, month: 30, year: 365 }[period] ?? 7;
 
     // Earnings over time (grouped by day)
     const dailyResult = await pool.query(
@@ -1729,10 +1900,10 @@ const getDriverEarnings = async (req, res) => {
        FROM rides
        WHERE driver_id = $1
          AND status = 'completed'
-         AND completed_at >= NOW() - INTERVAL '${interval}'
+         AND completed_at >= NOW() - ($2 || ' days')::interval
        GROUP BY DATE(completed_at)
        ORDER BY date ASC`,
-      [driverId]
+      [driverId, intervalDays]
     );
 
     // Totals
@@ -1745,8 +1916,8 @@ const getDriverEarnings = async (req, res) => {
          ROUND(AVG(final_fare))::int as avg_fare
        FROM rides
        WHERE driver_id = $1 AND status = 'completed'
-         AND completed_at >= NOW() - INTERVAL '${interval}'`,
-      [driverId]
+         AND completed_at >= NOW() - ($2 || ' days')::interval`,
+      [driverId, intervalDays]
     );
 
     // Peak hours (rides by hour of day)
