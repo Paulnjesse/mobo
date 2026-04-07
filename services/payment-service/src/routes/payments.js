@@ -16,6 +16,8 @@ const {
   getWalletBalance,
   processSubscription,
   getSubscriptionStatus,
+  driverCashout,
+  getDriverCashoutHistory,
 } = require('../controllers/paymentController');
 
 // ── Public webhook endpoints (no auth — called by payment providers) ───────────
@@ -52,5 +54,9 @@ router.get('/subscription',           getSubscriptionStatus);
 
 // Stripe payment sheet — creates a PaymentIntent; client uses client_secret with Stripe SDK
 router.post('/stripe/payment-intent', createStripePaymentIntent);
+
+// Driver cashout (payout to mobile money / bank)
+router.post('/driver/cashout',         driverCashout);
+router.get('/driver/cashout-history',  getDriverCashoutHistory);
 
 module.exports = router;

@@ -1566,6 +1566,144 @@ const webhookStripe = async (req, res) => {
   res.json({ received: true });
 };
 
+/**
+ * POST /payments/driver/cashout
+ * Driver initiates payout of accumulated earnings to their mobile money account.
+ *
+ * Workflow:
+ *   1. Verify caller is a driver
+ *   2. Look up available_balance on drivers table
+ *   3. Validate minimum cashout (500 XAF) and sufficient balance
+ *   4. Deduct balance atomically (UPDATE WHERE available_balance >= amount)
+ *   5. Insert cashout record (status = 'pending')
+ *   6. Return cashout reference for client polling
+ */
+const driverCashout = async (req, res) => {
+  try {
+    const driverUserId = req.user.id;
+    const { amount, method = 'mtn_momo', phone } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'amount must be a positive integer (XAF)' });
+    }
+
+    const MIN_CASHOUT_XAF = 500;
+    if (amount < MIN_CASHOUT_XAF) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum cashout is ${MIN_CASHOUT_XAF.toLocaleString()} XAF`,
+      });
+    }
+
+    const ALLOWED_METHODS = ['mtn_momo', 'orange_money', 'bank_transfer'];
+    if (!ALLOWED_METHODS.includes(method)) {
+      return res.status(400).json({
+        success: false,
+        message: `method must be one of: ${ALLOWED_METHODS.join(', ')}`,
+      });
+    }
+
+    // Find driver record
+    const driverRow = await db.query(
+      'SELECT id, available_balance FROM drivers WHERE user_id = $1',
+      [driverUserId]
+    );
+    if (!driverRow.rows[0]) {
+      return res.status(403).json({ success: false, message: 'Driver account not found' });
+    }
+
+    const driverId = driverRow.rows[0].id;
+
+    // Atomic deduction — prevents double-spend
+    const deduct = await db.query(
+      `UPDATE drivers
+         SET available_balance = available_balance - $1
+       WHERE id = $2 AND available_balance >= $1
+       RETURNING available_balance`,
+      [amount, driverId]
+    );
+
+    if (!deduct.rows[0]) {
+      return res.status(400).json({ success: false, message: 'Insufficient available balance' });
+    }
+
+    // Record cashout
+    const cashout = await db.query(
+      `INSERT INTO driver_cashouts
+         (driver_id, amount, method, phone, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       RETURNING id, amount, method, status, created_at`,
+      [driverId, amount, method, phone || null]
+    );
+
+    res.status(202).json({
+      success:           true,
+      message:           'Cashout initiated — funds will arrive within 24 hours',
+      data: {
+        cashout_id:        cashout.rows[0].id,
+        amount,
+        method,
+        status:            'pending',
+        remaining_balance: deduct.rows[0].available_balance,
+        currency:          'XAF',
+      },
+    });
+  } catch (err) {
+    console.error('[DriverCashout Error]', err);
+    res.status(500).json({ success: false, message: 'Cashout request failed' });
+  }
+};
+
+/**
+ * GET /payments/driver/cashout-history
+ * Returns the driver's past cashout records (paginated).
+ */
+const getDriverCashoutHistory = async (req, res) => {
+  try {
+    const driverUserId = req.user.id;
+    const limit  = Math.min(parseInt(req.query.limit  || '20', 10), 100);
+    const offset = parseInt(req.query.offset || '0', 10);
+
+    const driverRow = await db.query(
+      'SELECT id FROM drivers WHERE user_id = $1',
+      [driverUserId]
+    );
+    if (!driverRow.rows[0]) {
+      return res.status(403).json({ success: false, message: 'Driver account not found' });
+    }
+
+    const driverId = driverRow.rows[0].id;
+
+    const results = await db.query(
+      `SELECT id, amount, method, phone, status, created_at, completed_at, failure_reason
+         FROM driver_cashouts
+        WHERE driver_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3`,
+      [driverId, limit, offset]
+    );
+
+    const count = await db.query(
+      'SELECT COUNT(*)::int FROM driver_cashouts WHERE driver_id = $1',
+      [driverId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        cashouts: results.rows,
+        total:    count.rows[0].count,
+        limit,
+        offset,
+        currency: 'XAF',
+      },
+    });
+  } catch (err) {
+    console.error('[GetDriverCashoutHistory Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to load cashout history' });
+  }
+};
+
 module.exports = {
   addPaymentMethod,
   listPaymentMethods,
@@ -1582,4 +1720,6 @@ module.exports = {
   getWalletBalance,
   processSubscription,
   getSubscriptionStatus,
+  driverCashout,
+  getDriverCashoutHistory,
 };

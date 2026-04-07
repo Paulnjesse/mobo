@@ -55,8 +55,11 @@ router.post('/reset-password',  sensitiveAuthLimiter, resetPasswordValidator, va
 // Rate-limited to prevent TOTP brute-force (6-digit = 1,000,000 possibilities)
 router.post('/2fa/validate', sensitiveAuthLimiter, validate2FA);
 
-// Protected routes
-router.post('/refresh-token', authenticate, refreshToken);
+// Refresh token — must NOT use authenticate middleware because the token
+// may be expired; the controller calls decodeIgnoreExpiry() and enforces
+// the 30-day window itself. Accepting expired tokens is the entire purpose
+// of this endpoint.
+router.post('/refresh-token', refreshToken);
 router.post('/register-driver', authenticate, registerDriver);
 router.post('/register-fleet-owner', authenticate, registerFleetOwner);
 router.post('/driver/home-location', authenticate, setHomeLocation);
