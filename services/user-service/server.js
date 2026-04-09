@@ -51,9 +51,17 @@ const CORS_ORIGINS = process.env.CORS_ORIGIN
   : ['http://localhost:3000', 'http://localhost:8081', 'exp://localhost:8081'];
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'none'"] },
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'no-referrer' },
+  permittedCrossDomainPolicies: false,
+}));
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
+// 2mb limit: profile photos are base64-encoded (adds ~33% overhead over raw JPEG)
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 const logger = require('./src/utils/logger');
 app.use(morgan('combined', {

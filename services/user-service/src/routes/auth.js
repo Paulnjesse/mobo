@@ -42,7 +42,7 @@ const {
 } = require('../controllers/twoFactorController');
 
 // Public routes
-router.post('/social',          socialLogin);   // Google / Apple sign-in
+router.post('/social',          sensitiveAuthLimiter, socialLogin);   // Google / Apple sign-in
 router.post('/signup',          signupValidator, validate, signup);
 router.post('/login',           loginValidator, validate, login);
 router.post('/verify',          verifyOtpValidator, validate, verify);

@@ -73,8 +73,23 @@ app.options('*', cors(corsOptions));
 // ============================================================
 // Security & Logging
 // ============================================================
+// Production-grade security headers (Uber/FreeNow standard)
 app.use(helmet({
-  contentSecurityPolicy: false // Disabled for API
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:      ["'none'"],
+      frameAncestors:  ["'none'"],
+      formAction:      ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge:            31536000, // 1 year
+    includeSubDomains: true,
+    preload:           true,
+  },
+  referrerPolicy:            { policy: 'no-referrer' },
+  permittedCrossDomainPolicies: false,
+  crossOriginEmbedderPolicy: false, // Not needed for REST API
 }));
 const logger = require('./src/utils/logger');
 app.use(morgan('combined', {

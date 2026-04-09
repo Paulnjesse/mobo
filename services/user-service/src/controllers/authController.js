@@ -207,8 +207,8 @@ const signup = async (req, res) => {
       });
     }
 
-    // 3. Hash password
-    const password_hash = await bcrypt.hash(password, 10);
+    // 3. Hash password — 12 rounds meets OWASP minimum for bcrypt in production
+    const password_hash = await bcrypt.hash(password, 12);
     const otp_code = generateOtp();
     const otp_expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     const id = uuidv4();
@@ -1165,7 +1165,7 @@ const resetPassword = async (req, res) => {
     }
 
     // All good — update password and clear reset OTP
-    const password_hash = await bcrypt.hash(new_password, 10);
+    const password_hash = await bcrypt.hash(new_password, 12);
 
     await db.query(
       `UPDATE users

@@ -1,8 +1,21 @@
 const db = require('../db');
 const crypto = require('crypto');
+const logger = require('../../shared/logger');
 
 function generateApiKey() {
   return 'mobo_live_sk_' + crypto.randomBytes(20).toString('base64url').slice(0, 32);
+}
+
+/** Returns a masked representation: prefix + dots + last 4 chars. */
+function maskApiKey(key) {
+  if (!key || key.length < 8) return '••••••••';
+  return key.slice(0, 13) + '••••••••••••••••••••' + key.slice(-4);
+}
+
+/** Safe portal row — never exposes the raw api_key. */
+function safePortalRow(row) {
+  const { api_key, ...rest } = row;
+  return { ...rest, api_key_masked: maskApiKey(api_key) };
 }
 
 exports.getPortal = async (req, res) => {
@@ -21,9 +34,9 @@ exports.getPortal = async (req, res) => {
       rows = newRows;
     }
 
-    res.json(rows[0]);
+    res.json(safePortalRow(rows[0]));
   } catch (err) {
-    console.error('developerPortalController.getPortal:', err);
+    logger.error('developerPortalController.getPortal', { error: err.message, userId: req.user?.id });
     res.status(500).json({ error: 'Failed to load developer portal' });
   }
 };
@@ -42,9 +55,11 @@ exports.regenerateKey = async (req, res) => {
        RETURNING *`,
       [req.user.id, newKey]
     );
-    res.json({ api_key: rows[0]?.api_key || newKey });
+    // Return the full key ONCE on generation (same pattern as GitHub PATs / Stripe keys).
+    // All subsequent GET /portal calls return only the masked version.
+    res.json({ api_key: rows[0]?.api_key || newKey, message: 'Save this key — it will not be shown again.' });
   } catch (err) {
-    console.error('developerPortalController.regenerateKey:', err);
+    logger.error('developerPortalController.regenerateKey', { error: err.message, userId: req.user?.id });
     res.status(500).json({ error: 'Failed to regenerate API key' });
   }
 };

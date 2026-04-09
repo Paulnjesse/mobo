@@ -67,14 +67,15 @@ async function logOtpSend(userId, phone) {
 
 /**
  * Find a user by phone or email. Returns null if not found.
+ * Uses two explicit parameterized queries — no dynamic field interpolation.
  */
 async function findUserByIdentifier(identifier) {
   const isPhone = !identifier.includes('@');
-  const field = isPhone ? 'phone' : 'email';
-  const { rows } = await db.query(
-    `SELECT * FROM users WHERE ${field} = $1 LIMIT 1`,
-    [identifier]
-  );
+  if (isPhone) {
+    const { rows } = await db.query('SELECT * FROM users WHERE phone = $1 LIMIT 1', [identifier]);
+    return rows[0] || null;
+  }
+  const { rows } = await db.query('SELECT * FROM users WHERE email = $1 LIMIT 1', [identifier]);
   return rows[0] || null;
 }
 

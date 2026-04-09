@@ -10,7 +10,7 @@ const signupValidator = [
     .matches(/^\+?[\d\s\-()]{7,20}$/).withMessage('Invalid phone number format'),
   body('password')
     .notEmpty().withMessage('Password is required')
-    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('role')
     .optional()
     .isIn(['rider', 'driver', 'fleet_owner']).withMessage('Role must be rider, driver, or fleet_owner'),
@@ -60,7 +60,7 @@ const resetPasswordValidator = [
     .isLength({ min: 6, max: 6 }).withMessage('OTP must be exactly 6 digits'),
   body('new_password')
     .notEmpty().withMessage('New password is required')
-    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
 ];
 
 module.exports = {

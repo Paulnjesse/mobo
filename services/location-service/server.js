@@ -47,9 +47,16 @@ const CORS_ORIGINS = process.env.SOCKET_CORS_ORIGIN
   ? process.env.SOCKET_CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['http://localhost:3000', 'http://localhost:8081', 'exp://localhost:8081'];
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], formAction: ["'none'"] },
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'no-referrer' },
+  permittedCrossDomainPolicies: false,
+}));
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 const logger = require('./src/utils/logger');
 app.use(morgan('combined', {

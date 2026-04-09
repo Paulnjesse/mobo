@@ -1,6 +1,6 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
+const { verifyJwt } = require('../../../shared/jwtUtil');
 
 /**
  * Map of driverId -> latest location payload.
@@ -51,10 +51,9 @@ function initLocationSocket(io) {
 
       if (!token) return next(new Error('Authentication required: no token provided'));
 
-      const secret = process.env.JWT_SECRET;
-      if (!secret) return next(new Error('Server configuration error'));
-
-      const decoded = jwt.verify(token, secret);
+      // Uses shared jwtUtil — honours RS256 in production, HS256 in dev/test.
+      // Consistent with the HTTP auth middleware (location-service/src/middleware/auth.js).
+      const decoded = verifyJwt(token);
       socket.user = decoded; // { id, role, name, ... }
       next();
     } catch (err) {
