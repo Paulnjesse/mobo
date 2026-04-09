@@ -4,6 +4,7 @@ const axios = require('axios');
 const cache = require('../utils/cache');
 const { checkRideCollusion, checkFareManipulation } = require('../../../shared/fraudDetection');
 const { isEnabled } = require('../../../shared/featureFlags');
+const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/currencyUtil');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -623,8 +624,16 @@ const getFare = async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    const userResult = await pool.query('SELECT subscription_plan FROM users WHERE id = $1', [userId]);
-    const subscription = userResult.rows[0]?.subscription_plan || 'none';
+    const userResult = await pool.query('SELECT subscription_plan, country FROM users WHERE id = $1', [userId]);
+    const subscription  = userResult.rows[0]?.subscription_plan || 'none';
+    const userCountry   = userResult.rows[0]?.country || 'Cameroon';
+    const COUNTRY_ISO = {
+      'Cameroon': 'CM', 'Nigeria': 'NG', 'Kenya': 'KE', 'South Africa': 'ZA',
+      "Ivory Coast": 'CI', "Côte d'Ivoire": 'CI', 'Gabon': 'GA', 'Benin': 'BJ',
+      'Niger': 'NE', 'Ghana': 'GH', 'Tanzania': 'TZ', 'Uganda': 'UG',
+      'Rwanda': 'RW', 'Senegal': 'SN', 'Ethiopia': 'ET', 'Egypt': 'EG',
+    };
+    const countryCode = COUNTRY_ISO[userCountry] || 'CM';
 
     const surgeResult = await pool.query(
       `SELECT multiplier FROM surge_zones
@@ -664,13 +673,16 @@ const getFare = async (req, res) => {
     const allTypes = Object.keys(RIDE_TYPE_RATES);
     const fares = {};
     allTypes.forEach(rt => {
-      fares[rt] = calculateFare(totalDistance, durationMin, surgeMultiplier, subscription, false, null, rt);
+      const xafFare = calculateFare(totalDistance, durationMin, surgeMultiplier, subscription, false, null, rt);
+      const local   = fareWithLocalCurrency(xafFare, countryCode);
+      fares[rt]     = { ...local };
     });
     const fare = fares[ride_type] || fares.standard;
 
     const fareResponse = {
       fare,
       fares,           // per-type breakdown for RideCompareScreen
+      currency_code:   getCurrencyCode(countryCode),
       distance_km: totalDistance.toFixed(2),
       duration_minutes: durationMin,
       surge_multiplier: surgeMultiplier,
@@ -1735,7 +1747,36 @@ const sendMessage = async (req, res) => {
       `INSERT INTO messages (ride_id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4) RETURNING *`,
       [id, senderId, receiver_id, content]
     );
-    res.status(201).json({ message: result.rows[0] });
+    const newMsg = result.rows[0];
+
+    // Fire push notification to receiver — non-blocking, never fails the request
+    if (receiver_id) {
+      setImmediate(async () => {
+        try {
+          const { notifyNewMessage } = require('../services/pushNotifications');
+          const senderRow = await pool.query(
+            'SELECT full_name, role FROM users WHERE id = $1',
+            [senderId]
+          );
+          const receiverRow = await pool.query(
+            'SELECT push_token FROM users WHERE id = $1',
+            [receiver_id]
+          );
+          const token = receiverRow.rows[0]?.push_token;
+          if (token) {
+            await notifyNewMessage(token, {
+              ride_id:     id,
+              sender_name: senderRow.rows[0]?.full_name || 'Someone',
+              sender_role: senderRow.rows[0]?.role || 'user',
+              text:        content,
+              user_id:     receiver_id,
+            });
+          }
+        } catch (_) { /* intentionally swallowed — push must never break chat */ }
+      });
+    }
+
+    res.status(201).json({ message: newMsg });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2044,10 +2085,41 @@ const declineRide = async (req, res) => {
   }
 };
 
+// ── QUICK REPLIES ─────────────────────────────────────────────────────────────
+// Context-aware predefined messages riders and drivers can tap instead of typing.
+// ?context=waiting|arriving|in_progress|general   &role=rider|driver
+const QUICK_REPLIES = {
+  rider: {
+    waiting:     ['I\'m at the blue gate', 'I\'m outside', 'I can\'t find you — call me', 'I\'ll be there in 2 minutes', 'At the main entrance'],
+    arriving:    ['I can see your car', 'Almost there!', 'Wait — I\'m running late', 'Which car is yours?'],
+    in_progress: ['Can you turn up the AC?', 'Please slow down a bit', 'Drop me at the corner please', 'Can we make a quick stop?'],
+    general:     ['OK', 'On my way', 'Thank you!', 'Got it', 'Please wait'],
+  },
+  driver: {
+    waiting:     ['I\'m outside — grey car', 'I\'ve arrived, please come out', 'I\'m near the gate', 'Call me when you\'re ready', 'Which entrance are you at?'],
+    arriving:    ['Almost at your location', '2 minutes away', 'Traffic is heavy, bear with me', 'I can see you'],
+    in_progress: ['We\'ll be there soon', 'Slight traffic ahead', 'Almost at drop-off', 'Safe journey!'],
+    general:     ['OK', 'On my way', 'No problem', 'Got it', 'Thank you'],
+  },
+};
+
+const getQuickReplies = (req, res) => {
+  const context = req.query.context || 'general';
+  const role    = req.query.role    || 'rider';
+
+  const validContexts = ['waiting', 'arriving', 'in_progress', 'general'];
+  const validRoles    = ['rider', 'driver'];
+  const safeContext = validContexts.includes(context) ? context : 'general';
+  const safeRole    = validRoles.includes(role)       ? role    : 'rider';
+
+  const replies = QUICK_REPLIES[safeRole][safeContext] || QUICK_REPLIES[safeRole].general;
+  res.json({ context: safeContext, role: safeRole, replies });
+};
+
 module.exports = {
   requestRide, getFare, acceptRide, updateRideStatus, cancelRide, getRide, listRides,
   rateRide, addTip, roundUpFare, getSurgePricing, applyPromoCode, getActivePromos,
-  getMessages, sendMessage,
+  getMessages, sendMessage, getQuickReplies,
   updateRideStops, lockPrice,
   triggerCheckin, respondToCheckin, getCheckins,
   reportLostItem, getLostAndFound, updateLostAndFoundStatus,

@@ -194,6 +194,9 @@ router.post('/checkins', authenticate, ctrl.triggerCheckin);
 router.patch('/checkins/:id/respond', authenticate, ctrl.respondToCheckin);
 router.get('/:ride_id/checkins', authenticate, ctrl.getCheckins);
 
+// Quick replies (context-aware canned messages for in-ride chat)
+router.get('/quick-replies', authenticate, ctrl.getQuickReplies);
+
 // Messages
 router.get('/:id/messages', authenticate, ctrl.getMessages);
 router.post('/:id/messages', authenticate, ctrl.sendMessage);

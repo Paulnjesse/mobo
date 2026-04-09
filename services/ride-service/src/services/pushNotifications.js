@@ -184,6 +184,25 @@ async function notifyRideCompleted(riderToken, details) {
 }
 
 /**
+ * notifyNewMessage(receiverToken, details)
+ * Sent to rider or driver when the other party sends a chat message.
+ *
+ * @param {string} receiverToken
+ * @param {{ ride_id: string, sender_name: string, text: string,
+ *           sender_role: string, user_id?: string }} details
+ */
+async function notifyNewMessage(receiverToken, details) {
+  const { sender_name = 'Someone', text = '', sender_role = 'user' } = details;
+  const roleLabel = sender_role === 'driver' ? 'Driver' : 'Rider';
+  return _send(
+    receiverToken,
+    `New message from ${roleLabel}`,
+    `${sender_name}: ${text.length > 80 ? text.slice(0, 77) + '…' : text}`,
+    { type: 'new_message', ...details }
+  );
+}
+
+/**
  * notifyRideCancelled(token, reason)
  * Sent to either party when the ride is cancelled.
  *
@@ -218,4 +237,6 @@ module.exports = {
   notifyRiderDriverArriving,
   notifyRideCompleted,
   notifyRideCancelled,
+  notifyNewMessage,
+  _send,
 };

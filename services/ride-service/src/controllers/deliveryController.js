@@ -1,4 +1,6 @@
 'use strict';
+const { fareWithLocalCurrency, getCurrencyCode, COUNTRY_CURRENCY } = require('../../../shared/currencyUtil');
+
 /**
  * deliveryController — Full multi-type delivery feature for MOBO.
  *
@@ -184,18 +186,27 @@ const estimateDeliveryFare = async (req, res) => {
     const breakdown   = computeFare(pricing, distanceKm, is_fragile, is_express, delivery_type, Number(insurance_value));
     const estMins     = estimateMins(distanceKm, is_express);
 
+    // Resolve country → currency from query param or user profile
+    const countryCode  = req.query.country_code || (req.user?.country_code) || 'CM';
+    const localFare    = fareWithLocalCurrency(breakdown.total, countryCode);
+    const expressPrice = is_express ? null : (() => {
+      const ex = computeFare(pricing, distanceKm, is_fragile, true, delivery_type, Number(insurance_value));
+      return {
+        ...fareWithLocalCurrency(ex.total, countryCode),
+        express_surcharge:  ex.express_surcharge,
+        estimated_mins:     estimateMins(distanceKm, true),
+      };
+    })();
+
     return res.json({
-      success:       true,
-      fare_estimate: breakdown.total,
-      distance_km:   Math.round(distanceKm * 1000) / 1000,
+      success:        true,
+      fare_estimate:  breakdown.total,
+      currency_code:  getCurrencyCode(countryCode),
+      local_price:    localFare.local_price,
+      distance_km:    Math.round(distanceKm * 1000) / 1000,
       estimated_mins: estMins,
-      currency:      'XAF',
       breakdown,
-      // Show both standard and express prices for comparison
-      express_price:   is_express ? null : (() => {
-        const ex = computeFare(pricing, distanceKm, is_fragile, true, delivery_type, Number(insurance_value));
-        return { total: ex.total, express_surcharge: ex.express_surcharge, estimated_mins: estimateMins(distanceKm, true) };
-      })(),
+      express_price:  expressPrice,
     });
   } catch (err) {
     logger.error('[deliveryController] estimateDeliveryFare', { error: err.message });

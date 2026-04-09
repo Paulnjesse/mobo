@@ -39,6 +39,7 @@ const { initDeliverySocket }          = require('./src/socket/deliverySocket');
 const { startEscalationJob }          = require('./src/jobs/escalationJob');
 const { startScheduledRideJob }       = require('./src/jobs/scheduledRideJob');
 const { startDeliverySchedulerJob }   = require('./src/jobs/deliverySchedulerJob');
+const { startMessagePurgeJob }        = require('./src/jobs/messagePurgeJob');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -155,6 +156,7 @@ if (process.env.NODE_ENV !== 'test') {
     startEscalationJob();
     startScheduledRideJob(io);
     startDeliverySchedulerJob(io);  // Process scheduled deliveries when their time arrives
+    startMessagePurgeJob();          // Nightly GDPR-compliant message TTL purge
   });
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);

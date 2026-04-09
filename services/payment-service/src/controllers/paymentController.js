@@ -2,6 +2,7 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 const { checkPaymentFraud } = require('../../../../shared/fraudDetection');
+const { convertFromXAF, getCurrencyCode, getStripeCurrency } = require('../../../../shared/currencyUtil');
 
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {
@@ -592,10 +593,25 @@ const chargeRide = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Ride already paid' });
     }
 
-    const amount = ride.final_fare || ride.estimated_fare;
-    if (!amount || amount <= 0) {
+    const amountXAF = ride.final_fare || ride.estimated_fare;
+    if (!amountXAF || amountXAF <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid fare amount' });
     }
+
+    // Resolve user's country → local currency amount for payment providers
+    const userRow = await db.query('SELECT country FROM users WHERE id = $1', [userId]);
+    const userCountry = userRow.rows[0]?.country || 'Cameroon';
+    const COUNTRY_ISO = {
+      'Cameroon': 'CM', 'Nigeria': 'NG', 'Kenya': 'KE', 'South Africa': 'ZA',
+      'Ivory Coast': 'CI', "Côte d'Ivoire": 'CI', 'Gabon': 'GA', 'Benin': 'BJ',
+      'Niger': 'NE', 'Ghana': 'GH', 'Tanzania': 'TZ', 'Uganda': 'UG',
+      'Rwanda': 'RW', 'Senegal': 'SN', 'Ethiopia': 'ET', 'Egypt': 'EG',
+    };
+    const countryCode    = COUNTRY_ISO[userCountry] || 'CM';
+    const localCurrency  = convertFromXAF(amountXAF, countryCode);
+    // amount used for the actual payment provider call (local currency integer)
+    const amount         = localCurrency.amount;
+    const chargeCurrency = localCurrency.currency_code;
 
     // Resolve phone: body param → saved payment method
     let paymentPhone = phone;
@@ -644,8 +660,8 @@ const chargeRide = async (req, res) => {
       let initResult;
       try {
         initResult = method === 'mtn_mobile_money'
-          ? await processMtnMobileMoney(paymentPhone, amount, 'XAF')
-          : await processOrangeMoney(paymentPhone, amount, 'XAF');
+          ? await processMtnMobileMoney(paymentPhone, amount, chargeCurrency)
+          : await processOrangeMoney(paymentPhone, amount, chargeCurrency);
       } catch (providerErr) {
         console.error(`[${method}] Init error:`, providerErr.message);
         return res.status(502).json({
@@ -667,9 +683,9 @@ const chargeRide = async (req, res) => {
       const payment = await db.query(
         `INSERT INTO payments
            (ride_id, user_id, amount, currency, method, status, provider_ref, metadata)
-         VALUES ($1, $2, $3, 'XAF', $4, 'pending', $5, $6)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)
          RETURNING id, status, provider_ref`,
-        [ride_id, userId, amount, method, initResult.reference_id, JSON.stringify(metadata)]
+        [ride_id, userId, amountXAF, chargeCurrency, method, initResult.reference_id, JSON.stringify(metadata)]
       );
 
       // PCI DSS 10.2 — log payment initiation
@@ -716,7 +732,7 @@ const chargeRide = async (req, res) => {
         if (!paymentPhone) {
           return res.status(400).json({ success: false, message: 'Phone number required for Wave' });
         }
-        paymentResult = await processWave(paymentPhone, amount, 'XAF');
+        paymentResult = await processWave(paymentPhone, amount, chargeCurrency);
         break;
 
       case 'card': {
@@ -728,22 +744,23 @@ const chargeRide = async (req, res) => {
             message: 'A Stripe payment method token (stripe_payment_method_token) is required for card payments. Use the Stripe mobile SDK to obtain one.',
           });
         }
-        paymentResult = await processStripe(amount, 'XAF', stripeToken);
+        // Stripe charges in local currency (supports NGN, KES, ZAR natively)
+        paymentResult = await processStripe(amount, getStripeCurrency(countryCode), stripeToken);
         break;
       }
 
       case 'wallet': {
-        // Atomic deduction: the WHERE guard prevents double-spending under concurrent requests
+        // Wallet is always stored in XAF internally
         const walletUpdate = await db.query(
           `UPDATE users SET wallet_balance = wallet_balance - $1
            WHERE id = $2 AND wallet_balance >= $1
            RETURNING wallet_balance`,
-          [amount, userId]
+          [amountXAF, userId]
         );
         if (!walletUpdate.rows[0]) {
           return res.status(400).json({
             success: false,
-            message: `Insufficient wallet balance. Need ${amount} XAF.`,
+            message: `Insufficient wallet balance. Need ${amountXAF.toLocaleString()} XAF (${localCurrency.currency_symbol} ${amount.toLocaleString()} ${chargeCurrency}).`,
           });
         }
         paymentResult = {
@@ -764,10 +781,10 @@ const chargeRide = async (req, res) => {
     const payment = await db.query(
       `INSERT INTO payments
          (ride_id, user_id, amount, currency, method, status, transaction_id, provider_ref, failure_reason, metadata)
-       VALUES ($1, $2, $3, 'XAF', $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        ride_id, userId, amount, method, paymentStatus,
+        ride_id, userId, amountXAF, chargeCurrency, method, paymentStatus,
         paymentResult.transaction_id || null,
         paymentResult.provider_ref   || null,
         paymentResult.success ? null : paymentResult.message,
