@@ -76,17 +76,26 @@ router.post('/developer/portal/regenerate-key', authenticate, developerCtrl.rege
 router.get('/drivers/me/airport-mode',       authenticate, airportCtrl.getAirportMode);
 router.patch('/drivers/me/airport-mode',     authenticate, airportCtrl.updateAirportMode);
 
-// ── Delivery routes (all before /:id to avoid param conflicts)
-router.get('/deliveries/estimate',          authenticate, deliveryCtrl.estimateDeliveryFare);
-router.get('/deliveries/mine',              authenticate, deliveryCtrl.getMyDeliveries);
-router.get('/deliveries/nearby',            authenticate, deliveryCtrl.getNearbyDeliveries);
-router.get('/deliveries/stats',             authenticate, deliveryCtrl.getDeliveryStats);
-router.post('/deliveries',                  authenticate, deliveryCtrl.createDelivery);
-router.get('/deliveries/:id',               authenticate, deliveryCtrl.getDeliveryById);
-router.post('/deliveries/:id/accept',       authenticate, deliveryCtrl.acceptDelivery);
-router.patch('/deliveries/:id/status',      authenticate, deliveryCtrl.updateDeliveryStatus);
-router.post('/deliveries/:id/verify-otp',   authenticate, deliveryCtrl.verifyRecipientOTP);
-router.post('/deliveries/:id/cancel',       authenticate, deliveryCtrl.cancelDelivery);
+// ── Delivery routes (all before /:id to avoid param conflicts) ────────────────
+// Estimation & discovery
+router.get('/deliveries/estimate',              authenticate, deliveryCtrl.estimateDeliveryFare);
+router.get('/deliveries/mine',                  authenticate, deliveryCtrl.getMyDeliveries);
+router.get('/deliveries/nearby',                authenticate, deliveryCtrl.getNearbyDeliveries);
+router.get('/deliveries/stats',                 authenticate, deliveryCtrl.getDeliveryStats);
+router.get('/deliveries/driver/history',        authenticate, deliveryCtrl.getDriverDeliveryHistory);
+// Public live-tracking — no auth required (accessible via tracking_token)
+router.get('/deliveries/track/:token',          deliveryCtrl.getDeliveryByToken);
+// Batch / B2B multi-drop
+router.post('/deliveries/batch',                authenticate, deliveryCtrl.createBatchDelivery);
+router.get('/deliveries/batch/:batchId',        authenticate, deliveryCtrl.getBatchDelivery);
+// Single delivery CRUD
+router.post('/deliveries',                      authenticate, deliveryCtrl.createDelivery);
+router.get('/deliveries/:id',                   authenticate, deliveryCtrl.getDeliveryById);
+router.post('/deliveries/:id/accept',           authenticate, deliveryCtrl.acceptDelivery);
+router.patch('/deliveries/:id/status',          authenticate, deliveryCtrl.updateDeliveryStatus);
+router.post('/deliveries/:id/verify-otp',       authenticate, deliveryCtrl.verifyRecipientOTP);
+router.post('/deliveries/:id/cancel',           authenticate, deliveryCtrl.cancelDelivery);
+router.post('/deliveries/:id/rate',             authenticate, deliveryCtrl.rateDelivery);
 
 // ── Share trip (PUBLIC track route MUST come before /:id to avoid param conflict)
 router.get('/track/:token', shareCtrl.getSharedTrip);  // PUBLIC - no auth

@@ -1,6 +1,6 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
+const { verifyJwt } = require('../../../shared/jwtUtil');
 const db = require('../config/database');
 
 /**
@@ -75,10 +75,8 @@ function initRideSocket(io) {
         return next(new Error('Authentication required: no token provided'));
       }
 
-      const secret = process.env.JWT_SECRET;
-      if (!secret) return next(new Error('Server configuration error'));
-
-      const decoded = jwt.verify(token, secret);
+      // Uses shared jwtUtil — RS256 in production, HS256 in dev/test
+      const decoded = verifyJwt(token);
       socket.user = decoded; // { id, role, name, ... }
       next();
     } catch (err) {

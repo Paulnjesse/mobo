@@ -34,9 +34,11 @@ const { Server } = require('socket.io');
 const rideRoutes = require('./src/routes/rides');
 const adsRoutes  = require('./src/routes/ads');
 const foodRoutes = require('./src/routes/food');
-const { initRideSocket } = require('./src/socket/rideSocket');
-const { startEscalationJob } = require('./src/jobs/escalationJob');
-const { startScheduledRideJob } = require('./src/jobs/scheduledRideJob');
+const { initRideSocket }              = require('./src/socket/rideSocket');
+const { initDeliverySocket }          = require('./src/socket/deliverySocket');
+const { startEscalationJob }          = require('./src/jobs/escalationJob');
+const { startScheduledRideJob }       = require('./src/jobs/scheduledRideJob');
+const { startDeliverySchedulerJob }   = require('./src/jobs/deliverySchedulerJob');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -140,8 +142,9 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
 });
 
-// Initialise the /rides namespace with all ride event handlers
-const ridesNamespace = initRideSocket(io);
+// Initialise Socket.IO namespaces
+const ridesNamespace    = initRideSocket(io);
+const deliveriesNamespace = initDeliverySocket(io);
 
 // Expose io on app so route handlers can emit socket events
 app.set('io', io);
@@ -150,7 +153,8 @@ if (process.env.NODE_ENV !== 'test') {
   httpServer.listen(PORT, () => {
     logger.info(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
     startEscalationJob();
-    startScheduledRideJob(io);  // Feature 29: scheduled ride reminders + auto-dispatch
+    startScheduledRideJob(io);
+    startDeliverySchedulerJob(io);  // Process scheduled deliveries when their time arrives
   });
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
