@@ -1,4 +1,5 @@
 const { verifyJwt } = require('../../../shared/jwtUtil');
+const { currencyMiddleware } = require('../../../shared/currencyMiddleware');
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -12,7 +13,7 @@ const authenticate = (req, res, next) => {
   try {
     const decoded = verifyJwt(token);
     req.user = decoded;
-    next();
+    currencyMiddleware(req, res, next);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ success: false, message: 'Token expired' });

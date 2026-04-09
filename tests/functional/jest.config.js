@@ -31,8 +31,9 @@ module.exports = {
     '.*shared/jwtUtil.*':         '<rootDir>/tests/functional/__mocks__/jwtUtil.js',
     '.*shared/auditLog.*':        '<rootDir>/tests/functional/__mocks__/auditLog.js',
     '.*shared/certRotation.*':    '<rootDir>/tests/functional/__mocks__/certRotation.js',
-    // currencyUtil — pure computation, pass-through (no DB/network)
-    '.*shared/currencyUtil.*':    '<rootDir>/tests/functional/__mocks__/currencyUtil.js',
+    // currencyUtil + currencyMiddleware — pure computation, pass-through
+    '.*shared/currencyUtil.*':       '<rootDir>/tests/functional/__mocks__/currencyUtil.js',
+    '.*shared/currencyMiddleware.*': '<rootDir>/tests/functional/__mocks__/currencyMiddleware.js',
     // External packages not installed at root level
     '^nodemailer$':               '<rootDir>/tests/functional/__mocks__/nodemailer.js',
     // Per-service db convenience re-exports (matched by the raw ../db require string)

@@ -45,6 +45,11 @@ const FILES = [
   'migration_021.sql',
   'migration_022.sql',
   'migration_023.sql',
+  'migration_024.sql',
+  'migration_025.sql',
+  'migration_026.sql',
+  'migration_027.sql',  // Message TTL + country_currency_config table
+  'migration_028.sql',  // country_code column on users + preferred_currency
 ];
 
 async function run() {

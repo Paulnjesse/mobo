@@ -186,8 +186,8 @@ const estimateDeliveryFare = async (req, res) => {
     const breakdown   = computeFare(pricing, distanceKm, is_fragile, is_express, delivery_type, Number(insurance_value));
     const estMins     = estimateMins(distanceKm, is_express);
 
-    // Resolve country → currency from query param or user profile
-    const countryCode  = req.query.country_code || (req.user?.country_code) || 'CM';
+    // req.currency is set by currencyMiddleware (runs inside authenticate)
+    const countryCode  = req.currency?.country_code || req.query.country_code || 'CM';
     const localFare    = fareWithLocalCurrency(breakdown.total, countryCode);
     const expressPrice = is_express ? null : (() => {
       const ex = computeFare(pricing, distanceKm, is_fragile, true, delivery_type, Number(insurance_value));

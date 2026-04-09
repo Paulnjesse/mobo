@@ -598,16 +598,9 @@ const chargeRide = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid fare amount' });
     }
 
-    // Resolve user's country → local currency amount for payment providers
-    const userRow = await db.query('SELECT country FROM users WHERE id = $1', [userId]);
-    const userCountry = userRow.rows[0]?.country || 'Cameroon';
-    const COUNTRY_ISO = {
-      'Cameroon': 'CM', 'Nigeria': 'NG', 'Kenya': 'KE', 'South Africa': 'ZA',
-      'Ivory Coast': 'CI', "Côte d'Ivoire": 'CI', 'Gabon': 'GA', 'Benin': 'BJ',
-      'Niger': 'NE', 'Ghana': 'GH', 'Tanzania': 'TZ', 'Uganda': 'UG',
-      'Rwanda': 'RW', 'Senegal': 'SN', 'Ethiopia': 'ET', 'Egypt': 'EG',
-    };
-    const countryCode    = COUNTRY_ISO[userCountry] || 'CM';
+    // req.currency is attached by currencyMiddleware (runs inside authenticate)
+    // No extra DB query needed — country_code comes from the JWT
+    const countryCode    = req.currency?.country_code || 'CM';
     const localCurrency  = convertFromXAF(amountXAF, countryCode);
     // amount used for the actual payment provider call (local currency integer)
     const amount         = localCurrency.amount;

@@ -136,6 +136,7 @@ const signup = async (req, res) => {
     const {
       full_name, phone, email, password,
       role = 'rider', country = 'Cameroon',
+      country_code: rawCountryCode,           // ISO alpha-2 preferred; derived from country if absent
       city, language = 'fr', date_of_birth, gender,
       // Driver-specific
       license_number, license_expiry,
@@ -143,6 +144,10 @@ const signup = async (req, res) => {
       // Fleet owner-specific
       company_name,
     } = req.body;
+
+    // Resolve country_code — accept explicit ISO code or derive from full name
+    const { resolveCountryCode } = require('../../../shared/currencyUtil');
+    const country_code = resolveCountryCode(rawCountryCode || country);
 
     // 1. Validate required common fields
     if (!full_name || !phone || !password) {
@@ -221,14 +226,14 @@ const signup = async (req, res) => {
     const result = await db.query(
       `INSERT INTO users (
         id, full_name, phone, email, password_hash, role,
-        country, city, language, date_of_birth, gender,
+        country, country_code, city, language, date_of_birth, gender,
         otp_code, otp_expiry, is_verified, loyalty_points, otp_attempts,
         registration_step, registration_completed
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,50,0,$14,$15)
-      RETURNING id, full_name, phone, email, role, country, city, language,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,50,0,$15,$16)
+      RETURNING id, full_name, phone, email, role, country, country_code, city, language,
                 is_verified, loyalty_points, registration_step, registration_completed, created_at`,
       [id, full_name, phone, email || null, password_hash, role,
-       country, city || null, language, date_of_birth || null, gender || null,
+       country, country_code, city || null, language, date_of_birth || null, gender || null,
        otp_code, otp_expiry, registration_step, registration_completed]
     );
 
@@ -658,6 +663,7 @@ const login = async (req, res) => {
       email: user.email,
       role: user.role,
       full_name: user.full_name,
+      country_code: user.country_code || 'CM',  // ISO alpha-2 — drives currency in all downstream services
       ...(deviceId ? { device_id: deviceId } : {}),
     };
 
@@ -1395,6 +1401,7 @@ const socialLogin = async (req, res) => {
       email: user.email,
       role: user.role,
       full_name: user.full_name,
+      country_code: user.country_code || 'CM',
     };
     const jwtToken = signToken(tokenPayload, { expiresIn: JWT_EXPIRES_IN });
 

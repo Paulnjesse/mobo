@@ -29,12 +29,32 @@ const RATES = {
   EGP: { code: 'EGP', symbol: 'E£',   xaf_rate_x1000:  820 },
 };
 
-// Country → currency code lookup (mirrors migration_027 seed)
+// Country ISO alpha-2 → currency code (mirrors migration_027 seed)
 const COUNTRY_CURRENCY = {
   CM: 'XAF', CI: 'XOF', GA: 'XAF', BJ: 'XOF', NE: 'XOF',
   NG: 'NGN', KE: 'KES', ZA: 'ZAR',
   GH: 'GHS', TZ: 'TZS', UG: 'UGX', RW: 'RWF', SN: 'XOF',
   ET: 'ETB', EG: 'EGP',
+};
+
+// Full country name → ISO alpha-2 (single source of truth — used by middleware + auth)
+const COUNTRY_NAME_TO_ISO = {
+  'Cameroon':       'CM',
+  'Nigeria':        'NG',
+  'Kenya':          'KE',
+  'South Africa':   'ZA',
+  'Ivory Coast':    'CI',
+  "Côte d'Ivoire":  'CI',
+  'Gabon':          'GA',
+  'Benin':          'BJ',
+  'Niger':          'NE',
+  'Ghana':          'GH',
+  'Tanzania':       'TZ',
+  'Uganda':         'UG',
+  'Rwanda':         'RW',
+  'Senegal':        'SN',
+  'Ethiopia':       'ET',
+  'Egypt':          'EG',
 };
 
 /**
@@ -115,12 +135,37 @@ function getStripeCurrency(countryCode) {
   return STRIPE_CURRENCIES[code] || 'xaf';
 }
 
+/**
+ * Resolve a country code from either an ISO alpha-2 code or a full country name.
+ * Returns 'CM' (Cameroon / XAF) as the safe fallback.
+ *
+ * @param {string} countryOrCode — 'NG' or 'Nigeria' or 'nigeria'
+ * @returns {string} ISO alpha-2 country code
+ */
+function resolveCountryCode(countryOrCode) {
+  if (!countryOrCode) return 'CM';
+  const upper = countryOrCode.trim().toUpperCase();
+  // Direct ISO code match (e.g. 'NG', 'KE')
+  if (upper.length === 2 && COUNTRY_CURRENCY[upper]) return upper;
+  // Full name match (case-insensitive)
+  const titleCase = countryOrCode.trim();
+  if (COUNTRY_NAME_TO_ISO[titleCase]) return COUNTRY_NAME_TO_ISO[titleCase];
+  // Case-insensitive fallback
+  const lower = titleCase.toLowerCase();
+  for (const [name, code] of Object.entries(COUNTRY_NAME_TO_ISO)) {
+    if (name.toLowerCase() === lower) return code;
+  }
+  return 'CM';
+}
+
 module.exports = {
   convertFromXAF,
   convertToXAF,
   fareWithLocalCurrency,
   getCurrencyCode,
   getStripeCurrency,
+  resolveCountryCode,
   RATES,
   COUNTRY_CURRENCY,
+  COUNTRY_NAME_TO_ISO,
 };

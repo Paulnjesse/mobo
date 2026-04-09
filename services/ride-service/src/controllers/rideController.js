@@ -619,21 +619,15 @@ const getFare = async (req, res) => {
     const { pickup_location, dropoff_location, ride_type = 'standard', stops = [] } = req.body;
     const userId = req.headers['x-user-id'];
 
-    // Cache fare estimates (coords quantized to ~111m precision via *1000 rounding)
-    const cacheKey = `fare:${ride_type}:${Math.round(pickup_location.lat * 1000)}:${Math.round(pickup_location.lng * 1000)}:${Math.round(dropoff_location.lat * 1000)}:${Math.round(dropoff_location.lng * 1000)}`;
+    // Cache key includes country_code so each currency market gets its own cached response
+    const countryCode = req.currency?.country_code || 'CM';
+    const cacheKey = `fare:${ride_type}:${countryCode}:${Math.round(pickup_location.lat * 1000)}:${Math.round(pickup_location.lng * 1000)}:${Math.round(dropoff_location.lat * 1000)}:${Math.round(dropoff_location.lng * 1000)}`;
     const cached = await cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    const userResult = await pool.query('SELECT subscription_plan, country FROM users WHERE id = $1', [userId]);
-    const subscription  = userResult.rows[0]?.subscription_plan || 'none';
-    const userCountry   = userResult.rows[0]?.country || 'Cameroon';
-    const COUNTRY_ISO = {
-      'Cameroon': 'CM', 'Nigeria': 'NG', 'Kenya': 'KE', 'South Africa': 'ZA',
-      "Ivory Coast": 'CI', "Côte d'Ivoire": 'CI', 'Gabon': 'GA', 'Benin': 'BJ',
-      'Niger': 'NE', 'Ghana': 'GH', 'Tanzania': 'TZ', 'Uganda': 'UG',
-      'Rwanda': 'RW', 'Senegal': 'SN', 'Ethiopia': 'ET', 'Egypt': 'EG',
-    };
-    const countryCode = COUNTRY_ISO[userCountry] || 'CM';
+    const userResult = await pool.query('SELECT subscription_plan FROM users WHERE id = $1', [userId]);
+    const subscription = userResult.rows[0]?.subscription_plan || 'none';
+    // countryCode already resolved above for cache key (from req.currency set by currencyMiddleware)
 
     const surgeResult = await pool.query(
       `SELECT multiplier FROM surge_zones
@@ -673,9 +667,9 @@ const getFare = async (req, res) => {
     const allTypes = Object.keys(RIDE_TYPE_RATES);
     const fares = {};
     allTypes.forEach(rt => {
-      const xafFare = calculateFare(totalDistance, durationMin, surgeMultiplier, subscription, false, null, rt);
-      const local   = fareWithLocalCurrency(xafFare, countryCode);
-      fares[rt]     = { ...local };
+      const fareObj = calculateFare(totalDistance, durationMin, surgeMultiplier, subscription, false, null, rt);
+      // fareObj.total is the XAF integer total; spread both breakdown and local currency
+      fares[rt] = { ...fareObj, ...fareWithLocalCurrency(fareObj.total, countryCode) };
     });
     const fare = fares[ride_type] || fares.standard;
 
