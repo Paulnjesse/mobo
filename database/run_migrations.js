@@ -54,6 +54,7 @@ const FILES = [
   'migration_030.sql',  // GDPR consent management: user_consents, consent_audit_log, consent_purposes
   'migration_031.sql',  // Surge price cap: max_multiplier on surge_zones (3.50× ceiling)
   'migration_032.sql',  // MOBO Hourly 10h package + rider identity verification + share-trip live location
+  'migration_033.sql',  // Soft deletes + admin_roles table + read_only/read_write roles + new permissions
 ];
 
 async function run() {

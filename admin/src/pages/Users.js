@@ -13,7 +13,9 @@ import {
 } from '@mui/icons-material';
 import StatCard from '../components/StatCard';
 import DataTable from '../components/DataTable';
-import { usersAPI } from '../services/api';
+import { usersAPI, adminMgmtAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { Archive as ArchiveIcon } from '@mui/icons-material';
 
 const MOCK_USERS = Array.from({ length: 40 }, (_, i) => ({
   id: `usr_${i + 1}`,
@@ -43,6 +45,11 @@ const EMPTY_EDIT = {
 };
 
 export default function Users() {
+  const { hasPermission } = useAuth();
+  const canWrite   = hasPermission('users:write');
+  const canArchive = hasPermission('users:archive');
+  const canSuspend = hasPermission('users:suspend');
+
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({ total: 0, riders: 0, drivers: 0, suspended: 0 });
   const [loading, setLoading] = useState(true);
@@ -53,7 +60,7 @@ export default function Users() {
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewOpen, setViewOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT);
@@ -152,11 +159,15 @@ export default function Users() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
-  const handleDelete = async (user) => {
-    try { await usersAPI.delete(user.id || user._id); } catch {}
-    setUsers(prev => prev.filter(u => u.id !== user.id && u._id !== user._id));
-    setSuccess(`${user.name || user.full_name} has been deleted.`);
-    setDeleteConfirm(null);
+  const handleArchive = async (user) => {
+    try { await adminMgmtAPI.archiveUser(user.id || user._id); } catch {}
+    setUsers(prev => prev.map(u =>
+      (u.id === user.id || u._id === user._id)
+        ? { ...u, is_deleted: true, deleted_at: new Date().toISOString(), is_active: false }
+        : u
+    ));
+    setSuccess(`${user.name || user.full_name} has been archived.`);
+    setArchiveConfirm(null);
     setTimeout(() => setSuccess(''), 3000);
   };
 
@@ -270,10 +281,21 @@ export default function Users() {
           </Box>
           <DataTable columns={columns} rows={filteredUsers} loading={loading} externalSearch={search} actions
             onView={row => { setSelectedUser(row); setViewOpen(true); }}
-            onEdit={openEdit}
-            onSuspend={handleSuspend} onUnsuspend={handleUnsuspend}
-            onDelete={row => setDeleteConfirm(row)}
+            onEdit={canWrite ? openEdit : null}
+            onSuspend={canSuspend ? handleSuspend : null}
+            onUnsuspend={canSuspend ? handleUnsuspend : null}
             getRowSuspended={row => isSuspended(row)}
+            extraActions={canArchive ? (row) => (
+              !row.is_deleted
+                ? (
+                  <Tooltip title="Archive user" arrow>
+                    <IconButton size="small" onClick={() => setArchiveConfirm(row)}
+                      sx={{ color: '#F5A623', '&:hover': { bgcolor: 'rgba(245,166,35,0.1)' } }}>
+                      <ArchiveIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                ) : null
+            ) : null}
             searchPlaceholder="Filter table..."
           />
         </CardContent>
@@ -383,25 +405,34 @@ export default function Users() {
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => { openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>
-          {isSuspended(selectedUser) ? (
+          {canWrite && <Button onClick={() => { openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
+          {canSuspend && (isSuspended(selectedUser) ? (
             <Button onClick={() => { handleUnsuspend(selectedUser); setViewOpen(false); }} color="success" variant="outlined" size="small">Unsuspend</Button>
           ) : (
             <Button onClick={() => { handleSuspend(selectedUser); setViewOpen(false); }} color="error" variant="outlined" size="small">Suspend</Button>
+          ))}
+          {canArchive && !selectedUser?.is_deleted && (
+            <Button onClick={() => { setArchiveConfirm(selectedUser); setViewOpen(false); }} color="warning" variant="outlined" size="small" startIcon={<ArchiveIcon />}>Archive</Button>
           )}
           <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── DELETE CONFIRM ── */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle>Confirm Delete</DialogTitle>
+      {/* ── ARCHIVE CONFIRM ── */}
+      <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ArchiveIcon sx={{ color: '#F5A623' }} />
+          <Typography fontWeight={700}>Archive User</Typography>
+        </DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to permanently delete <strong>{deleteConfirm && getName(deleteConfirm)}</strong>? This action cannot be undone.</Typography>
+          <Typography>
+            Archive <strong>{archiveConfirm && getName(archiveConfirm)}</strong>? Their account will be deactivated and
+            hidden from active users. All data is retained for compliance and audit purposes.
+          </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteConfirm(null)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} color="error" variant="contained" size="small">Delete</Button>
+          <Button onClick={() => setArchiveConfirm(null)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={() => handleArchive(archiveConfirm)} color="warning" variant="contained" size="small">Archive</Button>
         </DialogActions>
       </Dialog>
     </Box>

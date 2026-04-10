@@ -8,12 +8,14 @@ import {
 } from '@mui/material';
 import {
   DirectionsCar as CarIcon, CheckCircle as CheckIcon,
-  WifiTethering as OnlineIcon, Block as BlockIcon,
-  Close as CloseIcon, Edit as EditIcon, Star as StarIcon,
+  CheckCircle, WifiTethering as OnlineIcon, Block as BlockIcon,
+  Close as CloseIcon, Edit as EditIcon, Star as StarIcon, Tooltip,
 } from '@mui/icons-material';
 import StatCard from '../components/StatCard';
 import DataTable from '../components/DataTable';
-import { driversAPI } from '../services/api';
+import { driversAPI, adminMgmtAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { Archive as ArchiveIcon } from '@mui/icons-material';
 
 const MOCK_DRIVERS = Array.from({ length: 35 }, (_, i) => ({
   id: `drv_${i + 1}`,
@@ -58,6 +60,12 @@ const EMPTY_VEHICLE_FORM = {
 };
 
 export default function Drivers() {
+  const { hasPermission } = useAuth();
+  const canWrite   = hasPermission('drivers:write');
+  const canArchive = hasPermission('drivers:archive');
+  const canSuspend = hasPermission('drivers:suspend');
+  const canApprove = hasPermission('drivers:approve');
+
   const [drivers, setDrivers] = useState([]);
   const [stats, setStats] = useState({ total: 0, online: 0, pending: 0, suspended: 0 });
   const [loading, setLoading] = useState(true);
@@ -73,7 +81,7 @@ export default function Drivers() {
   const [vehicleForm, setVehicleForm] = useState(EMPTY_VEHICLE_FORM);
   const [editTab, setEditTab] = useState(0);
   const [editSaving, setEditSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
 
   const fetchDrivers = useCallback(async () => {
     setLoading(true); setError('');
@@ -182,11 +190,15 @@ export default function Drivers() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
-  const handleDelete = async (driver) => {
-    try { await driversAPI.delete(driver.id || driver._id); } catch {}
-    setDrivers(prev => prev.filter(d => d.id !== driver.id && d._id !== driver._id));
-    setSuccess(`${driver.full_name || driver.name} deleted.`);
-    setDeleteConfirm(null);
+  const handleArchive = async (driver) => {
+    try { await adminMgmtAPI.archiveDriver(driver.id || driver._id); } catch {}
+    setDrivers(prev => prev.map(d =>
+      (d.id === driver.id || d._id === driver._id)
+        ? { ...d, is_deleted: true, is_approved: false }
+        : d
+    ));
+    setSuccess(`${driver.full_name || driver.name} archived.`);
+    setArchiveConfirm(null);
     setTimeout(() => setSuccess(''), 3000);
   };
 
@@ -278,11 +290,30 @@ export default function Drivers() {
           </Box>
           <DataTable columns={columns} rows={filtered} loading={loading} externalSearch={search} actions
             onView={row => { setSelectedDriver(row); setViewOpen(true); }}
-            onEdit={openEdit}
-            onSuspend={handleSuspend} onUnsuspend={handleUnsuspend}
-            onDelete={row => setDeleteConfirm(row)}
+            onEdit={canWrite ? openEdit : null}
+            onSuspend={canSuspend ? handleSuspend : null}
+            onUnsuspend={canSuspend ? handleUnsuspend : null}
             getRowSuspended={row => row.is_suspended}
-            extraAction={{ label: 'Approve', color: 'success', show: row => !row.is_approved, onClick: handleApprove }}
+            extraActions={(row) => (
+              <Box sx={{ display: 'flex', gap: 0.3 }}>
+                {canApprove && !row.is_approved && !row.is_deleted && (
+                  <Tooltip title="Approve Driver" arrow>
+                    <IconButton size="small" onClick={() => handleApprove(row)}
+                      sx={{ color: '#4CAF50', '&:hover': { bgcolor: 'rgba(76,175,80,0.1)' } }}>
+                      <CheckCircle sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {canArchive && !row.is_deleted && (
+                  <Tooltip title="Archive Driver" arrow>
+                    <IconButton size="small" onClick={() => setArchiveConfirm(row)}
+                      sx={{ color: '#F5A623', '&:hover': { bgcolor: 'rgba(245,166,35,0.1)' } }}>
+                      <ArchiveIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            )}
             searchPlaceholder="Filter table..."
           />
         </CardContent>
@@ -430,24 +461,37 @@ export default function Drivers() {
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => { openEdit(selectedDriver); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>
-          {!selectedDriver?.is_approved && <Button onClick={() => { handleApprove(selectedDriver); setViewOpen(false); }} color="success" variant="outlined" size="small">Approve</Button>}
-          {selectedDriver?.is_suspended ? (
+          {canWrite && <Button onClick={() => { openEdit(selectedDriver); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
+          {canApprove && !selectedDriver?.is_approved && !selectedDriver?.is_deleted && (
+            <Button onClick={() => { handleApprove(selectedDriver); setViewOpen(false); }} color="success" variant="outlined" size="small">Approve</Button>
+          )}
+          {canSuspend && (selectedDriver?.is_suspended ? (
             <Button onClick={() => { handleUnsuspend(selectedDriver); setViewOpen(false); }} color="success" variant="outlined" size="small">Unsuspend</Button>
           ) : (
             <Button onClick={() => { handleSuspend(selectedDriver); setViewOpen(false); }} color="error" variant="outlined" size="small">Suspend</Button>
+          ))}
+          {canArchive && !selectedDriver?.is_deleted && (
+            <Button onClick={() => { setArchiveConfirm(selectedDriver); setViewOpen(false); }} color="warning" variant="outlined" size="small" startIcon={<ArchiveIcon />}>Archive</Button>
           )}
           <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── DELETE CONFIRM ── */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent><Typography>Are you sure you want to delete <strong>{deleteConfirm && getName(deleteConfirm)}</strong>?</Typography></DialogContent>
+      {/* ── ARCHIVE CONFIRM ── */}
+      <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ArchiveIcon sx={{ color: '#F5A623' }} />
+          <Typography fontWeight={700}>Archive Driver</Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Archive <strong>{archiveConfirm && getName(archiveConfirm)}</strong>? Their account will be deactivated and
+            approval revoked. All data is retained for compliance. This action does not delete any records.
+          </Typography>
+        </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteConfirm(null)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={() => handleDelete(deleteConfirm)} color="error" variant="contained" size="small">Delete</Button>
+          <Button onClick={() => setArchiveConfirm(null)} variant="outlined" size="small">Cancel</Button>
+          <Button onClick={() => handleArchive(archiveConfirm)} color="warning" variant="contained" size="small">Archive</Button>
         </DialogActions>
       </Dialog>
     </Box>

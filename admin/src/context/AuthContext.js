@@ -1,33 +1,32 @@
 /**
  * Admin Authentication Context
  *
- * Security hardening vs original:
+ * Security hardening:
  *  - Token stored in memory only (NOT localStorage — XSS-safe)
  *  - Non-sensitive user profile in sessionStorage (cleared on tab close)
  *  - 30-minute idle session timeout with activity tracking
  *  - Single-session enforcement: login invalidates any prior session
  *  - All auth events logged for insider threat detection
- *  - Role double-check on every context read
+ *  - Permission list fetched after 2FA and cached in state
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, adminMgmtAPI } from '../services/api';
 
 const AuthContext = createContext(null);
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const IDLE_TIMEOUT_MS    = 30 * 60 * 1000;  // 30 minutes
-const USER_STORE_KEY     = 'mobo_admin_user_safe';  // sessionStorage — non-PII only
-const ACTIVITY_EVENTS    = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const USER_STORE_KEY  = 'mobo_admin_user_safe';
+const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll'];
 
 export function AuthProvider({ children }) {
-  // Token held in memory only — never written to localStorage
-  const tokenRef          = useRef(null);
-  const idleTimerRef      = useRef(null);
+  const tokenRef     = useRef(null);
+  const idleTimerRef = useRef(null);
 
-  const [user,    setUser]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user,        setUser]        = useState(null);
+  const [permissions, setPermissions] = useState(new Set());
+  const [loading,     setLoading]     = useState(true);
 
-  // ── Idle timeout ────────────────────────────────────────────────────────────
+  // ── Idle timeout ─────────────────────────────────────────────────────────────
   const resetIdleTimer = useCallback(() => {
     if (!tokenRef.current) return;
     clearTimeout(idleTimerRef.current);
@@ -46,49 +45,46 @@ export function AuthProvider({ children }) {
     clearTimeout(idleTimerRef.current);
   }, [resetIdleTimer]);
 
-  // ── Restore session from sessionStorage (survives page refresh, not new tab) ─
+  // ── Restore session from sessionStorage ──────────────────────────────────────
   useEffect(() => {
-    const raw = sessionStorage.getItem(USER_STORE_KEY);
-    if (raw) {
-      try {
-        const saved = JSON.parse(raw);
-        // Only restore non-sensitive fields — token is gone on refresh (by design)
-        // User must re-authenticate after hard refresh; this prevents token theft via crash recovery
-        if (saved?.role === 'admin') {
-          // No token to restore — user will be redirected to login on first API call
-          // This is intentional: memory-only tokens don't survive page refresh
-        }
-      } catch { /* ignore */ }
-    }
     setLoading(false);
   }, []);
 
-  // ── Core logout (shared by manual + idle + security events) ─────────────────
+  // ── Fetch permissions after login ────────────────────────────────────────────
+  const fetchPermissions = useCallback(async () => {
+    try {
+      const res = await adminMgmtAPI.getMyPermissions();
+      const perms = res.data?.permissions || [];
+      setPermissions(new Set(perms));
+      return perms;
+    } catch {
+      setPermissions(new Set());
+      return [];
+    }
+  }, []);
+
+  // ── Core logout ──────────────────────────────────────────────────────────────
   const performLogout = useCallback(async (reason = 'manual') => {
     detachActivityListeners();
     const hadToken = !!tokenRef.current;
     tokenRef.current = null;
     sessionStorage.removeItem(USER_STORE_KEY);
     setUser(null);
+    setPermissions(new Set());
 
     if (hadToken) {
-      try {
-        await authAPI.logout();
-      } catch { /* ignore — server may already have invalidated */ }
+      try { await authAPI.logout(); } catch { /* already expired */ }
     }
-
     if (reason !== 'manual') {
-      // Notify user why they were logged out
       window.dispatchEvent(new CustomEvent('mobo:admin:session-ended', { detail: { reason } }));
     }
   }, [detachActivityListeners]);
 
-  // ── Login ───────────────────────────────────────────────────────────────────
+  // ── Login (step 1 — returns requires_2fa flag for admin accounts) ─────────────
   const login = useCallback(async (email, password) => {
     const response = await authAPI.login(email, password);
     const { token: newToken, user: newUser, requires_2fa } = response.data;
 
-    // 2FA required before full session grant
     if (requires_2fa) {
       return { requires_2fa: true, tempToken: newToken };
     }
@@ -97,22 +93,18 @@ export function AuthProvider({ children }) {
       throw new Error('Access denied. Admin privileges required.');
     }
 
-    // Store token in memory only
     tokenRef.current = newToken;
-
-    // Store only non-PII in sessionStorage for UI display
     const safeMeta = { id: newUser.id, role: newUser.role, email: newUser.email, name: newUser.name };
     sessionStorage.setItem(USER_STORE_KEY, JSON.stringify(safeMeta));
     setUser(newUser);
 
-    // Start idle timer
     attachActivityListeners();
     resetIdleTimer();
-
+    await fetchPermissions();
     return newUser;
-  }, [attachActivityListeners, resetIdleTimer]);
+  }, [attachActivityListeners, resetIdleTimer, fetchPermissions]);
 
-  // ── Complete 2FA challenge ──────────────────────────────────────────────────
+  // ── Complete 2FA challenge (step 2) ──────────────────────────────────────────
   const complete2FA = useCallback(async (tempToken, totpCode) => {
     const response = await authAPI.validate2FA(tempToken, totpCode);
     const { token: finalToken, user: newUser } = response.data;
@@ -128,26 +120,34 @@ export function AuthProvider({ children }) {
 
     attachActivityListeners();
     resetIdleTimer();
+    await fetchPermissions();
     return newUser;
-  }, [attachActivityListeners, resetIdleTimer]);
+  }, [attachActivityListeners, resetIdleTimer, fetchPermissions]);
 
-  // ── Token accessor (used by api.js interceptor) ─────────────────────────────
   const getToken = useCallback(() => tokenRef.current, []);
 
-  // ── Cleanup on unmount ──────────────────────────────────────────────────────
   useEffect(() => {
     return () => detachActivityListeners();
   }, [detachActivityListeners]);
 
+  // ── Permission helpers ────────────────────────────────────────────────────────
+  const hasPermission = useCallback((perm) => permissions.has(perm), [permissions]);
+
+  // Role shortcuts
+  const isSuperAdmin = useCallback(() => user?.admin_role === 'admin', [user]);
+
   const value = {
     user,
     loading,
+    permissions,
     isAuthenticated: !!user && !!tokenRef.current,
     login,
     complete2FA,
     logout: () => performLogout('manual'),
     getToken,
     idleTimeoutMs: IDLE_TIMEOUT_MS,
+    hasPermission,
+    isSuperAdmin,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -36,10 +36,13 @@ import {
   DeliveryDining as DeliveryDiningIcon,
   LocationCity as LocationCityIcon,
   Campaign as CampaignIcon,
+  AdminPanelSettings as AdminPanelSettingsIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
-const NAV_ITEMS = [
+// Items that always show for any authenticated admin
+const BASE_NAV_ITEMS = [
   { label: 'Dashboard',    path: '/',             icon: <BarChartIcon /> },
   { label: 'Users',        path: '/users',         icon: <PeopleIcon /> },
   { label: 'Drivers',      path: '/drivers',       icon: <DriveEtaIcon /> },
@@ -64,10 +67,26 @@ const NAV_ITEMS = [
   { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
 ];
 
+// Items only shown to users with admin:manage_staff permission
+const STAFF_NAV_ITEMS = [
+  { label: 'Admin Staff',  path: '/admin-staff', icon: <ManageAccountsIcon /> },
+];
+
+// Items only shown to users with admin:manage_roles permission
+const ROLES_NAV_ITEMS = [
+  { label: 'Roles & Perms', path: '/roles', icon: <AdminPanelSettingsIcon /> },
+];
+
 export default function Sidebar({ width = 240 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, hasPermission } = useAuth();
+
+  const NAV_ITEMS = [
+    ...BASE_NAV_ITEMS,
+    ...(hasPermission('admin:manage_staff') ? STAFF_NAV_ITEMS : []),
+    ...(hasPermission('admin:manage_roles') ? ROLES_NAV_ITEMS : []),
+  ];
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
@@ -262,8 +281,8 @@ export default function Sidebar({ width = 240 }) {
               >
                 {user?.name || 'Admin User'}
               </Typography>
-              <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem' }}>
-                Administrator
+              <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem', textTransform: 'capitalize' }}>
+                {user?.admin_role ? user.admin_role.replace(/_/g, ' ') : 'Administrator'}
               </Typography>
             </Box>
           </Box>

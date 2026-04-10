@@ -27,6 +27,8 @@ import MultiCity from './pages/MultiCity';
 import FareManagement from './pages/FareManagement';
 import AdsManagement from './pages/AdsManagement';
 import FoodManagement from './pages/FoodManagement';
+import AdminManagement from './pages/AdminManagement';
+import RoleManagement from './pages/RoleManagement';
 
 const theme = createTheme({
   palette: {
@@ -153,6 +155,8 @@ function App() {
               <Route path="/fare-management"   element={<FareManagement />} />
               <Route path="/ads"               element={<AdsManagement />} />
               <Route path="/food"              element={<FoodManagement />} />
+              <Route path="/admin-staff"       element={<AdminManagement />} />
+              <Route path="/roles"             element={<RoleManagement />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

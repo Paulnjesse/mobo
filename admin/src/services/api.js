@@ -125,3 +125,28 @@ export const settingsAPI = {
   get: () => api.get('/admin/settings'),
   update: (data) => api.put('/admin/settings', data),
 };
+
+// Admin Management (staff + roles + permissions)
+export const adminMgmtAPI = {
+  // Permissions for current user
+  getMyPermissions: () => api.get('/admin/admin-mgmt/my-permissions'),
+
+  // Admin staff
+  listStaff:    ()         => api.get('/admin/admin-mgmt/staff'),
+  createStaff:  (data)     => api.post('/admin/admin-mgmt/staff', data),
+  updateStaff:  (id, data) => api.patch(`/admin/admin-mgmt/staff/${id}`, data),
+  archiveStaff: (id)       => api.delete(`/admin/admin-mgmt/staff/${id}`),
+
+  // Roles
+  listRoles:    ()         => api.get('/admin/admin-mgmt/roles'),
+  createRole:   (data)     => api.post('/admin/admin-mgmt/roles', data),
+  updateRole:   (id, data) => api.patch(`/admin/admin-mgmt/roles/${id}`, data),
+  archiveRole:  (id)       => api.delete(`/admin/admin-mgmt/roles/${id}`),
+
+  // Permissions catalogue
+  listPermissions: () => api.get('/admin/admin-mgmt/permissions'),
+
+  // Soft archive (replaces hard delete for users/drivers)
+  archiveUser:   (id) => api.patch(`/admin/admin-mgmt/users/${id}/archive`),
+  archiveDriver: (id) => api.patch(`/admin/admin-mgmt/drivers/${id}/archive`),
+};
