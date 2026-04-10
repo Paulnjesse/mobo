@@ -26,12 +26,15 @@ const RIDE_TYPE_RATES = {
   delivery: { base: 500,  perKm: 150, perMin: 40,  bookingFee: 300 },
 };
 
-// ── Rental packages (XAF) ─────────────────────────────────────────────────────
+// ── Rental / Hourly packages (XAF) — MOBO Hourly: keep a car+driver for 1–10 hours ──
+// Matches Uber Hourly (up to 10 h) and Bolt Hourly.
+// Extra km beyond the included limit: 200 XAF/km.
 const RENTAL_PACKAGES = {
-  '1h': { hours: 1, kmLimit: 50,  price: 8000  },
-  '2h': { hours: 2, kmLimit: 100, price: 14000 },
-  '4h': { hours: 4, kmLimit: 180, price: 25000 },
-  '8h': { hours: 8, kmLimit: 300, price: 45000 },
+  '1h':  { hours: 1,  kmLimit: 50,  price: 8000  },
+  '2h':  { hours: 2,  kmLimit: 100, price: 14000 },
+  '4h':  { hours: 4,  kmLimit: 180, price: 25000 },
+  '8h':  { hours: 8,  kmLimit: 300, price: 45000 },
+  '10h': { hours: 10, kmLimit: 400, price: 55000 },  // MOBO Hourly max — matches Uber
 };
 const RENTAL_EXTRA_KM_RATE = 200; // XAF per extra km
 
@@ -453,12 +456,44 @@ const requestRide = async (req, res) => {
       music_preference = true,
     } = req.body;
 
+    // ── Advance booking: max 30 days ahead (matches Uber Reserve / Bolt Scheduled) ──
+    if (scheduled_at) {
+      const schedDate = new Date(scheduled_at);
+      const maxDate   = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (isNaN(schedDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid scheduled_at date format' });
+      }
+      if (schedDate < new Date()) {
+        return res.status(400).json({ error: 'scheduled_at must be in the future' });
+      }
+      if (schedDate > maxDate) {
+        return res.status(400).json({ error: 'Rides can be scheduled at most 30 days in advance' });
+      }
+    }
+
     // ── Fetch user record first (needed for teen checks + subscription) ─────
     const earlyUserResult = await pool.query(
-      'SELECT subscription_plan, gender_preference, wallet_balance, is_teen_account, parent_id FROM users WHERE id = $1',
+      'SELECT subscription_plan, gender_preference, wallet_balance, is_teen_account, parent_id, is_rider_verified FROM users WHERE id = $1',
       [riderId]
     );
     const earlyUser = earlyUserResult.rows[0];
+
+    // ── Multiple stops: only verified riders may add up to 2 extra stops ──────
+    if (stops && stops.length > 0) {
+      const MAX_STOPS = earlyUser?.is_rider_verified ? 2 : 0;
+      if (stops.length > MAX_STOPS) {
+        if (!earlyUser?.is_rider_verified) {
+          return res.status(403).json({
+            error: 'Multiple stops are available to verified riders only. Complete identity verification to unlock this feature.',
+            code: 'STOPS_REQUIRE_VERIFICATION',
+          });
+        }
+        return res.status(400).json({
+          error: `Verified riders may add up to ${MAX_STOPS} extra stops per ride`,
+          code: 'TOO_MANY_STOPS',
+        });
+      }
+    }
 
     // ── Teen account restrictions (apply to ALL ride types, including rental) ─
     if (earlyUser?.is_teen_account) {
@@ -488,7 +523,7 @@ const requestRide = async (req, res) => {
     // ── Rental ride fast-path ──────────────────────────────────────────────
     if (ride_type === 'rental') {
       const pkg = RENTAL_PACKAGES[rental_package];
-      if (!pkg) return res.status(400).json({ error: 'Invalid rental package. Choose: 1h, 2h, 4h, 8h' });
+      if (!pkg) return res.status(400).json({ error: 'Invalid rental package. Choose: 1h, 2h, 4h, 8h, 10h' });
 
       const dropLng = dropoff_location?.lng ?? pickup_location.lng;
       const dropLat = dropoff_location?.lat ?? pickup_location.lat;
@@ -956,17 +991,35 @@ const acceptRide = async (req, res) => {
       console.warn('[AcceptRide PushNotification]', pnErr.message);
     }
 
-    // Enrich response with driver photo + vehicle so rider app can display them immediately
+    // Enrich response:
+    // - Rider app: driver photo, vehicle details, verified badge
+    // - Driver app: rider verified badge (Uber-style "you're picking up a verified rider")
     const enriched = await pool.query(
-      `SELECT du.full_name AS driver_name, du.profile_picture AS driver_photo, du.rating AS driver_rating,
-              v.make, v.model, v.color, v.plate
+      `SELECT du.full_name AS driver_name, du.profile_picture AS driver_photo,
+              du.rating AS driver_rating, du.is_verified AS driver_verified,
+              v.make, v.model, v.color, v.plate,
+              EXISTS (
+                SELECT 1 FROM driver_biometric_verifications dbv
+                WHERE dbv.driver_id = d.id AND dbv.result = 'verified'
+              ) AS driver_biometric_verified
        FROM drivers d
        JOIN users du ON du.id = d.user_id
        LEFT JOIN vehicles v ON v.id = d.vehicle_id
        WHERE d.id = $1`,
       [driverId]
     );
-    res.json({ ride: result.rows[0], driver: enriched.rows[0] || null });
+    // Fetch rider verification status so driver knows they're picking up a verified rider
+    const riderInfo = await pool.query(
+      'SELECT is_rider_verified, rider_verified_at FROM users WHERE id = $1',
+      [result.rows[0].rider_id]
+    );
+    const rider = riderInfo.rows[0] || {};
+    res.json({
+      ride:   result.rows[0],
+      driver: enriched.rows[0] || null,
+      rider_verified: rider.is_rider_verified || false,
+      rider_verified_at: rider.rider_verified_at || null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -5,6 +5,7 @@ const db = require('../config/database');
  * POST /rides/:id/share
  * Authenticated rider generates a share token for their active ride.
  * Returns { share_url, token }.
+ * Trusted contacts (family/friends) can view the live trip WITHOUT installing the app.
  */
 const generateShareToken = async (req, res) => {
   try {
@@ -42,7 +43,8 @@ const generateShareToken = async (req, res) => {
       success: true,
       data: {
         share_url: shareUrl,
-        expires_at: expiresAt
+        expires_at: expiresAt,
+        note: 'Anyone with this link can track your ride in real time — no app needed.'
       }
     });
   } catch (err) {
@@ -53,8 +55,9 @@ const generateShareToken = async (req, res) => {
 
 /**
  * GET /rides/track/:token
- * PUBLIC — no authentication required.
- * Returns safe, limited ride info for sharing.
+ * PUBLIC — no authentication required. Family and friends can track without the app.
+ * Returns safe, limited ride info: status, addresses, driver first name + last initial,
+ * vehicle info, and the driver's last known GPS location for live map display.
  * Returns 404 if token is expired or the ride completed more than 2 hours ago.
  */
 const getSharedTrip = async (req, res) => {
@@ -71,18 +74,26 @@ const getSharedTrip = async (req, res) => {
          r.estimated_arrival,
          r.share_token_expires,
          r.completed_at,
-         -- Driver: first name + last initial only
+         r.driver_id,
+         -- Driver: first name + last initial only (no full PII)
          SPLIT_PART(du.full_name, ' ', 1) AS driver_first_name,
          LEFT(SPLIT_PART(du.full_name, ' ', 2), 1) AS driver_last_initial,
+         du.is_verified AS driver_verified,
          v.make,
          v.model,
          v.color,
          v.plate,
-         v.vehicle_type
+         v.vehicle_type,
+         -- Last known driver location (from driver_locations table)
+         dl.latitude  AS driver_lat,
+         dl.longitude AS driver_lng,
+         dl.heading   AS driver_heading,
+         dl.updated_at AS location_updated_at
        FROM rides r
        LEFT JOIN drivers d ON r.driver_id = d.id
        LEFT JOIN users du ON d.user_id = du.id
        LEFT JOIN vehicles v ON d.vehicle_id = v.id
+       LEFT JOIN driver_locations dl ON dl.driver_id = d.id
        WHERE r.share_token = $1`,
       [token]
     );
@@ -107,25 +118,41 @@ const getSharedTrip = async (req, res) => {
       }
     }
 
-    // Build safe response — no PII (no full name, no phone)
+    // Build safe response — no PII (no full name, no phone number)
     const safeData = {
-      ride_id: ride.id,
-      status: ride.status,
-      pickup_address: ride.pickup_address,
-      dropoff_address: ride.dropoff_address,
+      ride_id:           ride.id,
+      status:            ride.status,
+      pickup_address:    ride.pickup_address,
+      dropoff_address:   ride.dropoff_address,
       estimated_arrival: ride.estimated_arrival || null,
       driver: ride.driver_first_name
         ? {
             name: `${ride.driver_first_name}${ride.driver_last_initial ? ' ' + ride.driver_last_initial + '.' : ''}`,
+            verified: ride.driver_verified || false,
             vehicle: {
-              make: ride.make,
-              model: ride.model,
-              color: ride.color,
-              plate: ride.plate,
+              make:         ride.make,
+              model:        ride.model,
+              color:        ride.color,
+              plate:        ride.plate,
               vehicle_type: ride.vehicle_type
-            }
+            },
+            // Live location — lets family/friends track on a map without the app
+            live_location: ride.driver_lat != null
+              ? {
+                  latitude:     parseFloat(ride.driver_lat),
+                  longitude:    parseFloat(ride.driver_lng),
+                  heading:      ride.driver_heading,
+                  updated_at:   ride.location_updated_at,
+                  // Indicate if location is stale (>5 min old)
+                  is_live:      ride.location_updated_at
+                    ? (now - new Date(ride.location_updated_at)) < 5 * 60 * 1000
+                    : false,
+                }
+              : null
           }
-        : null
+        : null,
+      // Polling hint: clients should refresh every 10 seconds while ride is active
+      refresh_interval_seconds: ['accepted', 'arriving', 'in_progress'].includes(ride.status) ? 10 : null,
     };
 
     return res.json({ success: true, data: safeData });

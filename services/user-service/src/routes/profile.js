@@ -105,6 +105,10 @@ router.delete('/users/me/saved-places/:id', require('../controllers/savedPlacesC
 router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);
 router.get('/drivers/me/biometric-status',  require('../controllers/biometricController').getVerificationStatus);
 
+// Rider identity verification — unlocks multi-stop + Verified Rider badge shown to driver
+router.post('/users/me/verify-identity',       require('../controllers/biometricController').verifyRider);
+router.get('/users/me/verification-status',    require('../controllers/biometricController').getRiderVerificationStatus);
+
 // GDPR Article 17 — Right to Erasure (self-service)
 router.post('/me/erase', requestErasure);
 

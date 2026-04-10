@@ -203,6 +203,118 @@ exports.verifyDriver = async (req, res) => {
 };
 
 /**
+ * POST /users/me/verify-identity
+ * Rider identity verification against trusted data sources (Smile Identity).
+ * On success: sets users.is_rider_verified = true, unlocks multiple stops.
+ * Riders are shown a "Verified Rider" badge to their driver for extra peace of mind.
+ *
+ * Body: { photo_base64, id_number?, id_type? }
+ */
+exports.verifyRider = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { photo_base64, id_number, id_type = 'NATIONAL_ID' } = req.body;
+
+    if (!photo_base64) {
+      return res.status(400).json({ error: 'No photo provided', verified: false });
+    }
+
+    const photoSizeKb = Math.round(Buffer.byteLength(photo_base64, 'utf8') * 0.75 / 1024);
+    if (photoSizeKb < 5) {
+      return res.status(400).json({ error: 'Photo too small. Please use a clearer image.', verified: false });
+    }
+
+    // Check if already verified
+    const existing = await db.query(
+      'SELECT is_rider_verified, rider_verified_at FROM users WHERE id = $1',
+      [userId]
+    );
+    if (existing.rows[0]?.is_rider_verified) {
+      return res.json({ verified: true, message: 'Identity already verified.', verified_at: existing.rows[0].rider_verified_at });
+    }
+
+    const PARTNER_ID  = process.env.SMILE_PARTNER_ID;
+    const API_KEY     = process.env.SMILE_API_KEY;
+    const SID_SERVER  = process.env.SMILE_SID_SERVER || '0';
+    const smileUrl    = SMILE_ENDPOINT[SID_SERVER] || SMILE_ENDPOINT['0'];
+
+    let result = 'verified'; // Default to verified in dev mode
+    let resultCode = 'DEV_BYPASS';
+    let confidence = null;
+
+    if (PARTNER_ID && API_KEY) {
+      const { timestamp, signature } = buildSmileSignature(PARTNER_ID, API_KEY);
+      const payload = {
+        partner_id:      PARTNER_ID,
+        timestamp,
+        sec_key:         signature,
+        smile_client_id: `MOBO-RIDER-${userId}`,
+        job_type:        4, // Enhanced Document Verification
+        image_info_list: [{ image_type_id: 0, image: photo_base64 }],
+        ...(id_number && { id_info: { country: 'CM', id_type, id_number, entered: true } }),
+      };
+
+      const smileResponse = await axios.post(`${smileUrl}/upload`, payload, { timeout: 30000 });
+      const data = smileResponse.data;
+
+      resultCode = data.result?.ResultCode || data.ResultCode || null;
+      confidence = data.result?.ConfidenceValue || null;
+
+      const PASS_CODES = ['0810', '0811'];
+      result = PASS_CODES.includes(String(resultCode)) ? 'verified' : 'failed';
+    }
+
+    if (result === 'verified') {
+      // Mark rider as verified — unlocks multiple stops and shows Verified badge to driver
+      await db.query(
+        `UPDATE users SET is_rider_verified = true, rider_verified_at = NOW() WHERE id = $1`,
+        [userId]
+      );
+      return res.json({
+        verified:    true,
+        message:     'Identity verified. You can now add up to 2 stops and display your Verified Rider badge.',
+        confidence,
+        result_code: resultCode,
+      });
+    }
+
+    return res.status(422).json({
+      verified:    false,
+      message:     'Identity verification failed. Please ensure your photo and ID are clear.',
+      result_code: resultCode,
+    });
+  } catch (err) {
+    console.error('[BiometricController] verifyRider:', err);
+    res.status(500).json({ error: 'Verification failed', verified: false });
+  }
+};
+
+/**
+ * GET /users/me/verification-status
+ * Returns the current rider identity verification status.
+ */
+exports.getRiderVerificationStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { rows } = await db.query(
+      'SELECT is_rider_verified, rider_verified_at FROM users WHERE id = $1',
+      [userId]
+    );
+    const user = rows[0];
+    res.json({
+      verified:    user?.is_rider_verified || false,
+      verified_at: user?.rider_verified_at || null,
+      benefits:    user?.is_rider_verified
+        ? ['up_to_2_extra_stops', 'verified_rider_badge']
+        : [],
+    });
+  } catch (err) {
+    console.error('[BiometricController] getRiderVerificationStatus:', err);
+    res.status(500).json({ error: 'Failed to get verification status' });
+  }
+};
+
+/**
  * GET /drivers/me/biometric-status
  * Returns the current biometric verification status for the logged-in driver.
  */
