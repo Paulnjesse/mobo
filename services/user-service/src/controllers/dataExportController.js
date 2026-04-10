@@ -21,10 +21,10 @@ const getDataExport = asyncHandler(async (req, res, next) => {
   const recentExport = await db.query(
     `SELECT created_at FROM gdpr_export_requests
       WHERE user_id = $1
-        AND created_at > NOW() - INTERVAL '${EXPORT_COOLDOWN_HOURS} hours'
+        AND created_at > NOW() - ($2 || ' hours')::interval
       ORDER BY created_at DESC
       LIMIT 1`,
-    [userId]
+    [userId, EXPORT_COOLDOWN_HOURS]
   ).catch(() => ({ rows: [] })); // table may not exist yet — degrade gracefully
 
   if (recentExport.rows.length > 0) {

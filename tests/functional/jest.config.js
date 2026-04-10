@@ -36,6 +36,7 @@ module.exports = {
     '.*shared/currencyMiddleware.*': '<rootDir>/tests/functional/__mocks__/currencyMiddleware.js',
     // External packages not installed at root level
     '^nodemailer$':               '<rootDir>/tests/functional/__mocks__/nodemailer.js',
+    '^expo-server-sdk$':          '<rootDir>/tests/functional/__mocks__/expoServerSdk.js',
     // Per-service db convenience re-exports (matched by the raw ../db require string)
     '.*user-service/src/db$':     '<rootDir>/tests/functional/__mocks__/userDb.js',
     '.*ride-service/src/db$':     '<rootDir>/tests/functional/__mocks__/rideDb.js',

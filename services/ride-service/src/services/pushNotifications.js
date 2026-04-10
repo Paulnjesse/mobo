@@ -203,6 +203,24 @@ async function notifyNewMessage(receiverToken, details) {
 }
 
 /**
+ * notifyRideRequested(parentToken, details)
+ * Sent to a parent when their teen account books a ride.
+ *
+ * @param {string} parentToken
+ * @param {{ ride_id: string, pickup_address: string, dropoff_address: string,
+ *           ride_type: string, teen_id: string }} details
+ */
+async function notifyRideRequested(parentToken, details) {
+  const { pickup_address = 'Unknown', dropoff_address = 'Unknown', ride_type = 'standard' } = details;
+  return _send(
+    parentToken,
+    'Teen account booked a ride',
+    `${pickup_address} → ${dropoff_address} (${ride_type})`,
+    { type: 'teen_ride_requested', ...details }
+  );
+}
+
+/**
  * notifyRideCancelled(token, reason)
  * Sent to either party when the ride is cancelled.
  *
@@ -238,5 +256,6 @@ module.exports = {
   notifyRideCompleted,
   notifyRideCancelled,
   notifyNewMessage,
+  notifyRideRequested,
   _send,
 };

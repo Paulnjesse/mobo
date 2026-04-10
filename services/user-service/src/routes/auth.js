@@ -11,6 +11,8 @@ const sensitiveAuthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many attempts. Please wait 15 minutes.', code: 'RATE_LIMIT_EXCEEDED' },
+  // Disable in test environment so functional tests don't exhaust the quota
+  skip: () => process.env.NODE_ENV === 'test',
 });
 const {
   signupValidator,

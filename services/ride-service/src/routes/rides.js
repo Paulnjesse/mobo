@@ -170,6 +170,9 @@ router.post('/', authenticate, ctrl.requestRide);
 router.get('/', authenticate, ctrl.listRides);
 router.get('/:id', authenticate, ctrl.getRide);
 
+// Ride receipt (JSON — before /:id/actions to avoid conflicts)
+router.get('/:id/receipt', authenticate, ctrl.getRideReceipt);
+
 // Ride actions
 router.post('/:id/accept',  authenticate, ctrl.acceptRide);
 router.post('/:id/decline', authenticate, ctrl.declineRide);

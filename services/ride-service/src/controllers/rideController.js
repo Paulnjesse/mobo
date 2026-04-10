@@ -448,6 +448,38 @@ const requestRide = async (req, res) => {
       music_preference = true,
     } = req.body;
 
+    // ── Fetch user record first (needed for teen checks + subscription) ─────
+    const earlyUserResult = await pool.query(
+      'SELECT subscription_plan, gender_preference, wallet_balance, is_teen_account, parent_id FROM users WHERE id = $1',
+      [riderId]
+    );
+    const earlyUser = earlyUserResult.rows[0];
+
+    // ── Teen account restrictions (apply to ALL ride types, including rental) ─
+    if (earlyUser?.is_teen_account) {
+      const TEEN_BLOCKED_TYPES = ['outstation', 'luxury', 'rental'];
+      if (TEEN_BLOCKED_TYPES.includes(ride_type)) {
+        return res.status(403).json({
+          error: `Teen accounts cannot book ${ride_type} rides. Only standard, economy, comfort, women_only, and pool rides are allowed.`,
+          code: 'TEEN_BLOCKED_RIDE_TYPE',
+        });
+      }
+      const TEEN_ALLOWED_PAYMENTS = ['wallet', 'card', 'mtn_momo', 'orange_money'];
+      if (!TEEN_ALLOWED_PAYMENTS.includes(payment_method)) {
+        return res.status(403).json({
+          error: 'Teen accounts must pay via wallet, card, or mobile money. Cash is not allowed.',
+          code: 'TEEN_PAYMENT_NOT_ALLOWED',
+        });
+      }
+      const hourUTC = new Date().getUTCHours();
+      if (hourUTC >= 22 || hourUTC < 6) {
+        return res.status(403).json({
+          error: 'Teen accounts cannot book rides between 10 PM and 6 AM.',
+          code: 'TEEN_CURFEW',
+        });
+      }
+    }
+
     // ── Rental ride fast-path ──────────────────────────────────────────────
     if (ride_type === 'rental') {
       const pkg = RENTAL_PACKAGES[rental_package];
@@ -491,9 +523,8 @@ const requestRide = async (req, res) => {
       return res.status(400).json({ error: 'Pickup and dropoff locations required' });
     }
 
-    // Get user subscription
-    const userResult = await pool.query('SELECT subscription_plan, gender_preference, wallet_balance FROM users WHERE id = $1', [riderId]);
-    const user = userResult.rows[0];
+    // Reuse the user record already fetched above for teen + subscription data
+    const user = earlyUser;
 
     // Check surge
     const surgeResult = await pool.query(
@@ -607,6 +638,31 @@ const requestRide = async (req, res) => {
         pickup_instructions, quiet_mode, ac_preference, music_preference,
       ]
     );
+
+    // ── Teen account: notify parent of new booking ───────────────────────────
+    if (user?.is_teen_account && user?.parent_id) {
+      setImmediate(async () => {
+        try {
+          const parentTokenRow = await pool.query(
+            'SELECT push_token, full_name FROM users WHERE id = $1',
+            [user.parent_id]
+          );
+          const parentToken = parentTokenRow.rows[0]?.push_token;
+          if (parentToken) {
+            const { notifyRideRequested } = require('../services/pushNotifications');
+            await notifyRideRequested(parentToken, {
+              ride_id: result.rows[0].id,
+              pickup_address,
+              dropoff_address,
+              ride_type,
+              teen_id: riderId,
+            });
+          }
+        } catch (teenNotifErr) {
+          // Non-blocking — never fail the main response
+        }
+      });
+    }
 
     res.status(201).json({ ride: result.rows[0], fare: fareCalc, surge_active: surgeMultiplier > 1.0 });
   } catch (err) {
@@ -1247,6 +1303,11 @@ const cancelRide = async (req, res) => {
     const ride = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
     const r = ride.rows[0];
+
+    // Cannot cancel an already terminal ride
+    if (r.status === 'completed' || r.status === 'cancelled') {
+      return res.status(400).json({ error: `Cannot cancel a ride that is already ${r.status}` });
+    }
 
     // Only the rider or the assigned driver may cancel
     const isRider = r.rider_id === userId;
@@ -2097,6 +2158,88 @@ const QUICK_REPLIES = {
   },
 };
 
+// ── GET /rides/:id/receipt ──────────────────────────────────────────────────
+const getRideReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requesterId = req.headers['x-user-id'];
+    const requesterRole = req.user?.role;
+
+    const rideResult = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
+    const ride = rideResult.rows[0];
+    if (!ride) return res.status(404).json({ error: 'Ride not found' });
+
+    // Only rider, the driver on that ride, or admin can view receipt
+    const driverUserResult = await pool.query(
+      'SELECT user_id FROM drivers WHERE id = $1',
+      [ride.driver_id]
+    );
+    const driverUserId = driverUserResult.rows[0]?.user_id;
+
+    if (requesterRole !== 'admin' && requesterId !== ride.rider_id && requesterId !== driverUserId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const [riderRow, driverRow] = await Promise.all([
+      pool.query('SELECT full_name, email, phone FROM users WHERE id = $1', [ride.rider_id]),
+      ride.driver_id
+        ? pool.query(
+            'SELECT u.full_name, d.vehicle_make, d.vehicle_model, d.plate_number FROM drivers d JOIN users u ON u.id = d.user_id WHERE d.id = $1',
+            [ride.driver_id]
+          )
+        : Promise.resolve({ rows: [] }),
+    ]);
+
+    const finalFare = ride.final_fare || ride.estimated_fare || 0;
+    const countryCode = req.currency?.country_code || 'CM';
+    const { localPrice } = req.currency || {};
+
+    res.json({
+      receipt: {
+        receipt_id:        ride.id,
+        ride_id:           ride.id,
+        ride_type:         ride.ride_type,
+        status:            ride.status,
+        rider_name:        riderRow.rows[0]?.full_name || 'Rider',
+        rider_email:       riderRow.rows[0]?.email,
+        rider_phone:       riderRow.rows[0]?.phone,
+        driver_name:       driverRow.rows[0]?.full_name || '–',
+        vehicle:           driverRow.rows[0]
+          ? `${driverRow.rows[0].vehicle_make || ''} ${driverRow.rows[0].vehicle_model || ''}`.trim()
+          : '–',
+        plate_number:      driverRow.rows[0]?.plate_number || '–',
+        pickup_address:    ride.pickup_address,
+        dropoff_address:   ride.dropoff_address,
+        distance_km:       parseFloat(ride.distance_km || 0).toFixed(1),
+        duration_minutes:  ride.duration_minutes || 0,
+        fare_breakdown: {
+          base_fare:      ride.base_fare || 0,
+          service_fee:    ride.service_fee || 0,
+          booking_fee:    ride.booking_fee || 0,
+          surge_fee:      ride.surge_active
+            ? Math.round((ride.final_fare || 0) * ((ride.surge_multiplier || 1) - 1))
+            : 0,
+          waiting_fee:    ride.waiting_fee || 0,
+          tip_amount:     ride.tip_amount  || 0,
+          commuter_discount: -(ride.commuter_discount || 0),
+          total_xaf:      finalFare,
+          local_price:    localPrice ? localPrice(finalFare) : null,
+        },
+        payment_method:    ride.payment_method,
+        surge_multiplier:  ride.surge_multiplier || 1.0,
+        surge_active:      ride.surge_active || false,
+        requested_at:      ride.created_at,
+        completed_at:      ride.completed_at,
+        promo_code:        ride.promo_code || null,
+        split_payment:     ride.split_payment || false,
+        child_seat:        ride.child_seat_required || false,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 const getQuickReplies = (req, res) => {
   const context = req.query.context || 'general';
   const role    = req.query.role    || 'rider';
@@ -2125,4 +2268,5 @@ module.exports = {
   getRentalPackages,
   getCancellationFeePreview,
   declineRide,
+  getRideReceipt,
 };

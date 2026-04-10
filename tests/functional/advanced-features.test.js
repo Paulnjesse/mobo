@@ -2,11 +2,12 @@
  * Functional Tests — Advanced Features
  *
  * Covers the scenarios identified as gaps vs Uber/Lyft:
- *   7. Token Management (refresh rotation + session logout)
- *   8. Scheduled Ride Booking (future scheduled_at field)
- *   9. Fare Split End-to-End (create → view → mark paid)
- *  10. Driver Earnings & Payout (earnings dashboard + cashout)
- *  11. Socket.IO Reconnect & Session Recovery
+ *   7.  Token Management (refresh rotation + session logout)
+ *   8.  Scheduled Ride Booking (future scheduled_at field)
+ *   9.  Fare Split End-to-End (create → view → mark paid)
+ *  10.  Driver Earnings & Payout (earnings dashboard + cashout)
+ *  11.  Socket.IO Reconnect & Session Recovery
+ *  12.  GDPR Data Export & Erasure (Article 20 portability + Article 17 erasure)
  *
  * Pattern: Jest + Supertest with mocked DBs and external services.
  */
@@ -24,7 +25,12 @@ process.env.STRIPE_SECRET_KEY     = 'sk_test_stripe_key';
 process.env.TWILIO_AUTH_TOKEN     = 'test_twilio_auth_token_placeholder';
 
 // ─── Database mocks ───────────────────────────────────────────────────────────
-const mockUserDb    = { query: jest.fn() };
+// mockUserDb also needs connect() for transaction-based controllers (gdprController executeErasure)
+const mockTxClient = {
+  query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  release: jest.fn(),
+};
+const mockUserDb    = { query: jest.fn(), connect: jest.fn().mockResolvedValue(mockTxClient) };
 const mockRideDb    = { query: jest.fn() };
 const mockPaymentDb = { query: jest.fn() };
 const mockLocationDb = { query: jest.fn() };
@@ -89,11 +95,18 @@ beforeEach(() => {
   mockRideDb.query.mockReset();
   mockPaymentDb.query.mockReset();
   mockLocationDb.query.mockReset();
+  mockTxClient.query.mockReset();
+  mockTxClient.release.mockReset();
+  // Restore connect() mock after clearAllMocks
+  mockUserDb.connect.mockResolvedValue(mockTxClient);
   jest.clearAllMocks();
+  // Restore defaults after clearAllMocks (clearAllMocks clears mockResolvedValue too for connect)
   mockUserDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
   mockRideDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
   mockPaymentDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
   mockLocationDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockUserDb.connect.mockResolvedValue(mockTxClient);
+  mockTxClient.query.mockResolvedValue({ rows: [], rowCount: 0 });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
