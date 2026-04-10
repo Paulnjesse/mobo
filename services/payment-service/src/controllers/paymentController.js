@@ -1,8 +1,10 @@
 const axios   = require('axios');
+const crypto  = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 const { checkPaymentFraud } = require('../../../../shared/fraudDetection');
 const { convertFromXAF, getCurrencyCode, getStripeCurrency } = require('../../../../shared/currencyUtil');
+const logger  = require('../../../../shared/logger');
 
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {
@@ -352,7 +354,7 @@ async function processStripe(amount, currency, paymentMethodToken) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
 
   if (!stripeKey || stripeKey === 'sk_test_xxxx') {
-    console.log(`[Stripe Mock] Processing ${amount} ${currency}`);
+    logger.info({ amount, currency }, '[Stripe Mock] Processing payment');
     return {
       success: true,
       transaction_id: `pi_mock_${Date.now()}`,
@@ -953,7 +955,6 @@ const webhookMtn = async (req, res) => {
     if (webhookSecret) {
       const signature = req.headers['x-mtn-signature'] || req.headers['x-callback-secret'];
       if (!signature) return res.sendStatus(401);
-      const crypto = require('crypto');
       const rawBody = JSON.stringify(req.body);
       const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
       const provided = signature.replace(/^sha256=/, '');
@@ -994,10 +995,10 @@ const webhookMtn = async (req, res) => {
       await resolvePendingPayment(rows[0].id, 'failed', null, body.reason || 'MTN declined');
     }
 
-    console.log(`[Webhook/MTN] ref=${referenceId} status=${status}`);
+    logger.info({ referenceId, status }, "[Webhook/MTN] callback received");
     res.sendStatus(200);
   } catch (err) {
-    console.error('[Webhook/MTN Error]', err.message);
+    logger.error({ err }, '[Webhook/MTN Error]');
     res.sendStatus(500);
   }
 };
@@ -1012,7 +1013,6 @@ const webhookOrange = async (req, res) => {
     if (webhookSecret) {
       const signature = req.headers['x-orange-signature'] || req.headers['x-callback-secret'];
       if (!signature) return res.sendStatus(401);
-      const crypto = require('crypto');
       const rawBody = JSON.stringify(req.body);
       const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
       const provided = signature.replace(/^sha256=/, '');
@@ -1051,10 +1051,10 @@ const webhookOrange = async (req, res) => {
       await resolvePendingPayment(rows[0].id, 'failed', null, body.message || 'Orange declined');
     }
 
-    console.log(`[Webhook/Orange] order=${orderId} status=${status}`);
+    logger.info({ orderId, status }, '[Webhook/Orange] callback received');
     res.sendStatus(200);
   } catch (err) {
-    console.error('[Webhook/Orange Error]', err.message);
+    logger.error({ err }, '[Webhook/Orange Error]');
     res.sendStatus(500);
   }
 };
@@ -1458,7 +1458,7 @@ const webhookStripe = async (req, res) => {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error('[StripeWebhook] STRIPE_WEBHOOK_SECRET not configured');
+    logger.error('[StripeWebhook] STRIPE_WEBHOOK_SECRET not configured');
     return res.status(500).json({ error: 'Webhook secret not configured' });
   }
 
@@ -1468,7 +1468,7 @@ const webhookStripe = async (req, res) => {
     // req.body is a raw Buffer (express.raw middleware applied in server.js)
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
-    console.error('[StripeWebhook] Signature verification failed:', err.message);
+    logger.error({ err }, '[StripeWebhook] Signature verification failed');
     return res.status(400).json({ error: 'Webhook signature invalid' });
   }
 
@@ -1534,7 +1534,7 @@ const webhookStripe = async (req, res) => {
         });
       }
     } else {
-      console.warn('[StripeWebhook] payment_intent.succeeded: no matching payment row for PI', pi.id);
+      logger.warn({ piId: pi.id }, '[StripeWebhook] payment_intent.succeeded: no matching payment row');
     }
 
   } else if (event.type === 'payment_intent.payment_failed') {
@@ -1714,6 +1714,73 @@ const getDriverCashoutHistory = async (req, res) => {
   }
 };
 
+/**
+ * POST /payments/webhook/flutterwave  (public — no auth middleware)
+ *
+ * Flutterwave sends a `verif-hash` header equal to the FLUTTERWAVE_WEBHOOK_HASH
+ * secret you set in the Flutterwave dashboard. We use timingSafeEqual to prevent
+ * timing-oracle attacks even on this simpler comparison.
+ *
+ * Security: https://developer.flutterwave.com/docs/integration-guides/webhooks/
+ */
+const webhookFlutterwave = async (req, res) => {
+  try {
+    // ── Signature verification ────────────────────────────────────────────────
+    const webhookHash = process.env.FLUTTERWAVE_WEBHOOK_HASH;
+    if (webhookHash) {
+      const provided = req.headers['verif-hash'] || '';
+      if (!provided) {
+        logger.warn('[Webhook/Flutterwave] Missing verif-hash header');
+        return res.sendStatus(401);
+      }
+      // timingSafeEqual on UTF-8 buffers — prevent timing oracle
+      const expectedBuf = Buffer.from(webhookHash);
+      const providedBuf = Buffer.from(provided);
+      const maxLen = Math.max(expectedBuf.length, providedBuf.length);
+      const ePad = Buffer.alloc(maxLen); expectedBuf.copy(ePad);
+      const pPad = Buffer.alloc(maxLen); providedBuf.copy(pPad);
+      if (ePad.length !== pPad.length || !crypto.timingSafeEqual(ePad, pPad)) {
+        logger.warn('[Webhook/Flutterwave] Invalid verif-hash — request rejected');
+        return res.sendStatus(401);
+      }
+    } else {
+      logger.warn('[Webhook/Flutterwave] FLUTTERWAVE_WEBHOOK_HASH not set — skipping signature check');
+    }
+
+    const body = req.body || {};
+    // Flutterwave wraps event data in body.data
+    const event  = body.event || '';
+    const data   = body.data  || {};
+    const txRef  = data.tx_ref || data.flw_ref;
+    const status = (data.status || '').toUpperCase();
+
+    if (!txRef || !status) {
+      return res.status(400).json({ message: 'Missing tx_ref or status' });
+    }
+
+    const { rows } = await db.query(
+      "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1",
+      [txRef]
+    );
+
+    if (rows.length === 0) {
+      return res.sendStatus(200); // already resolved or unknown tx_ref
+    }
+
+    if (status === 'SUCCESSFUL') {
+      await resolvePendingPayment(rows[0].id, 'completed', data.flw_ref || txRef, null);
+    } else if (status === 'FAILED') {
+      await resolvePendingPayment(rows[0].id, 'failed', null, data.processor_response || 'Flutterwave declined');
+    }
+
+    logger.info({ txRef, status, event }, '[Webhook/Flutterwave] callback processed');
+    res.sendStatus(200);
+  } catch (err) {
+    logger.error({ err }, '[Webhook/Flutterwave Error]');
+    res.sendStatus(500);
+  }
+};
+
 module.exports = {
   addPaymentMethod,
   listPaymentMethods,
@@ -1725,6 +1792,7 @@ module.exports = {
   webhookMtn,
   webhookOrange,
   webhookStripe,
+  webhookFlutterwave,
   getPaymentHistory,
   refundPayment,
   getWalletBalance,

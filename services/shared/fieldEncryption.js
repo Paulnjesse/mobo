@@ -45,6 +45,27 @@ const KEYS = {
   2: loadKey('FIELD_ENCRYPTION_KEY_V2'),
 };
 
+// ── Startup validation ────────────────────────────────────────────────────────
+// In production the primary key MUST be set and correctly formatted.
+// In all environments warn loudly if the key is missing — encrypted lookups
+// will silently return null without it.
+//
+// Security note: FIELD_ENCRYPTION_KEY is stored as an environment variable.
+// For higher security, rotate to a secrets manager (Supabase Vault, AWS Secrets
+// Manager, HashiCorp Vault) and inject the key at runtime, not via environment.
+if (process.env.NODE_ENV === 'production' && !KEYS[1]) {
+  console.error(
+    '[FATAL] FIELD_ENCRYPTION_KEY is not set or is incorrectly formatted in production. ' +
+    'All encrypted PII (phone, DOB, license) will be unreadable. Exiting.'
+  );
+  process.exit(1);
+} else if (!KEYS[1]) {
+  console.warn(
+    '[fieldEncryption] FIELD_ENCRYPTION_KEY not set — encrypt() will throw, ' +
+    'decrypt() will return null. Set the key before storing any PII.'
+  );
+}
+
 function getActiveKey(version = KEY_VERSION) {
   const key = KEYS[version];
   if (!key) {

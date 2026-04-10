@@ -1,14 +1,28 @@
 version: '3.9'
+# ─────────────────────────────────────────────────────────────────────────────
+# MOBO Local Development Stack
+#
+# SECURITY NOTES (do NOT use these defaults in production):
+#   1. All secrets below are DEVELOPMENT PLACEHOLDERS. Replace every value
+#      marked "CHANGE_ME" with a strong random secret before any deployment.
+#   2. The database is intentionally NOT exposed on the host (no ports: mapping).
+#      Use `docker exec -it mobo_db psql -U mobo_user mobo` for direct access.
+#   3. For production, use environment-specific .env files or a secrets manager
+#      (Render secret groups, AWS Secrets Manager, Supabase Vault).
+# ─────────────────────────────────────────────────────────────────────────────
 services:
   db:
     image: postgis/postgis:16-3.4-alpine
     container_name: mobo_db
     environment:
-      POSTGRES_DB: mobo
-      POSTGRES_USER: mobo_user
-      POSTGRES_PASSWORD: mobo_pass
-    ports:
-      - "5432:5432"
+      POSTGRES_DB:       mobo
+      POSTGRES_USER:     mobo_user
+      # SECURITY: change this in any non-local environment
+      POSTGRES_PASSWORD: mobo_dev_pass_CHANGE_ME
+    # ── DB port is NOT exposed to the host — services communicate over the
+    #    internal Docker network only. This prevents host-level DB attacks.
+    # ports:
+    #   - "5432:5432"   # Uncomment ONLY for local debugging, never in production
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
@@ -26,11 +40,13 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
-      USER_SERVICE_URL: http://user-service:3001
-      RIDE_SERVICE_URL: http://ride-service:3002
-      PAYMENT_SERVICE_URL: http://payment-service:3003
+      USER_SERVICE_URL:     http://user-service:3001
+      RIDE_SERVICE_URL:     http://ride-service:3002
+      PAYMENT_SERVICE_URL:  http://payment-service:3003
       LOCATION_SERVICE_URL: http://location-service:3004
-      JWT_SECRET: mobo_jwt_secret_change_in_production
+      # SECURITY: use a 64+ character random string in production
+      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
     depends_on:
       - user-service
       - ride-service
@@ -45,9 +61,12 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
-      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
-      JWT_SECRET: mobo_jwt_secret_change_in_production
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
+      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       JWT_EXPIRES_IN: 7d
+      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      # Per-service key (optional — takes priority over shared key above)
+      INTERNAL_SERVICE_KEY_USER: mobo_user_svc_dev_key_CHANGE_ME
     depends_on:
       db:
         condition: service_healthy
@@ -60,11 +79,13 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3002
-      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
-      JWT_SECRET: mobo_jwt_secret_change_in_production
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
+      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       LOCATION_SERVICE_URL: http://location-service:3004
-      PAYMENT_SERVICE_URL: http://payment-service:3003
+      PAYMENT_SERVICE_URL:  http://payment-service:3003
       SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
+      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      INTERNAL_SERVICE_KEY_RIDE: mobo_ride_svc_dev_key_CHANGE_ME
     depends_on:
       db:
         condition: service_healthy
@@ -77,10 +98,17 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3003
-      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
-      JWT_SECRET: mobo_jwt_secret_change_in_production
-      FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-xxxx
-      STRIPE_SECRET_KEY: sk_test_xxxx
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
+      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      # Payment providers — use real test keys from each provider's dashboard
+      FLUTTERWAVE_SECRET_KEY:  FLWSECK_TEST-xxxx
+      FLUTTERWAVE_WEBHOOK_HASH: flw_dev_webhook_hash_CHANGE_ME
+      STRIPE_SECRET_KEY:       sk_test_xxxx
+      STRIPE_WEBHOOK_SECRET:   whsec_dev_CHANGE_ME
+      MTN_WEBHOOK_SECRET:      mtn_dev_webhook_secret_CHANGE_ME
+      ORANGE_WEBHOOK_SECRET:   orange_dev_webhook_secret_CHANGE_ME
+      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      INTERNAL_SERVICE_KEY_PAYMENT: mobo_payment_svc_dev_key_CHANGE_ME
     depends_on:
       db:
         condition: service_healthy
@@ -93,10 +121,12 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3004
-      DATABASE_URL: postgresql://mobo_user:mobo_pass@db:5432/mobo
-      JWT_SECRET: mobo_jwt_secret_change_in_production
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
+      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       GOOGLE_MAPS_API_KEY: AIza_your_key_here
       SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
+      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      INTERNAL_SERVICE_KEY_LOCATION: mobo_location_svc_dev_key_CHANGE_ME
     depends_on:
       db:
         condition: service_healthy
@@ -108,7 +138,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      INTERNAL_SERVICE_KEY: mobo_internal_key_change_in_production
+      INTERNAL_SERVICE_KEY:    mobo_internal_dev_key_CHANGE_ME
+      INTERNAL_SERVICE_KEY_ML: mobo_ml_svc_dev_key_CHANGE_ME
       MODEL_DIR: /tmp/models
     volumes:
       - ml_models:/tmp/models
@@ -125,7 +156,7 @@ services:
     environment:
       POSTGRES_DB:       unleash
       POSTGRES_USER:     unleash
-      POSTGRES_PASSWORD: unleash_pass
+      POSTGRES_PASSWORD: unleash_dev_pass_CHANGE_ME
     volumes:
       - unleash_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -140,7 +171,7 @@ services:
     ports:
       - "4242:4242"
     environment:
-      DATABASE_URL:           postgresql://unleash:unleash_pass@unleash-db:5432/unleash
+      DATABASE_URL:           postgresql://unleash:unleash_dev_pass_CHANGE_ME@unleash-db:5432/unleash
       INIT_CLIENT_API_TOKENS: "mobo-service-client-token"
       AUTH_TYPE:              open
     depends_on:

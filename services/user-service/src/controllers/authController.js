@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { randomInt } = require('crypto');
@@ -6,6 +7,7 @@ const db = require('../config/database');
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
 const { encrypt, hashForLookup } = require('../../../../shared/fieldEncryption');
+const redis = require('../../../shared/redis');
 
 const { signToken, decodeIgnoreExpiry } = require('../../../shared/jwtUtil');
 const audit = require('../../../shared/auditLog');
@@ -1218,6 +1220,27 @@ const socialLogin = async (req, res) => {
     }
     if (!['google', 'apple', 'facebook'].includes(provider)) {
       return res.status(400).json({ success: false, message: 'provider must be google, apple, or facebook' });
+    }
+
+    // ── Token replay protection ───────────────────────────────────────────────
+    // Hash the provider token so we never store the raw credential in Redis.
+    // TTL = 10 minutes (generous window for network delays; tokens expire sooner).
+    // If the same token is submitted twice within the window, reject it.
+    try {
+      const tokenHash = crypto.createHash('sha256').update(`${provider}:${providerToken}`).digest('hex');
+      const replayKey = `social_token_used:${tokenHash}`;
+      const redisClient = redis.getClient ? redis.getClient() : redis;
+      if (redisClient && typeof redisClient.set === 'function') {
+        const alreadyUsed = await redisClient.set(replayKey, '1', { NX: true, EX: 600 });
+        if (alreadyUsed === null) {
+          // NX returned null → key already existed → token was already used
+          return res.status(401).json({ success: false, message: 'Token has already been used. Please sign in again.' });
+        }
+      }
+    } catch (replayErr) {
+      // Non-fatal: Redis unavailable → skip replay check but log it
+      const logger = require('../../../shared/logger');
+      logger.warn({ err: replayErr }, '[SocialLogin] Redis replay check failed — proceeding without it');
     }
 
     let providerId = null;

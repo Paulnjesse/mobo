@@ -11,6 +11,7 @@ const {
   createStripePaymentIntent,
   webhookMtn,
   webhookOrange,
+  webhookFlutterwave,
   getPaymentHistory,
   refundPayment,
   getWalletBalance,
@@ -23,8 +24,9 @@ const {
 // ── Public webhook endpoints (no auth — called by payment providers) ───────────
 // NOTE: /webhook/stripe is registered in server.js BEFORE express.json()
 //       because Stripe requires the raw request body for signature verification.
-router.post('/webhook/mtn',    webhookMtn);
-router.post('/webhook/orange', webhookOrange);
+router.post('/webhook/mtn',         webhookMtn);
+router.post('/webhook/orange',      webhookOrange);
+router.post('/webhook/flutterwave', webhookFlutterwave);
 
 // ── All other routes require a valid JWT ───────────────────────────────────────
 router.use(authenticate);

@@ -51,6 +51,7 @@ const FILES = [
   'migration_027.sql',  // Message TTL + country_currency_config table
   'migration_028.sql',  // country_code column on users + preferred_currency
   'migration_029.sql',  // Teen account safety: date_of_birth, curfew, teen_ride_log
+  'migration_030.sql',  // GDPR consent management: user_consents, consent_audit_log, consent_purposes
 ];
 
 async function run() {

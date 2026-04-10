@@ -5,6 +5,7 @@
  */
 
 const twilio = require('twilio');
+const logger  = require('../../../../shared/logger');
 
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -81,9 +82,7 @@ async function _send(to, body) {
     });
     return { success: true, messageId: message.sid };
   } catch (err) {
-    console.error('[MOBO SMS] Twilio send error:', err.message);
-    // Fallback: log so developers can still test
-    console.log(`[MOBO SMS] Fallback log — to: ${to} | message: ${body}`);
+    logger.error({ err }, '[MOBO SMS] Twilio send error');
     return { success: false, mock: true, error: err.message };
   }
 }

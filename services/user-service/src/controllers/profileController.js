@@ -6,6 +6,25 @@ const AppError = require('../utils/AppError');
 const { validateImageMagicBytes } = require('../utils/validateImageBuffer');
 
 /**
+ * maskPhone — returns a privacy-safe version of a phone number.
+ * Shows the country code prefix and last 4 digits; masks the middle.
+ * e.g. "+237600000001" → "+237 ****0001"
+ *      "+2348123456789" → "+234 ****6789"
+ * Returns null/undefined unchanged; strings shorter than 8 chars are not masked.
+ */
+function maskPhone(phone) {
+  if (!phone) return phone;
+  const s = String(phone).replace(/\s/g, '');
+  if (s.length < 8) return s;
+  // Preserve leading + and up to 4 digits of country code, mask middle, show last 4
+  const prefixMatch = s.match(/^(\+\d{1,4})/);
+  const prefix = prefixMatch ? prefixMatch[1] : '';
+  const rest   = s.slice(prefix.length);
+  const tail   = rest.slice(-4);
+  return `${prefix} ****${tail}`;
+}
+
+/**
  * GET /users/profile
  * REFACTORED: Now uses the robust Global Error Handling architecture
  * instead of raw try/catch blocks.
@@ -33,6 +52,8 @@ const getProfile = asyncHandler(async (req, res, next) => {
   }
 
   const user = result.rows[0];
+  // Mask phone in API response — full phone is only needed internally
+  user.phone = maskPhone(user.phone);
 
   // Fetch driver info if applicable
   let driverInfo = null;
@@ -59,7 +80,7 @@ const getProfile = asyncHandler(async (req, res, next) => {
        FROM users WHERE parent_id = $1 AND is_teen_account = true`,
       [userId]
     );
-    teenAccounts = teenResult.rows;
+    teenAccounts = teenResult.rows.map(t => ({ ...t, phone: maskPhone(t.phone) }));
   }
 
   // Fetch active subscription

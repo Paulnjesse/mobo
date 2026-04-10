@@ -88,6 +88,48 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many authentication attempts.' }
 });
 
+// ── Twilio SMS status webhook (public — called by Twilio, not by clients) ────
+// Twilio sends delivery status callbacks (delivered / failed / undelivered) as
+// application/x-www-form-urlencoded POST requests, signed with your auth token.
+// Signature is verified using twilio.validateRequest() to prevent spoofing.
+app.post('/webhooks/twilio/status', express.urlencoded({ extended: false }), (req, res) => {
+  const twilioAuthToken  = process.env.TWILIO_AUTH_TOKEN;
+  const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+
+  // Only validate signature when Twilio is configured with real credentials
+  if (twilioAuthToken && twilioAccountSid && twilioAccountSid.startsWith('AC')) {
+    try {
+      const twilio    = require('twilio');
+      const signature = req.headers['x-twilio-signature'] || '';
+      // Construct the full URL Twilio used to call this endpoint
+      const protocol  = req.headers['x-forwarded-proto'] || req.protocol;
+      const webhookUrl = `${protocol}://${req.headers.host}${req.originalUrl}`;
+      const valid = twilio.validateRequest(twilioAuthToken, signature, webhookUrl, req.body);
+      if (!valid) {
+        const log = require('./src/utils/logger');
+        log.warn({ ip: req.ip }, '[Twilio webhook] Invalid signature — request rejected');
+        return res.status(403).send('Forbidden');
+      }
+    } catch (err) {
+      const log = require('./src/utils/logger');
+      log.error({ err }, '[Twilio webhook] Signature validation error');
+      return res.status(500).send('Internal error');
+    }
+  }
+
+  // Log delivery status for observability; non-critical so we never block OTPs on this
+  const log = require('./src/utils/logger');
+  log.info({
+    messageSid: req.body.MessageSid,
+    status:     req.body.MessageStatus,
+    to:         req.body.To ? req.body.To.replace(/\d(?=\d{4})/g, '*') : undefined,
+    errorCode:  req.body.ErrorCode,
+  }, '[Twilio webhook] SMS delivery status');
+
+  // Twilio expects a 200 TwiML or empty response
+  res.status(200).set('Content-Type', 'text/xml').send('<Response/>');
+});
+
 // Routes
 app.use('/auth', authLimiter, authRoutes);
 app.use('/users', profileRoutes);
