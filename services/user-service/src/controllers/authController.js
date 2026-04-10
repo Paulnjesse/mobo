@@ -6,7 +6,7 @@ const { randomInt } = require('crypto');
 const db = require('../config/database');
 const smsService = require('../services/sms');
 const emailService = require('../services/email');
-const { encrypt, hashForLookup } = require('../../../../shared/fieldEncryption');
+const { encrypt, hashForLookup } = require('../../../shared/fieldEncryption');
 const redis = require('../../../shared/redis');
 
 const { signToken, decodeIgnoreExpiry } = require('../../../shared/jwtUtil');

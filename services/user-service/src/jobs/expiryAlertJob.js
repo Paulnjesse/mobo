@@ -2,12 +2,40 @@
  * expiryAlertJob.js
  * Runs daily at 09:00 (Africa/Douala = UTC+1, so 08:00 UTC).
  * Finds drivers with license or insurance expiring in 30, 7, or 1 day.
+ * Also auto-deactivates drivers whose documents have already expired.
  * Sends push notification via Expo Push API.
  */
 
+const logger = require('../utils/logger');
 const ALERT_DAYS = [30, 7, 1];
 
+/**
+ * Auto-deactivate drivers whose background check or license has already expired.
+ * Sets is_approved = false so they cannot accept new rides.
+ */
+async function deactivateExpiredDrivers(db) {
+  const result = await db.query(
+    `UPDATE drivers SET is_approved = false
+     WHERE is_approved = true
+       AND (
+         (background_check_expires_at IS NOT NULL AND background_check_expires_at < NOW())
+         OR (license_expiry IS NOT NULL AND license_expiry < CURRENT_DATE)
+       )
+     RETURNING id, user_id`
+  );
+  if (result.rows.length > 0) {
+    logger.warn({ count: result.rows.length, driver_ids: result.rows.map(r => r.id) },
+      '[ExpiryAlertJob] Auto-deactivated drivers with expired documents');
+  }
+  return result.rows.length;
+}
+
 async function checkExpiryAlerts(db) {
+  // First: deactivate any already-expired drivers
+  await deactivateExpiredDrivers(db).catch(err =>
+    logger.error({ err }, '[ExpiryAlertJob] deactivateExpiredDrivers error')
+  );
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -83,7 +111,7 @@ async function checkExpiryAlerts(db) {
       );
     }
 
-    console.log(`[ExpiryAlertJob] Processed ${days}-day alerts: ${licenseResult.rows.length} license, ${insuranceResult.rows.length} insurance`);
+    logger.info({ days, license: licenseResult.rows.length, insurance: insuranceResult.rows.length }, '[ExpiryAlertJob] Processed alerts');
   }
 }
 
@@ -120,7 +148,7 @@ async function sendExpoNotification(pushToken, title, body, data) {
       req.end();
     });
   } catch (err) {
-    console.warn('[ExpiryAlertJob] Push notification failed:', err.message);
+    logger.warn({ err }, '[ExpiryAlertJob] Push notification failed');
   }
 }
 
@@ -130,20 +158,20 @@ function startExpiryAlertJob(db) {
     const cron = require('node-cron');
     // Run at 08:00 UTC daily (09:00 Douala time UTC+1)
     cron.schedule('0 8 * * *', () => {
-      console.log('[ExpiryAlertJob] Running daily expiry check...');
-      checkExpiryAlerts(db).catch(err => console.error('[ExpiryAlertJob] Error:', err.message));
+      logger.info('[ExpiryAlertJob] Running daily expiry check...');
+      checkExpiryAlerts(db).catch(err => logger.error({ err }, '[ExpiryAlertJob] Error'));
     });
-    console.log('[ExpiryAlertJob] Scheduled for 08:00 UTC daily');
+    logger.info('[ExpiryAlertJob] Scheduled for 08:00 UTC daily');
   } catch (e) {
     // Fallback: check every 24 hours
-    console.log('[ExpiryAlertJob] node-cron not available, using 24h interval fallback');
+    logger.warn('[ExpiryAlertJob] node-cron not available, using 24h interval fallback');
     setInterval(() => {
-      checkExpiryAlerts(db).catch(err => console.error('[ExpiryAlertJob] Error:', err.message));
+      checkExpiryAlerts(db).catch(err => logger.error({ err }, '[ExpiryAlertJob] Error'));
     }, 24 * 60 * 60 * 1000);
   }
 
   // Run once on startup to catch any missed alerts
-  checkExpiryAlerts(db).catch(err => console.error('[ExpiryAlertJob] Startup check error:', err.message));
+  checkExpiryAlerts(db).catch(err => logger.error({ err }, '[ExpiryAlertJob] Startup check error'));
 }
 
 module.exports = { startExpiryAlertJob, checkExpiryAlerts };

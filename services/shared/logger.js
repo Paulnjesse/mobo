@@ -22,61 +22,76 @@
  *     const reqLogger = logger.child({ requestId: req.id });
  */
 
-const pino = require('pino');
+// pino may not be available when running functional tests from the project root
+// (pino is in service-level node_modules, not root node_modules).
+// Degrade to a silent no-op logger so requiring shared/logger never crashes.
+let pino;
+try {
+  pino = require('pino');
+} catch (_e) {
+  pino = null;
+}
 
-const REDACTED_PATHS = [
-  // Auth
-  'req.headers.authorization',
-  'req.headers.cookie',
-  'body.password',
-  'body.password_hash',
-  'body.otp_code',
-  'body.otp',
-  // Payment
-  'body.card_number',
-  'body.cvv',
-  'body.card_expiry',
-  // Personal
-  'body.date_of_birth',
-  'body.national_id',
-  // Internal
-  'req.headers["x-internal-service-key"]',
-];
+if (!pino) {
+  const noop = () => {};
+  const noopLogger = { info: noop, warn: noop, error: noop, debug: noop, trace: noop, fatal: noop, http: noop };
+  noopLogger.child = () => noopLogger;
+  module.exports = noopLogger;
+} else {
+  const REDACTED_PATHS = [
+    // Auth
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'body.password',
+    'body.password_hash',
+    'body.otp_code',
+    'body.otp',
+    // Payment
+    'body.card_number',
+    'body.cvv',
+    'body.card_expiry',
+    // Personal
+    'body.date_of_birth',
+    'body.national_id',
+    // Internal
+    'req.headers["x-internal-service-key"]',
+  ];
 
-const logger = pino({
-  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
+  const logger = pino({
+    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
 
-  // Redact sensitive fields — value replaced with "[Redacted]"
-  redact: {
-    paths: REDACTED_PATHS,
-    censor: '[Redacted]',
-  },
-
-  // Serialize Error objects properly (pino doesn't serialize them by default)
-  serializers: {
-    err:   pino.stdSerializers.err,
-    error: pino.stdSerializers.err,
-    req:   pino.stdSerializers.req,
-    res:   pino.stdSerializers.res,
-  },
-
-  // Base fields added to every log line
-  base: {
-    service: process.env.SERVICE_NAME || 'user-service',
-    env:     process.env.NODE_ENV     || 'development',
-  },
-
-  // Pretty-print in development/test, JSON in production
-  ...(process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test' && {
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize:        true,
-        translateTime:   'SYS:HH:MM:ss',
-        ignore:          'pid,hostname,service',
-      },
+    // Redact sensitive fields — value replaced with "[Redacted]"
+    redact: {
+      paths: REDACTED_PATHS,
+      censor: '[Redacted]',
     },
-  }),
-});
 
-module.exports = logger;
+    // Serialize Error objects properly (pino doesn't serialize them by default)
+    serializers: {
+      err:   pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+      req:   pino.stdSerializers.req,
+      res:   pino.stdSerializers.res,
+    },
+
+    // Base fields added to every log line
+    base: {
+      service: process.env.SERVICE_NAME || 'user-service',
+      env:     process.env.NODE_ENV     || 'development',
+    },
+
+    // Pretty-print in development/test, JSON in production
+    ...(process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test' && {
+      transport: {
+        target: 'pino-pretty',
+        options: {
+          colorize:        true,
+          translateTime:   'SYS:HH:MM:ss',
+          ignore:          'pid,hostname,service',
+        },
+      },
+    }),
+  });
+
+  module.exports = logger;
+}

@@ -2,9 +2,9 @@ const axios   = require('axios');
 const crypto  = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
-const { checkPaymentFraud } = require('../../../../shared/fraudDetection');
-const { convertFromXAF, getCurrencyCode, getStripeCurrency } = require('../../../../shared/currencyUtil');
-const logger  = require('../../../../shared/logger');
+const { checkPaymentFraud } = require('../../../shared/fraudDetection');
+const { convertFromXAF, getCurrencyCode, getStripeCurrency } = require('../../../shared/currencyUtil');
+const logger  = require('../utils/logger');
 
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {

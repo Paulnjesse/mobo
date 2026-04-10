@@ -5,7 +5,7 @@
  */
 
 const twilio = require('twilio');
-const logger  = require('../../../../shared/logger');
+const logger  = require('../utils/logger');
 
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;

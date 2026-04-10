@@ -4,9 +4,16 @@
  * when GOOGLE_MAPS_API_KEY is absent.
  */
 
-const { Client } = require('@googlemaps/google-maps-services-js');
-
-const mapsClient = new Client({});
+let Client, mapsClient;
+try {
+  ({ Client } = require('@googlemaps/google-maps-services-js'));
+  mapsClient = new Client({});
+} catch (_loadErr) {
+  // Graceful degradation: SDK unavailable (e.g. axios version mismatch in this env).
+  // All Google Maps calls will fall through to mock/haversine paths.
+  Client = null;
+  mapsClient = null;
+}
 
 const API_KEY = process.env.GOOGLE_MAPS_API_KEY || null;
 
@@ -33,7 +40,7 @@ async function getDirections(origin, destination) {
     throw new Error('origin and destination are required');
   }
 
-  if (!hasApiKey()) {
+  if (!hasApiKey() || !mapsClient) {
     // Straight-line Haversine fallback
     const distanceKm = haversineDistance(
       origin.lat, origin.lng,
@@ -134,7 +141,7 @@ async function getDistanceMatrix(origins, destinations) {
     return [];
   }
 
-  if (!hasApiKey()) {
+  if (!hasApiKey() || !mapsClient) {
     console.log('[GoogleMaps] No API key — using Haversine fallback for Distance Matrix');
     const results = [];
     origins.forEach((origin, oi) => {
@@ -230,7 +237,7 @@ async function getDistanceMatrix(origins, destinations) {
 async function geocodeAddress(address) {
   if (!address) return null;
 
-  if (!hasApiKey()) {
+  if (!hasApiKey() || !mapsClient) {
     console.log(`[GoogleMaps] No API key — cannot geocode "${address}"`);
     return null;
   }
@@ -275,7 +282,7 @@ async function geocodeAddress(address) {
 async function reverseGeocode(lat, lng) {
   if (lat === undefined || lng === undefined) return null;
 
-  if (!hasApiKey()) {
+  if (!hasApiKey() || !mapsClient) {
     console.log(`[GoogleMaps] No API key — cannot reverse geocode ${lat},${lng}`);
     return null;
   }

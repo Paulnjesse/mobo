@@ -55,6 +55,7 @@ router.get('/express-pay/history', authenticate, driverCtrl.getExpressPayHistory
 // Safety features
 router.post('/safety/speed-alert', authenticate, safetyCtrl.recordSpeedAlert);
 router.post('/safety/route-deviation', authenticate, safetyCtrl.checkRouteDeviation);
+router.post('/safety/crash-detection', authenticate, safetyCtrl.crashDetection);
 router.get('/safety/fatigue-check', authenticate, requireDriver, safetyCtrl.checkFatigue);
 router.post('/safety/fatigue-break', authenticate, requireDriver, safetyCtrl.enforceFatigueBreak);
 router.post('/safety/realid', authenticate, requireDriver, safetyCtrl.driverRealIDSubmit);

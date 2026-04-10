@@ -3,6 +3,29 @@
 const { verifyJwt } = require('../../../shared/jwtUtil');
 
 /**
+ * Haversine distance in km between two lat/lng points.
+ * Used for real-time ETA recalculation on each driver location update.
+ */
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Estimate ETA in minutes from distance (Haversine) using 25 km/h avg urban speed.
+ * Returns null when dropoff coordinates are unavailable.
+ */
+function estimateEtaMinutes(driverLat, driverLng, dropoffLat, dropoffLng) {
+  if (dropoffLat == null || dropoffLng == null) return null;
+  const distKm = haversineKm(driverLat, driverLng, dropoffLat, dropoffLng);
+  return Math.max(1, Math.round((distKm / 25) * 60)); // 25 km/h avg urban speed
+}
+
+/**
  * Map of driverId -> latest location payload.
  * Used to provide instant location data to new subscribers.
  * @type {Map<string, object>}
@@ -87,12 +110,17 @@ function initLocationSocket(io) {
         return socket.emit('error', { message: 'Only drivers may emit update_location' });
       }
 
-      const { latitude, longitude, heading, speed, accuracy, timestamp } = data;
+      const { latitude, longitude, heading, speed, accuracy, timestamp,
+              dropoff_lat, dropoff_lng } = data;
       if (latitude == null || longitude == null) {
         return socket.emit('error', { message: 'update_location requires latitude and longitude' });
       }
 
       const driverId = String(socket.user.id);
+
+      // Compute live ETA from driver's current position to dropoff (if provided)
+      const eta_minutes = estimateEtaMinutes(latitude, longitude, dropoff_lat, dropoff_lng);
+
       const locationPayload = {
         driverId,
         latitude,
@@ -101,6 +129,7 @@ function initLocationSocket(io) {
         speed: speed ?? null,
         accuracy: accuracy ?? null,
         timestamp: timestamp || Date.now(),
+        eta_minutes,  // null when dropoff not provided
       };
 
       // Cache the latest position
@@ -108,6 +137,11 @@ function initLocationSocket(io) {
 
       // Broadcast to all subscribers in this driver's location room
       location.to(driverLocationRoom(driverId)).emit('driver_location', locationPayload);
+
+      // Emit dedicated eta_update event so riders can update their ETA display
+      if (eta_minutes !== null) {
+        location.to(driverLocationRoom(driverId)).emit('eta_update', { driverId, eta_minutes, timestamp: locationPayload.timestamp });
+      }
 
       // Persist to DB asynchronously — non-blocking, failures are logged only
       persistLocationToDB(driverId, locationPayload).catch((err) => {

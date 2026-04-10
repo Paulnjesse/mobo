@@ -1,6 +1,6 @@
 const db = require('../db');
 const crypto = require('crypto');
-const logger = require('../../shared/logger');
+const logger = require('../utils/logger');
 
 function generateApiKey() {
   return 'mobo_live_sk_' + crypto.randomBytes(20).toString('base64url').slice(0, 32);

@@ -52,6 +52,7 @@ const FILES = [
   'migration_028.sql',  // country_code column on users + preferred_currency
   'migration_029.sql',  // Teen account safety: date_of_birth, curfew, teen_ride_log
   'migration_030.sql',  // GDPR consent management: user_consents, consent_audit_log, consent_purposes
+  'migration_031.sql',  // Surge price cap: max_multiplier on surge_zones (3.50× ceiling)
 ];
 
 async function run() {

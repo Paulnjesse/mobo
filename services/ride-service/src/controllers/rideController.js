@@ -13,6 +13,9 @@ const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/curr
 // getMessages, sendMessage
 // ============================================================
 
+// ── Surge price cap — aligns with Bolt (3.5×) and protects riders ────────────
+const MAX_SURGE_MULTIPLIER = 3.5;
+
 // ── Per-ride-type fare multipliers (XAF base rates) ───────────────────────────
 const RIDE_TYPE_RATES = {
   moto:     { base: 300,  perKm: 80,  perMin: 12, bookingFee: 200 },
@@ -109,7 +112,8 @@ const lockPrice = async (req, res) => {
          ORDER BY multiplier DESC LIMIT 1`,
         [pickup_location.lng, pickup_location.lat]
       );
-      surgeMultiplier = surgeResult.rows[0]?.multiplier || 1.0;
+      const rawMultiplier = surgeResult.rows[0]?.multiplier || 1.0;
+      surgeMultiplier = Math.min(rawMultiplier, MAX_SURGE_MULTIPLIER);
     }
 
     const fare = calculateFare(distKm, durMin, surgeMultiplier, subscription, false, null, ride_type);
@@ -122,6 +126,7 @@ const lockPrice = async (req, res) => {
       pickup_address,
       dropoff_address,
       surge_multiplier: surgeMultiplier,
+      surge_capped: (surgeResult.rows[0]?.multiplier || 1.0) > MAX_SURGE_MULTIPLIER,
       message: 'Price locked for 30 minutes — guaranteed fare',
     });
   } catch (err) {
@@ -535,7 +540,8 @@ const requestRide = async (req, res) => {
        ORDER BY multiplier DESC LIMIT 1`,
       [pickup_location.lng, pickup_location.lat]
     );
-    const surgeMultiplier = surgeResult.rows[0]?.multiplier || 1.0;
+    const surgeMultiplier = Math.min(surgeResult.rows[0]?.multiplier || 1.0, MAX_SURGE_MULTIPLIER);
+    const surgeCapped = (surgeResult.rows[0]?.multiplier || 1.0) > MAX_SURGE_MULTIPLIER;
 
     // Estimate distance via haversine across all waypoints (pickup → stops → dropoff)
     function haversineKm(p1, p2) {
@@ -664,7 +670,61 @@ const requestRide = async (req, res) => {
       });
     }
 
-    res.status(201).json({ ride: result.rows[0], fare: fareCalc, surge_active: surgeMultiplier > 1.0 });
+    // ── Scored driver dispatch: notify top-ranked nearby drivers (non-blocking) ─
+    const createdRide = result.rows[0];
+    setImmediate(async () => {
+      try {
+        const { notifyRideRequested } = require('../services/pushNotifications');
+        // Fetch nearby drivers with scoring signals (within 5 km of pickup via PostGIS)
+        const nearbyRes = await pool.query(
+          `SELECT d.id AS driver_id, d.acceptance_rate, d.online_since,
+                  u.rating, u.push_token, u.full_name,
+                  ST_Distance(
+                    ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+                    dl.location::geography
+                  ) / 1000 AS dist_km
+           FROM drivers d
+           JOIN users u ON u.id = d.user_id
+           JOIN driver_locations dl ON dl.driver_id = d.id
+           WHERE d.is_approved = true AND d.is_available = true
+             AND ST_DWithin(
+               ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+               dl.location::geography,
+               5000
+             )
+           LIMIT 20`,
+          [pickup_location.lng, pickup_location.lat]
+        );
+
+        // Score each driver: proximity(40%) + acceptance_rate(30%) + rating(20%) + online_time(10%)
+        const scored = nearbyRes.rows.map(d => {
+          const proxScore   = Math.max(0, 1 - (d.dist_km / 5));
+          const arScore     = Math.min(1, (parseFloat(d.acceptance_rate) || 80) / 100);
+          const ratingScore = Math.min(1, Math.max(0, ((parseFloat(d.rating) || 4) - 1) / 4));
+          const hoursOnline = d.online_since
+            ? (Date.now() - new Date(d.online_since).getTime()) / 3600000 : 0;
+          const timeScore   = Math.min(1, hoursOnline / 8);
+          const score = (0.4 * proxScore) + (0.3 * arScore) + (0.2 * ratingScore) + (0.1 * timeScore);
+          return { ...d, score };
+        }).sort((a, b) => b.score - a.score).slice(0, 5); // notify top 5 drivers
+
+        for (const driver of scored) {
+          if (!driver.push_token) continue;
+          await notifyRideRequested(driver.push_token, {
+            ride_id:         createdRide.id,
+            pickup_address,
+            dropoff_address,
+            ride_type,
+            fare:            fareCalc.total,
+            distance_km:     distanceKm.toFixed(1),
+          }).catch(() => {}); // never let push failure affect ride creation
+        }
+      } catch (_err) {
+        // Non-blocking — dispatch errors must never affect the rider response
+      }
+    });
+
+    res.status(201).json({ ride: result.rows[0], fare: fareCalc, surge_active: surgeMultiplier > 1.0, surge_capped: surgeCapped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -692,7 +752,7 @@ const getFare = async (req, res) => {
        ORDER BY multiplier DESC LIMIT 1`,
       [pickup_location.lng, pickup_location.lat]
     );
-    const surgeMultiplier = surgeResult.rows[0]?.multiplier || 1.0;
+    const surgeMultiplier = Math.min(surgeResult.rows[0]?.multiplier || 1.0, MAX_SURGE_MULTIPLIER);
 
     // Build ordered waypoint list: pickup → each stop (in order) → dropoff
     function haversineKm(p1, p2) {
@@ -797,12 +857,14 @@ const acceptRide = async (req, res) => {
       }
     }
 
-    // ── Women+ Connect: enforce gender preference ──────────────────────────
+    // ── Women+ Connect: enforce gender preference or women ride type ──────────
+    const rideType = ride.rows[0].ride_type;
     const riderPref = await pool.query(
       'SELECT gender_preference FROM users WHERE id = $1',
       [ride.rows[0].rider_id]
     );
-    if (riderPref.rows[0]?.gender_preference === 'women_nonbinary') {
+    const needsWomenDriver = rideType === 'women' || riderPref.rows[0]?.gender_preference === 'women_nonbinary';
+    if (needsWomenDriver) {
       const driverGender = await pool.query(
         `SELECT u.gender FROM users u JOIN drivers d ON d.user_id = u.id WHERE d.id = $1`,
         [driverId]
@@ -811,7 +873,9 @@ const acceptRide = async (req, res) => {
       const womenAllowed = ['female', 'woman', 'non_binary', 'nonbinary', 'non-binary'];
       if (!womenAllowed.includes(g)) {
         return res.status(403).json({
-          error: 'This rider has enabled Women+ mode. Only women and non-binary drivers may accept this ride.',
+          error: rideType === 'women'
+            ? 'This is a Women+ ride. Only women and non-binary drivers may accept it.'
+            : 'This rider has enabled Women+ mode. Only women and non-binary drivers may accept this ride.',
         });
       }
     }
@@ -892,7 +956,17 @@ const acceptRide = async (req, res) => {
       console.warn('[AcceptRide PushNotification]', pnErr.message);
     }
 
-    res.json({ ride: result.rows[0] });
+    // Enrich response with driver photo + vehicle so rider app can display them immediately
+    const enriched = await pool.query(
+      `SELECT du.full_name AS driver_name, du.profile_picture AS driver_photo, du.rating AS driver_rating,
+              v.make, v.model, v.color, v.plate
+       FROM drivers d
+       JOIN users du ON du.id = d.user_id
+       LEFT JOIN vehicles v ON v.id = d.vehicle_id
+       WHERE d.id = $1`,
+      [driverId]
+    );
+    res.json({ ride: result.rows[0], driver: enriched.rows[0] || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1003,7 +1077,7 @@ const updateRideStatus = async (req, res) => {
         const arrivedAt = ride.driver_arrived_at;
         if (arrivedAt) {
           const waitMin = (Date.now() - new Date(arrivedAt).getTime()) / 60000;
-          const GRACE_MIN = 3;
+          const GRACE_MIN = 2; // 2-min grace matches Uber/Bolt standard
           const FEE_PER_MIN = 50; // XAF
           const chargeableMin = Math.max(0, waitMin - GRACE_MIN);
           const waitingFee = Math.round(chargeableMin * FEE_PER_MIN);
