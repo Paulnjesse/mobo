@@ -6,9 +6,20 @@
  *
  * Or create database/.env with DATABASE_URL set.
  */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+// Support dotenv from database/node_modules or ride-service/node_modules
+try {
+  require('./node_modules/dotenv').config({ path: require('path').join(__dirname, '.env') });
+} catch {
+  require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+}
 
-const { Client } = require('../services/ride-service/node_modules/pg');
+// Support pg from database/node_modules or ride-service/node_modules
+let Client;
+try {
+  ({ Client } = require('./node_modules/pg'));
+} catch {
+  ({ Client } = require('../services/ride-service/node_modules/pg'));
+}
 const fs = require('fs');
 const path = require('path');
 
