@@ -304,4 +304,18 @@ export const ridesService = {
     const response = await api.patch(`/rides/support/tickets/${ticketId}/close`);
     return response.data;
   },
+
+  // Vehicle Inspection (FREE NOW / Uber style)
+  async submitVehicleInspection(data) {
+    const response = await api.post('/rides/inspections', data);
+    return response.data;
+  },
+  async getMyInspections() {
+    const response = await api.get('/rides/inspections/me');
+    return response.data;
+  },
+  async getCurrentInspection() {
+    const response = await api.get('/rides/inspections/me/current');
+    return response.data;
+  },
 };

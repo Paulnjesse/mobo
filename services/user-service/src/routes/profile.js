@@ -101,6 +101,13 @@ router.get('/users/me/saved-places', require('../controllers/savedPlacesControll
 router.post('/users/me/saved-places', require('../controllers/savedPlacesController').createSavedPlace);
 router.delete('/users/me/saved-places/:id', require('../controllers/savedPlacesController').deleteSavedPlace);
 
+// ── Driver Shift-Start Selfie Check (Uber Real-Time ID style) ────────────────
+const selfieCtrl = require('../controllers/driverSelfieController');
+router.get('/drivers/me/selfie-check',             authenticate, selfieCtrl.getSelfieCheckStatus);
+router.post('/drivers/me/selfie-check',            authenticate, selfieCtrl.submitSelfieCheck);
+router.get('/admin/selfie-checks',                 authenticate, selfieCtrl.listSelfieChecks);
+router.patch('/admin/selfie-checks/:id/review',    authenticate, selfieCtrl.adminReviewSelfie);
+
 // Biometric driver verification (Smile Identity)
 router.post('/drivers/me/biometric-verify', require('../controllers/biometricController').verifyDriver);
 router.get('/drivers/me/biometric-status',  require('../controllers/biometricController').getVerificationStatus);

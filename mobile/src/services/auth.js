@@ -128,3 +128,15 @@ export const authService = {
     return response.data;
   },
 };
+
+// Driver shift-start selfie check (Uber Real-Time ID style)
+export const userService = {
+  async getSelfieCheckStatus() {
+    const response = await api.get('/users/drivers/me/selfie-check');
+    return response.data;
+  },
+  async submitSelfieCheck(data) {
+    const response = await api.post('/users/drivers/me/selfie-check', data);
+    return response.data;
+  },
+};

@@ -23,6 +23,7 @@ const guaranteeCtrl      = require('../controllers/earningsGuaranteeController')
 const developerCtrl      = require('../controllers/developerPortalController');
 const whatsappCtrl       = require('../controllers/whatsappController');
 const carpoolCtrl        = require('../controllers/carpoolController');
+const inspectionCtrl     = require('../controllers/vehicleInspectionController');
 
 // ── Pool / Carpool ─────────────────────────────────────────────────────────────
 router.get('/pool/estimate',                   authenticate, carpoolCtrl.estimatePoolFare);
@@ -210,5 +211,14 @@ router.post('/:id/sos', authenticate, sosCtrl.triggerSOS);
 // Ride audio recordings
 router.post('/:id/recording',  authenticate, recordingCtrl.saveRecording);
 router.get('/:id/recordings',  authenticate, recordingCtrl.getRecordings);
+
+// ── Vehicle Inspections ───────────────────────────────────────────────────────
+router.post('/inspections',                      authenticate, inspectionCtrl.submitInspection);
+router.get('/inspections/me',                    authenticate, inspectionCtrl.getMyInspections);
+router.get('/inspections/me/current',            authenticate, inspectionCtrl.getMyCurrentInspection);
+// Admin inspection routes (enforced by RBAC at gateway level)
+router.get('/admin/inspections',                 authenticate, inspectionCtrl.listInspections);
+router.get('/admin/inspections/:id',             authenticate, inspectionCtrl.getInspection);
+router.patch('/admin/inspections/:id/review',    authenticate, inspectionCtrl.reviewInspection);
 
 module.exports = router;

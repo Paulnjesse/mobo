@@ -31,7 +31,8 @@ const PAGE_TITLES = {
   '/settings':      'Platform Settings',
   '/admin-staff':   'Admin Staff Management',
   '/roles':         'Roles & Permissions',
-  '/audit-log':     'Audit Log',
+  '/audit-log':           'Audit Log',
+  '/vehicle-inspection':  'Vehicle Inspections',
 };
 
 const NOTIF_ICONS = {

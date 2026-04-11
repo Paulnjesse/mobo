@@ -18,12 +18,31 @@ const MAX_SURGE_MULTIPLIER = 3.5;
 
 // ── Per-ride-type fare multipliers (XAF base rates) ───────────────────────────
 const RIDE_TYPE_RATES = {
-  moto:     { base: 300,  perKm: 80,  perMin: 12, bookingFee: 200 },
-  benskin:  { base: 300,  perKm: 80,  perMin: 12, bookingFee: 200 },
-  standard: { base: 1000, perKm: 700, perMin: 100, bookingFee: 500 },
-  xl:       { base: 1400, perKm: 900, perMin: 130, bookingFee: 500 },
-  women:    { base: 1000, perKm: 700, perMin: 100, bookingFee: 500 },
-  delivery: { base: 500,  perKm: 150, perMin: 40,  bookingFee: 300 },
+  moto:     { base: 300,  perKm: 80,   perMin: 12,  bookingFee: 200, seats: 1, label: 'Moto',     icon: '🏍️' },
+  benskin:  { base: 300,  perKm: 80,   perMin: 12,  bookingFee: 200, seats: 1, label: 'Benskin',  icon: '🛵' },
+  standard: { base: 1000, perKm: 700,  perMin: 100, bookingFee: 500, seats: 4, label: 'Standard', icon: '🚗' },
+  xl:       { base: 1400, perKm: 900,  perMin: 130, bookingFee: 500, seats: 6, label: 'XL',       icon: '🚐' },
+  women:    { base: 1000, perKm: 700,  perMin: 100, bookingFee: 500, seats: 4, label: 'Women+',   icon: '👩' },
+  // ── New premium & licensed categories ────────────────────────────────────
+  luxury:   { base: 3500, perKm: 1800, perMin: 250, bookingFee: 1000, seats: 4, label: 'Luxury',   icon: '🚙', description: 'Premium cars — Mercedes, BMW, Lexus' },
+  taxi:     { base: 800,  perKm: 550,  perMin: 80,  bookingFee: 400,  seats: 4, label: 'Taxi',     icon: '🚕', description: 'Licensed metered taxis' },
+  private:  { base: 2000, perKm: 1200, perMin: 180, bookingFee: 700,  seats: 4, label: 'Private',  icon: '🏎️', description: 'Private hire — quiet, professional' },
+  van:      { base: 2000, perKm: 1100, perMin: 160, bookingFee: 700,  seats: 8, label: 'Van',      icon: '🚌', description: 'Minibus for groups up to 8' },
+  delivery: { base: 500,  perKm: 150,  perMin: 40,  bookingFee: 300,  seats: 0, label: 'Delivery', icon: '📦' },
+};
+
+// Map ride_type → required vehicle_category on drivers.vehicle_category
+const RIDE_TYPE_VEHICLE_MAP = {
+  moto:     ['moto'],
+  benskin:  ['benskin'],
+  standard: ['standard', 'taxi', 'private'],
+  xl:       ['xl', 'van'],
+  women:    ['standard', 'taxi', 'private', 'xl'],
+  luxury:   ['luxury'],
+  taxi:     ['taxi'],
+  private:  ['private'],
+  van:      ['van', 'xl'],
+  delivery: ['standard', 'taxi', 'moto', 'benskin', 'van'],
 };
 
 // ── Rental / Hourly packages (XAF) — MOBO Hourly: keep a car+driver for 1–10 hours ──
@@ -497,7 +516,7 @@ const requestRide = async (req, res) => {
 
     // ── Teen account restrictions (apply to ALL ride types, including rental) ─
     if (earlyUser?.is_teen_account) {
-      const TEEN_BLOCKED_TYPES = ['outstation', 'luxury', 'rental'];
+      const TEEN_BLOCKED_TYPES = ['outstation', 'luxury', 'private', 'rental', 'van'];
       if (TEEN_BLOCKED_TYPES.includes(ride_type)) {
         return res.status(403).json({
           error: `Teen accounts cannot book ${ride_type} rides. Only standard, economy, comfort, women_only, and pool rides are allowed.`,
@@ -711,8 +730,13 @@ const requestRide = async (req, res) => {
       try {
         const { notifyRideRequested } = require('../services/pushNotifications');
         // Fetch nearby drivers with scoring signals (within 5 km of pickup via PostGIS)
+        // Resolve which vehicle categories can accept this ride_type
+        const allowedCategories = RIDE_TYPE_VEHICLE_MAP[ride_type] || ['standard'];
+        const categoryPlaceholders = allowedCategories.map((_, i) => `$${i + 3}`).join(',');
+
         const nearbyRes = await pool.query(
           `SELECT d.id AS driver_id, d.acceptance_rate, d.online_since,
+                  v.vehicle_category,
                   u.rating, u.push_token, u.full_name,
                   ST_Distance(
                     ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
@@ -721,14 +745,16 @@ const requestRide = async (req, res) => {
            FROM drivers d
            JOIN users u ON u.id = d.user_id
            JOIN driver_locations dl ON dl.driver_id = d.id
+           LEFT JOIN vehicles v ON v.id = d.vehicle_id
            WHERE d.is_approved = true AND d.is_available = true
+             AND (v.vehicle_category IS NULL OR v.vehicle_category IN (${categoryPlaceholders}))
              AND ST_DWithin(
                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
                dl.location::geography,
                5000
              )
            LIMIT 20`,
-          [pickup_location.lng, pickup_location.lat]
+          [pickup_location.lng, pickup_location.lat, ...allowedCategories]
         );
 
         // Score each driver: proximity(40%) + acceptance_rate(30%) + rating(20%) + online_time(10%)

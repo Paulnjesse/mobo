@@ -30,6 +30,7 @@ import FoodManagement from './pages/FoodManagement';
 import AdminManagement from './pages/AdminManagement';
 import RoleManagement from './pages/RoleManagement';
 import AuditLog from './pages/AuditLog';
+import VehicleInspection from './pages/VehicleInspection';
 import { CopyProtectionProvider } from './components/CopyProtection';
 
 const theme = createTheme({
@@ -197,6 +198,7 @@ function App() {
               <Route path="/admin-staff"       element={<AdminManagement />} />
               <Route path="/roles"             element={<RoleManagement />} />
               <Route path="/audit-log"         element={<AuditLog />} />
+              <Route path="/vehicle-inspection" element={<VehicleInspection />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

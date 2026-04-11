@@ -67,6 +67,7 @@ const FILES = [
   'migration_032.sql',  // MOBO Hourly 10h package + rider identity verification + share-trip live location
   'migration_033.sql',  // Soft deletes + admin_roles table + read_only/read_write roles + new permissions
   'migration_034.sql',  // data_access_logs + admin_notifications + user_documents (encrypted)
+  'migration_035.sql',  // vehicle_categories + vehicle_inspections + driver_selfie_checks + police_contacts
 ];
 
 async function run() {

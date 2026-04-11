@@ -173,4 +173,13 @@ export const adminDataAPI = {
   getNotifications: ()   => api.get('/admin/admin-data/notifications'),
   markRead:        (id)  => api.patch(`/admin/admin-data/notifications/${id}/read`),
   markAllRead:     ()    => api.patch('/admin/admin-data/notifications/read-all'),
+
+  // Vehicle Inspections
+  getVehicleInspections:  (params) => api.get('/rides/admin/inspections', { params }),
+  getVehicleInspection:   (id)     => api.get(`/rides/admin/inspections/${id}`),
+  reviewVehicleInspection:(id, data) => api.patch(`/rides/admin/inspections/${id}/review`, data),
+
+  // Driver Selfie Checks
+  getSelfieChecks:        (params) => api.get('/users/admin/selfie-checks', { params }),
+  reviewSelfieCheck:      (id, data) => api.patch(`/users/admin/selfie-checks/${id}/review`, data),
 };

@@ -56,6 +56,7 @@ const BASE_NAV_ITEMS = [
   { label: 'Safety',        path: '/safety',       icon: <ShieldIcon /> },
   { label: 'Disputes',        path: '/disputes',        icon: <GavelIcon /> },
   { label: 'Doc Expiry',     path: '/doc-expiry',     icon: <WarningAmberIcon /> },
+  { label: 'Inspections',   path: '/vehicle-inspection', icon: <VerifiedUserIcon /> },
   { label: 'BG Checks',      path: '/bg-checks',      icon: <PersonSearchIcon /> },
   { label: 'Safety Zones',   path: '/safety-zones-mgr', icon: <LocationOnIcon /> },
   { label: '2FA Security',   path: '/2fa-setup',      icon: <SecurityIcon /> },

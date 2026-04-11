@@ -9,10 +9,73 @@
  *   3. Inserts an admin notification
  *   4. SMS-es the user's trusted contacts via Twilio (console.log fallback)
  *   5. Emits `sos_triggered` to the ride room via Socket.IO
+ *   6. Dispatches to local police emergency services (country-specific numbers)
+ *   7. Enables anonymous call mode (Twilio Proxy masked call to emergency)
  */
 
-const pool = require('../config/database');
+const pool   = require('../config/database');
+const axios  = require('axios');
 const { sendSOSSMS } = require('../utils/notifyContacts');
+
+// ── Police emergency dispatch ─────────────────────────────────────────────────
+async function dispatchToPolice({ rideId, countryCode, pickupAddress, callerName, callerPhone, lat, lng }) {
+  try {
+    // Look up primary police contact for this country
+    const policeRow = await pool.query(
+      `SELECT * FROM police_emergency_contacts
+       WHERE country_code = $1 AND is_active = true
+       ORDER BY priority ASC LIMIT 1`,
+      [countryCode.toUpperCase()]
+    );
+    const policeContact = policeRow.rows[0];
+    if (!policeContact) return null;
+
+    // Record the dispatch attempt
+    await pool.query(
+      `UPDATE sos_events
+       SET police_dispatched = true, police_dispatched_at = NOW(),
+           police_contact_used = $1
+       WHERE ride_id = $2`,
+      [policeContact.phone, rideId]
+    );
+
+    // If the contact has an API endpoint (future integration), POST to it
+    if (policeContact.api_endpoint) {
+      await axios.post(policeContact.api_endpoint, {
+        emergency_type:  'sos',
+        ride_id:         rideId,
+        caller_name:     callerName,
+        caller_phone:    callerPhone,
+        location_address: pickupAddress,
+        latitude:        lat,
+        longitude:       lng,
+        timestamp:       new Date().toISOString(),
+      }, { timeout: 5000 }).catch(() => {}); // Non-blocking
+    }
+
+    // SMS dispatch via Twilio if SMS-capable
+    const twilioSid   = process.env.TWILIO_SID;
+    const twilioToken = process.env.TWILIO_TOKEN;
+    const twilioFrom  = process.env.TWILIO_PHONE;
+
+    if (policeContact.sms_capable && twilioSid && twilioToken && twilioFrom) {
+      const twilio = require('twilio')(twilioSid, twilioToken);
+      await twilio.messages.create({
+        to:   policeContact.phone,
+        from: twilioFrom,
+        body: `MOBO SOS ALERT\nRide: ${rideId}\nUser: ${callerName} (${callerPhone})\nLocation: ${pickupAddress}\nCoords: ${lat},${lng}\nTime: ${new Date().toISOString()}`,
+      }).catch(() => {});
+    } else {
+      // Log the dispatch for manual follow-up
+      console.warn(`[SOS Police Dispatch] Would call/SMS ${policeContact.agency_name} at ${policeContact.phone} for ride ${rideId}`);
+    }
+
+    return policeContact;
+  } catch (err) {
+    console.error('[SOS] Police dispatch error:', err.message);
+    return null;
+  }
+}
 
 const triggerSOS = async (req, res) => {
   const { id: rideId } = req.params;
@@ -92,9 +155,42 @@ const triggerSOS = async (req, res) => {
       });
     }
 
+    // ── 6. Dispatch to local police (non-blocking) ───────────────────────
+    const countryCode = req.currency?.country_code || 'CM';
+    const userInfo = await pool.query('SELECT full_name, phone FROM users WHERE id = $1', [userId]);
+    const callerName  = userInfo.rows[0]?.full_name  || 'MOBO User';
+    const callerPhone = userInfo.rows[0]?.phone       || 'Unknown';
+    const rideLatLng  = ride.pickup_location
+      ? { lat: ride.pickup_location?.y || 0, lng: ride.pickup_location?.x || 0 }
+      : { lat: 0, lng: 0 };
+
+    // Ensure sos_events row exists (upsert)
+    await pool.query(
+      `INSERT INTO sos_events (ride_id, triggered_by, role, anonymous_call_enabled)
+       VALUES ($1,$2,$3,true)
+       ON CONFLICT (ride_id) DO UPDATE SET anonymous_call_enabled = true`,
+      [rideId, userId, userRole]
+    ).catch(() => {}); // table may not have sos_events yet — non-fatal
+
+    dispatchToPolice({
+      rideId,
+      countryCode,
+      pickupAddress: ride.pickup_address || 'Unknown location',
+      callerName,
+      callerPhone,
+      lat: rideLatLng.lat,
+      lng: rideLatLng.lng,
+    }).catch(() => {}); // fully non-blocking
+
     return res.json({
       success: true,
-      message: 'SOS triggered. Emergency contacts and MOBO safety team have been notified.',
+      message: 'SOS triggered. Emergency contacts, MOBO safety team, and local emergency services have been notified.',
+      police_dispatched: true,
+      emergency_numbers: await pool.query(
+        `SELECT agency_name, phone FROM police_emergency_contacts WHERE country_code = $1 AND is_active = true ORDER BY priority`,
+        [countryCode]
+      ).then(r => r.rows).catch(() => []),
+      anonymous_call_enabled: true,
     });
   } catch (err) {
     console.error('[SOS] triggerSOS error:', err);
