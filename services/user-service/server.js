@@ -37,7 +37,8 @@ const authRoutes = require('./src/routes/auth');
 const profileRoutes = require('./src/routes/profile');
 const fleetRoutes = require('./src/routes/fleet');
 const socialRoutes = require('./src/routes/social');
-const adminMgmtRoutes = require('./src/routes/adminManagement');
+const adminMgmtRoutes  = require('./src/routes/adminManagement');
+const adminDataRoutes  = require('./src/routes/adminData');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -137,6 +138,7 @@ app.use('/users', profileRoutes);
 app.use('/fleet', fleetRoutes);
 app.use('/social', socialRoutes);
 app.use('/admin/admin-mgmt', adminMgmtRoutes);
+app.use('/admin/admin-data', adminDataRoutes);
 
 // Prometheus metrics — restricted to internal scraper IPs only
 const promClient = require('prom-client');

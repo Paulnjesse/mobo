@@ -4,18 +4,20 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   Select, MenuItem, FormControl, InputLabel, TextField,
   Divider, Avatar, IconButton, Switch, FormControlLabel,
-  CircularProgress,
+  CircularProgress, Tabs, Tab, Tooltip,
 } from '@mui/material';
 import {
   People as PeopleIcon, DriveEta as DriveEtaIcon,
   Block as BlockIcon, Download as DownloadIcon,
   Close as CloseIcon, Edit as EditIcon,
+  Archive as ArchiveIcon,
 } from '@mui/icons-material';
 import StatCard from '../components/StatCard';
 import DataTable from '../components/DataTable';
+import SecureField from '../components/SecureField';
+import DocumentManager from '../components/DocumentManager';
 import { usersAPI, adminMgmtAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Archive as ArchiveIcon } from '@mui/icons-material';
 
 const MOCK_USERS = Array.from({ length: 40 }, (_, i) => ({
   id: `usr_${i + 1}`,
@@ -65,6 +67,7 @@ export default function Users() {
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT);
   const [editSaving, setEditSaving] = useState(false);
+  const [editTab, setEditTab] = useState(0);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true); setError('');
@@ -310,53 +313,63 @@ export default function Users() {
           </Box>
           <IconButton onClick={() => setEditOpen(false)} size="small"><CloseIcon /></IconButton>
         </DialogTitle>
-        <Divider />
+        <Tabs value={editTab} onChange={(_, v) => setEditTab(v)} sx={{ px: 2, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+          <Tab label="Profile Info" />
+          <Tab label="Documents" />
+        </Tabs>
         <DialogContent sx={{ pt: 2.5 }}>
-          <Grid container spacing={2}>
-            {field('Full Name', 'full_name')}
-            {field('Phone', 'phone')}
-            {field('Email', 'email')}
-            {field('Role', 'role', 'select', [
-              { value: 'rider', label: 'Rider' },
-              { value: 'driver', label: 'Driver' },
-              { value: 'fleet_owner', label: 'Fleet Owner' },
-              { value: 'admin', label: 'Admin' },
-            ])}
-            {field('Country', 'country')}
-            {field('City', 'city')}
-            {field('Language', 'language', 'select', [
-              { value: 'fr', label: 'French' },
-              { value: 'en', label: 'English' },
-              { value: 'sw', label: 'Swahili' },
-            ])}
-            {field('Gender', 'gender', 'select', [
-              { value: '', label: 'Not specified' },
-              { value: 'male', label: 'Male' },
-              { value: 'female', label: 'Female' },
-              { value: 'other', label: 'Other' },
-            ])}
-            {field('Wallet Balance (XAF)', 'wallet_balance', 'number')}
-            {field('Loyalty Points', 'loyalty_points', 'number')}
-            {field('Subscription Plan', 'subscription_plan', 'select', [
-              { value: 'none', label: 'None' },
-              { value: 'basic', label: 'Basic — 5,000 XAF/mo' },
-              { value: 'premium', label: 'Premium — 10,000 XAF/mo' },
-            ])}
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ display: 'flex', gap: 3 }}>
-                <FormControlLabel control={<Switch checked={!!editForm.is_verified} onChange={e => setEditForm(p => ({ ...p, is_verified: e.target.checked }))} color="success" />} label="Verified" />
-                <FormControlLabel control={<Switch checked={!!editForm.is_active} onChange={e => setEditForm(p => ({ ...p, is_active: e.target.checked }))} color="primary" />} label="Active" />
-              </Box>
+          {editTab === 0 && (
+            <Grid container spacing={2}>
+              {field('Full Name', 'full_name')}
+              {field('Phone', 'phone')}
+              {field('Email', 'email')}
+              {field('Role', 'role', 'select', [
+                { value: 'rider', label: 'Rider' },
+                { value: 'driver', label: 'Driver' },
+                { value: 'fleet_owner', label: 'Fleet Owner' },
+                { value: 'admin', label: 'Admin' },
+              ])}
+              {field('Country', 'country')}
+              {field('City', 'city')}
+              {field('Language', 'language', 'select', [
+                { value: 'fr', label: 'French' },
+                { value: 'en', label: 'English' },
+                { value: 'sw', label: 'Swahili' },
+              ])}
+              {field('Gender', 'gender', 'select', [
+                { value: '', label: 'Not specified' },
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'other', label: 'Other' },
+              ])}
+              {field('Wallet Balance (XAF)', 'wallet_balance', 'number')}
+              {field('Loyalty Points', 'loyalty_points', 'number')}
+              {field('Subscription Plan', 'subscription_plan', 'select', [
+                { value: 'none', label: 'None' },
+                { value: 'basic', label: 'Basic — 5,000 XAF/mo' },
+                { value: 'premium', label: 'Premium — 10,000 XAF/mo' },
+              ])}
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', gap: 3 }}>
+                  <FormControlLabel control={<Switch checked={!!editForm.is_verified} onChange={e => setEditForm(p => ({ ...p, is_verified: e.target.checked }))} color="success" />} label="Verified" />
+                  <FormControlLabel control={<Switch checked={!!editForm.is_active} onChange={e => setEditForm(p => ({ ...p, is_active: e.target.checked }))} color="primary" />} label="Active" />
+                </Box>
+              </Grid>
             </Grid>
-          </Grid>
+          )}
+          {editTab === 1 && editUser && (
+            <DocumentManager userId={editUser.id || editUser._id} readOnly={!canWrite} />
+          )}
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
-            {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
-          </Button>
+          {editTab === 0 && (
+            <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
+              sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+              {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -378,10 +391,29 @@ export default function Users() {
                   {isSuspended(selectedUser) && <Chip label="Suspended" size="small" sx={{ ml: 0.5, bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560' }} />}
                 </Box>
               </Box>
+
+              {/* PII fields — masked with SecureField */}
+              <Typography sx={{ fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5, color: '#666', mb: 1 }}>
+                Contact & Identity (Protected)
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={6}>
+                  <SecureField label="Phone" userId={selectedUser.id || selectedUser._id} field="phone" maskedValue={selectedUser.phone || '+XXX XXX XXX XXX'} />
+                </Grid>
+                <Grid item xs={6}>
+                  <SecureField label="Email" userId={selectedUser.id || selectedUser._id} field="email" maskedValue={selectedUser.email || 'user@••••.com'} />
+                </Grid>
+                <Grid item xs={6}>
+                  <SecureField label="National ID" userId={selectedUser.id || selectedUser._id} field="national_id" maskedValue="••••••••••••" />
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 2 }} />
+              <Typography sx={{ fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5, color: '#666', mb: 1.5 }}>
+                General Info
+              </Typography>
               <Grid container spacing={2}>
                 {[
-                  ['Phone', selectedUser.phone],
-                  ['Email', selectedUser.email],
                   ['Country', selectedUser.country],
                   ['City', selectedUser.city],
                   ['Language', selectedUser.language],
@@ -405,7 +437,7 @@ export default function Users() {
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          {canWrite && <Button onClick={() => { openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
+          {canWrite && <Button onClick={() => { setEditTab(0); openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
           {canSuspend && (isSuspended(selectedUser) ? (
             <Button onClick={() => { handleUnsuspend(selectedUser); setViewOpen(false); }} color="success" variant="outlined" size="small">Unsuspend</Button>
           ) : (

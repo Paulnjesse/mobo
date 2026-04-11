@@ -55,6 +55,7 @@ const FILES = [
   'migration_031.sql',  // Surge price cap: max_multiplier on surge_zones (3.50× ceiling)
   'migration_032.sql',  // MOBO Hourly 10h package + rider identity verification + share-trip live location
   'migration_033.sql',  // Soft deletes + admin_roles table + read_only/read_write roles + new permissions
+  'migration_034.sql',  // data_access_logs + admin_notifications + user_documents (encrypted)
 ];
 
 async function run() {

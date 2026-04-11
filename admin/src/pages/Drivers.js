@@ -4,15 +4,17 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   Select, MenuItem, FormControl, InputLabel, TextField,
   Divider, Avatar, IconButton, Switch, FormControlLabel,
-  CircularProgress, Tabs, Tab, Rating,
+  CircularProgress, Tabs, Tab, Rating, Tooltip,
 } from '@mui/material';
 import {
   DirectionsCar as CarIcon, CheckCircle as CheckIcon,
   CheckCircle, WifiTethering as OnlineIcon, Block as BlockIcon,
-  Close as CloseIcon, Edit as EditIcon, Star as StarIcon, Tooltip,
+  Close as CloseIcon, Edit as EditIcon, Star as StarIcon,
 } from '@mui/icons-material';
 import StatCard from '../components/StatCard';
 import DataTable from '../components/DataTable';
+import SecureField from '../components/SecureField';
+import DocumentManager from '../components/DocumentManager';
 import { driversAPI, adminMgmtAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Archive as ArchiveIcon } from '@mui/icons-material';
@@ -331,6 +333,7 @@ export default function Drivers() {
         <Tabs value={editTab} onChange={(_, v) => setEditTab(v)} sx={{ px: 2, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
           <Tab label="Driver Info" />
           <Tab label="Vehicle Info" />
+          <Tab label="Documents" />
         </Tabs>
         <DialogContent sx={{ pt: 2.5 }}>
           {editTab === 0 && (
@@ -390,14 +393,19 @@ export default function Drivers() {
               {sw('Vehicle Active', 'is_active', vehicleForm, setVehicleForm)}
             </Grid>
           )}
+          {editTab === 2 && editDriver && (
+            <DocumentManager userId={editDriver.id || editDriver._id} readOnly={!canWrite} />
+          )}
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
-            {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
-          </Button>
+          {editTab !== 2 && (
+            <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
+              sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+              {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -421,11 +429,30 @@ export default function Drivers() {
                   </Box>
                 </Box>
               </Box>
+              {/* PII — masked by default */}
+              <Typography sx={{ fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5, color: '#666', mb: 1 }}>
+                Contact & Identity (Protected)
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={6}>
+                  <SecureField label="Phone" userId={selectedDriver.id || selectedDriver._id} field="phone" maskedValue={selectedDriver.phone || '+XXX XXX XXX XXX'} />
+                </Grid>
+                <Grid item xs={6}>
+                  <SecureField label="Email" userId={selectedDriver.id || selectedDriver._id} field="email" maskedValue={selectedDriver.email || 'driver@••••.com'} />
+                </Grid>
+                <Grid item xs={6}>
+                  <SecureField label="National ID" userId={selectedDriver.id || selectedDriver._id} field="national_id" maskedValue={selectedDriver.national_id ? selectedDriver.national_id.replace(/./g, '•') : '••••••••••••'} />
+                </Grid>
+                <Grid item xs={6}>
+                  <SecureField label="License Number" userId={selectedDriver.id || selectedDriver._id} field="license_number" maskedValue={selectedDriver.license_number || 'CM-DL-••••-•••'} />
+                </Grid>
+              </Grid>
+              <Divider sx={{ my: 1.5 }} />
               <Typography variant="subtitle2" sx={{ mb: 1, color: '#666', fontWeight: 700, textTransform: 'uppercase', fontSize: '0.7rem' }}>Driver Info</Typography>
               <Grid container spacing={2} sx={{ mb: 2 }}>
                 {[
-                  ['Phone', selectedDriver.phone], ['Email', selectedDriver.email], ['City', selectedDriver.city],
-                  ['License', selectedDriver.license_number], ['License Expiry', selectedDriver.license_expiry?.substring(0,10)],
+                  ['City', selectedDriver.city],
+                  ['License Expiry', selectedDriver.license_expiry?.substring(0,10)],
                   ['Rating', `${selectedDriver.rating} / 5`], ['Total Rides', selectedDriver.total_rides],
                   ['Acceptance Rate', `${selectedDriver.acceptance_rate}%`],
                   ['Total Earnings', `${Number(selectedDriver.total_earnings || 0).toLocaleString()} XAF`],

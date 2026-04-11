@@ -8,6 +8,7 @@ import {
   Chip,
   Alert,
   Button,
+  Divider,
 } from '@mui/material';
 import {
   People as PeopleIcon,
@@ -15,12 +16,17 @@ import {
   DirectionsCar as DirectionsCarIcon,
   AccountBalanceWallet as WalletIcon,
   Refresh as RefreshIcon,
+  Shield as ShieldIcon,
+  Visibility as ViewIcon,
+  Download as DownloadIcon,
+  PersonSearch as RevealIcon,
 } from '@mui/icons-material';
 import { format, subDays } from 'date-fns';
 import StatCard from '../components/StatCard';
 import { RevenueLineChart, RidesBarChart, PaymentPieChart } from '../components/Chart';
 import DataTable from '../components/DataTable';
-import { dashboardAPI } from '../services/api';
+import { dashboardAPI, adminDataAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 // Mock data used as fallback when API returns empty
 function generateMockRevenue() {
@@ -143,7 +149,19 @@ const userColumns = [
   { field: 'joined', headerName: 'Joined' },
 ];
 
+const ACCESS_ICONS = {
+  reveal_field: <RevealIcon sx={{ fontSize: 14, color: '#E94560' }} />,
+  download:     <DownloadIcon sx={{ fontSize: 14, color: '#F5A623' }} />,
+  view:         <ViewIcon sx={{ fontSize: 14, color: '#2196F3' }} />,
+};
+
 export default function Dashboard() {
+  const { hasPermission } = useAuth();
+  const canSeeRevenue  = hasPermission('payments:read') || hasPermission('admin:full');
+  const canSeeUsers    = hasPermission('users:read')    || hasPermission('admin:full');
+  const canSeeRides    = hasPermission('rides:read')    || hasPermission('admin:full');
+  const canSeeAlerts   = hasPermission('admin:audit_logs');
+
   const [stats, setStats] = useState(null);
   const [revenueData, setRevenueData] = useState([]);
   const [ridesData, setRidesData] = useState([]);
@@ -153,19 +171,27 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [accessAlerts, setAccessAlerts] = useState([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [statsRes, revenueRes, ridesRes, pmRes, rrRes, ruRes] = await Promise.allSettled([
+      const calls = [
         dashboardAPI.getStats(),
         dashboardAPI.getRevenueChart(7),
         dashboardAPI.getRidesChart(7),
         dashboardAPI.getPaymentMethods(),
         dashboardAPI.getRecentRides(),
         dashboardAPI.getRecentUsers(),
-      ]);
+      ];
+      if (canSeeAlerts) calls.push(adminDataAPI.getAccessLogs({ limit: 10 }));
+
+      const [statsRes, revenueRes, ridesRes, pmRes, rrRes, ruRes, alertsRes] = await Promise.allSettled(calls);
+
+      if (canSeeAlerts && alertsRes?.status === 'fulfilled') {
+        setAccessAlerts(alertsRes.value.data?.logs || []);
+      }
 
       setStats(statsRes.status === 'fulfilled' && statsRes.value.data ? statsRes.value.data : MOCK_STATS);
       setRevenueData(
@@ -248,143 +274,213 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {/* Stat Cards */}
+      {/* Stat Cards — shown to all roles */}
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            title="Total Users"
-            value={loading ? '—' : Number(stats?.totalUsers || 0).toLocaleString()}
-            icon={<PeopleIcon />}
-            iconBg="#1A1A2E"
-            trend={12}
-            trendLabel="vs last month"
-            navigateTo="/users"
-            loading={loading}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            title="Total Drivers"
-            value={loading ? '—' : Number(stats?.totalDrivers || 0).toLocaleString()}
-            icon={<DriveEtaIcon />}
-            iconBg="#E94560"
-            trend={8}
-            trendLabel="vs last month"
-            navigateTo="/drivers"
-            loading={loading}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            title="Active Rides"
-            value={loading ? '—' : Number(stats?.activeRides || 0).toLocaleString()}
-            icon={<DirectionsCarIcon />}
-            iconBg="#F5A623"
-            subtitle="Right now"
-            navigateTo="/rides"
-            loading={loading}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            title="Revenue Today"
-            value={loading ? '—' : `${Number(stats?.revenueToday || 0).toLocaleString()} XAF`}
-            icon={<WalletIcon />}
-            iconBg="#4CAF50"
-            trend={5}
-            trendLabel="vs yesterday"
-            navigateTo="/payments"
-            loading={loading}
-          />
-        </Grid>
+        {canSeeUsers && (
+          <Grid item xs={12} sm={6} lg={3}>
+            <StatCard
+              title="Total Users"
+              value={loading ? '—' : Number(stats?.totalUsers || 0).toLocaleString()}
+              icon={<PeopleIcon />}
+              iconBg="#1A1A2E"
+              trend={12}
+              trendLabel="vs last month"
+              navigateTo="/users"
+              loading={loading}
+            />
+          </Grid>
+        )}
+        {canSeeUsers && (
+          <Grid item xs={12} sm={6} lg={3}>
+            <StatCard
+              title="Total Drivers"
+              value={loading ? '—' : Number(stats?.totalDrivers || 0).toLocaleString()}
+              icon={<DriveEtaIcon />}
+              iconBg="#E94560"
+              trend={8}
+              trendLabel="vs last month"
+              navigateTo="/drivers"
+              loading={loading}
+            />
+          </Grid>
+        )}
+        {canSeeRides && (
+          <Grid item xs={12} sm={6} lg={3}>
+            <StatCard
+              title="Active Rides"
+              value={loading ? '—' : Number(stats?.activeRides || 0).toLocaleString()}
+              icon={<DirectionsCarIcon />}
+              iconBg="#F5A623"
+              subtitle="Right now"
+              navigateTo="/rides"
+              loading={loading}
+            />
+          </Grid>
+        )}
+        {canSeeRevenue && (
+          <Grid item xs={12} sm={6} lg={3}>
+            <StatCard
+              title="Revenue Today"
+              value={loading ? '—' : `${Number(stats?.revenueToday || 0).toLocaleString()} XAF`}
+              icon={<WalletIcon />}
+              iconBg="#4CAF50"
+              trend={5}
+              trendLabel="vs yesterday"
+              navigateTo="/payments"
+              loading={loading}
+            />
+          </Grid>
+        )}
       </Grid>
 
-      {/* Charts Row 1 */}
-      <Grid container spacing={2.5} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
-                Revenue — Last 7 Days
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
-                Total earnings in XAF
-              </Typography>
-              <RevenueLineChart data={revenueData} loading={loading} height={240} />
-            </CardContent>
-          </Card>
+      {/* Charts Row 1 — finance / full access */}
+      {canSeeRevenue && (
+        <Grid container spacing={2.5} sx={{ mb: 3 }}>
+          <Grid item xs={12} md={8}>
+            <Card>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
+                  Revenue — Last 7 Days
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                  Total earnings in XAF
+                </Typography>
+                <RevenueLineChart data={revenueData} loading={loading} height={240} />
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
+                  Payment Methods
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 1 }}>
+                  Distribution breakdown
+                </Typography>
+                <PaymentPieChart data={paymentMethods} loading={loading} height={240} />
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
-                Payment Methods
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 1 }}>
-                Distribution breakdown
-              </Typography>
-              <PaymentPieChart data={paymentMethods} loading={loading} height={240} />
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      )}
 
-      {/* Charts Row 2 */}
-      <Grid container spacing={2.5} sx={{ mb: 3 }}>
-        <Grid item xs={12}>
-          <Card>
-            <CardContent sx={{ p: 2.5 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
-                Rides Per Day — Last 7 Days
-              </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
-                Daily ride volume
-              </Typography>
-              <RidesBarChart data={ridesData} loading={loading} height={200} />
-            </CardContent>
-          </Card>
+      {/* Charts Row 2 — ops / rides */}
+      {canSeeRides && (
+        <Grid container spacing={2.5} sx={{ mb: 3 }}>
+          <Grid item xs={12}>
+            <Card>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
+                  Rides Per Day — Last 7 Days
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                  Daily ride volume
+                </Typography>
+                <RidesBarChart data={ridesData} loading={loading} height={200} />
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
-      </Grid>
+      )}
 
-      {/* Recent Rides Table */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ p: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
-              Recent Rides
-            </Typography>
-            <Chip label="Last 10" size="small" sx={{ fontSize: '0.72rem' }} />
-          </Box>
-          <DataTable
-            columns={rideColumns}
-            rows={recentRides}
-            loading={loading}
-            actions={false}
-            searchPlaceholder="Search rides..."
-            defaultRowsPerPage={10}
-          />
-        </CardContent>
-      </Card>
+      {/* Bottom row: recent rides + access alerts (super admin) */}
+      <Grid container spacing={2.5}>
+        {canSeeRides && (
+          <Grid item xs={12} md={canSeeAlerts ? 8 : 12}>
+            <Card sx={{ mb: 3 }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Recent Rides</Typography>
+                  <Chip label="Last 10" size="small" sx={{ fontSize: '0.72rem' }} />
+                </Box>
+                <DataTable columns={rideColumns} rows={recentRides} loading={loading} actions={false} searchPlaceholder="Search rides..." defaultRowsPerPage={10} />
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Access alert panel — super admins only */}
+        {canSeeAlerts && (
+          <Grid item xs={12} md={4}>
+            <Card sx={{ mb: 3, height: '100%' }}>
+              <CardContent sx={{ p: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <ShieldIcon sx={{ fontSize: 18, color: '#E94560' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                    Recent Data Access
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                  Last 10 admin data access events
+                </Typography>
+                {loading ? (
+                  <Box sx={{ textAlign: 'center', py: 3 }}>
+                    <Typography sx={{ color: '#BBB', fontSize: '0.82rem' }}>Loading…</Typography>
+                  </Box>
+                ) : accessAlerts.length === 0 ? (
+                  <Typography sx={{ color: '#BBB', fontSize: '0.82rem', textAlign: 'center', py: 2 }}>
+                    No recent access events
+                  </Typography>
+                ) : (
+                  <Box>
+                    {accessAlerts.map((log, i) => (
+                      <Box key={log.id || i}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 1 }}>
+                          <Box sx={{ mt: 0.2 }}>
+                            {ACCESS_ICONS[log.action] || <ViewIcon sx={{ fontSize: 14, color: '#999' }} />}
+                          </Box>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#1A1A2E', lineHeight: 1.3 }}>
+                              {log.admin_name || 'Admin'} · {log.action?.replace('_', ' ')}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.7rem', color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {log.resource_type} {log.resource_id ? `(${String(log.resource_id).substring(0,8)}…)` : ''}
+                            </Typography>
+                            <Typography sx={{ fontSize: '0.68rem', color: '#BBB' }}>
+                              {log.created_at ? format(new Date(log.created_at), 'MMM d, HH:mm') : ''}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        {i < accessAlerts.length - 1 && <Divider />}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+                <Divider sx={{ mt: 1.5, mb: 1 }} />
+                <Button
+                  size="small" fullWidth
+                  onClick={() => window.location.href = '/audit-log'}
+                  sx={{ color: '#E94560', fontSize: '0.78rem', fontWeight: 600 }}>
+                  View Full Audit Log →
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+      </Grid>
 
       {/* Recent Users Table */}
-      <Card>
-        <CardContent sx={{ p: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
-              Recent Registrations
-            </Typography>
-            <Chip label="Last 5" size="small" sx={{ fontSize: '0.72rem' }} />
-          </Box>
-          <DataTable
-            columns={userColumns}
-            rows={recentUsers}
-            loading={loading}
-            actions={false}
-            searchPlaceholder="Search users..."
-            defaultRowsPerPage={5}
-          />
-        </CardContent>
-      </Card>
+      {canSeeUsers && (
+        <Card>
+          <CardContent sx={{ p: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                Recent Registrations
+              </Typography>
+              <Chip label="Last 5" size="small" sx={{ fontSize: '0.72rem' }} />
+            </Box>
+            <DataTable
+              columns={userColumns}
+              rows={recentUsers}
+              loading={loading}
+              actions={false}
+              searchPlaceholder="Search users..."
+              defaultRowsPerPage={5}
+            />
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 }

@@ -29,6 +29,8 @@ import AdsManagement from './pages/AdsManagement';
 import FoodManagement from './pages/FoodManagement';
 import AdminManagement from './pages/AdminManagement';
 import RoleManagement from './pages/RoleManagement';
+import AuditLog from './pages/AuditLog';
+import { CopyProtectionProvider } from './components/CopyProtection';
 
 const theme = createTheme({
   palette: {
@@ -104,24 +106,26 @@ function ProtectedLayout() {
     return <Navigate to="/login" replace />;
   }
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', background: '#F8F9FA' }}>
-      <Sidebar width={SIDEBAR_WIDTH} />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          ml: `${SIDEBAR_WIDTH}px`,
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100vh',
-        }}
-      >
-        <Header />
-        <Box sx={{ flexGrow: 1, p: 3, pt: 2 }}>
-          <Outlet />
+    <CopyProtectionProvider>
+      <Box sx={{ display: 'flex', minHeight: '100vh', background: '#F8F9FA' }}>
+        <Sidebar width={SIDEBAR_WIDTH} />
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            ml: `${SIDEBAR_WIDTH}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '100vh',
+          }}
+        >
+          <Header />
+          <Box sx={{ flexGrow: 1, p: 3, pt: 2 }}>
+            <Outlet />
+          </Box>
         </Box>
       </Box>
-    </Box>
+    </CopyProtectionProvider>
   );
 }
 
@@ -157,6 +161,7 @@ function App() {
               <Route path="/food"              element={<FoodManagement />} />
               <Route path="/admin-staff"       element={<AdminManagement />} />
               <Route path="/roles"             element={<RoleManagement />} />
+              <Route path="/audit-log"         element={<AuditLog />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

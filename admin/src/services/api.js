@@ -150,3 +150,27 @@ export const adminMgmtAPI = {
   archiveUser:   (id) => api.patch(`/admin/admin-mgmt/users/${id}/archive`),
   archiveDriver: (id) => api.patch(`/admin/admin-mgmt/drivers/${id}/archive`),
 };
+
+// Admin Data (encrypted docs, access logs, notifications)
+export const adminDataAPI = {
+  // Documents
+  listDocuments:   (userId)        => api.get(`/admin/admin-data/users/${userId}/documents`),
+  uploadDocument:  (userId, data)  => api.post(`/admin/admin-data/users/${userId}/documents`, data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  uploadDocumentBase64: (userId, data) => api.post(`/admin/admin-data/users/${userId}/documents`, data),
+  downloadDocument:(docId)         => api.get(`/admin/admin-data/documents/${docId}/download`, { responseType: 'blob' }),
+  verifyDocument:  (docId)         => api.patch(`/admin/admin-data/documents/${docId}/verify`),
+  archiveDocument: (docId)         => api.delete(`/admin/admin-data/documents/${docId}`),
+
+  // PII reveal (logged + notified)
+  revealFields: (userId, fields) => api.post(`/admin/admin-data/users/${userId}/reveal`, { fields }),
+
+  // Access audit log
+  getAccessLogs: (params) => api.get('/admin/admin-data/access-logs', { params }),
+
+  // Notifications
+  getNotifications: ()   => api.get('/admin/admin-data/notifications'),
+  markRead:        (id)  => api.patch(`/admin/admin-data/notifications/${id}/read`),
+  markAllRead:     ()    => api.patch('/admin/admin-data/notifications/read-all'),
+};

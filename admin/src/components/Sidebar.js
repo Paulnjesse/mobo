@@ -38,6 +38,7 @@ import {
   Campaign as CampaignIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   ManageAccounts as ManageAccountsIcon,
+  Shield as ShieldIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -77,6 +78,11 @@ const ROLES_NAV_ITEMS = [
   { label: 'Roles & Perms', path: '/roles', icon: <AdminPanelSettingsIcon /> },
 ];
 
+// Items only shown to users with admin:audit_logs permission
+const AUDIT_NAV_ITEMS = [
+  { label: 'Audit Log', path: '/audit-log', icon: <ShieldIcon /> },
+];
+
 export default function Sidebar({ width = 240 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,6 +92,7 @@ export default function Sidebar({ width = 240 }) {
     ...BASE_NAV_ITEMS,
     ...(hasPermission('admin:manage_staff') ? STAFF_NAV_ITEMS : []),
     ...(hasPermission('admin:manage_roles') ? ROLES_NAV_ITEMS : []),
+    ...(hasPermission('admin:audit_logs')   ? AUDIT_NAV_ITEMS : []),
   ];
 
   const isActive = (path) => {
