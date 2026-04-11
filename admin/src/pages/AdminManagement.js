@@ -22,11 +22,11 @@ import { adminMgmtAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const ROLE_COLORS = {
-  admin:      { bg: 'rgba(233,69,96,0.1)',   color: '#E94560' },
-  full_admin: { bg: 'rgba(26,26,46,0.1)',    color: '#1A1A2E' },
+  admin:      { bg: 'rgba(255,209,0,0.1)',   color: '#FFD100' },
+  full_admin: { bg: 'rgba(0,0,0,0.1)',    color: '#000000' },
   support:    { bg: 'rgba(33,150,243,0.1)',  color: '#2196F3' },
   finance:    { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
-  ops:        { bg: 'rgba(245,166,35,0.1)',  color: '#F5A623' },
+  ops:        { bg: 'rgba(255,140,0,0.1)',  color: '#FF8C00' },
   read_write: { bg: 'rgba(156,39,176,0.1)', color: '#9C27B0' },
   read_only:  { bg: 'rgba(0,0,0,0.07)',     color: '#666' },
 };
@@ -162,7 +162,7 @@ export default function AdminManagement() {
   const columns = [
     { field: 'name', headerName: 'Name', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#1A1A2E' }}>
+        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#000000' }}>
           {(row.full_name || '?').charAt(0)}
         </Avatar>
         <Box>
@@ -177,7 +177,7 @@ export default function AdminManagement() {
         ? <Chip label="Archived" size="small" sx={{ bgcolor: 'rgba(0,0,0,0.07)', color: '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : row.is_active
           ? <Chip label="Active"   size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
-          : <Chip label="Inactive" size="small" sx={{ bgcolor: 'rgba(245,166,35,0.1)', color: '#F5A623', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+          : <Chip label="Inactive" size="small" sx={{ bgcolor: 'rgba(255,140,0,0.1)', color: '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'created_by_name', headerName: 'Created By', renderCell: row => (
       <Typography sx={{ fontSize: '0.8rem', color: '#666' }}>{row.created_by_name || 'System'}</Typography>
@@ -195,7 +195,7 @@ export default function AdminManagement() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <AdminIcon sx={{ color: '#1A1A2E', fontSize: 28 }} />
+          <AdminIcon sx={{ color: '#000000', fontSize: 28 }} />
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Admin Staff Management</Typography>
         </Box>
         {canManageStaff && (
@@ -204,7 +204,7 @@ export default function AdminManagement() {
             variant="contained"
             size="small"
             onClick={() => setCreateOpen(true)}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px' }}
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px' }}
           >
             Add Staff Member
           </Button>
@@ -216,7 +216,7 @@ export default function AdminManagement() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}>
-          <StatCard title="Total Staff" value={stats.total} icon={<AdminIcon />} iconBg="#1A1A2E" loading={loading} />
+          <StatCard title="Total Staff" value={stats.total} icon={<AdminIcon />} iconBg="#000000" loading={loading} />
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatCard title="Active" value={stats.active} icon={<CheckIcon />} iconBg="#4CAF50" loading={loading} />
@@ -225,7 +225,7 @@ export default function AdminManagement() {
           <StatCard title="Archived" value={stats.archived} icon={<ArchiveIcon />} iconBg="#9E9E9E" loading={loading} />
         </Grid>
         <Grid item xs={6} sm={3}>
-          <StatCard title="Role Types" value={Object.keys(stats.byRole).length} icon={<AdminIcon />} iconBg="#F5A623" loading={loading} />
+          <StatCard title="Role Types" value={Object.keys(stats.byRole).length} icon={<AdminIcon />} iconBg="#FF8C00" loading={loading} />
         </Grid>
       </Grid>
 
@@ -246,7 +246,7 @@ export default function AdminManagement() {
                     <IconButton
                       size="small"
                       onClick={() => setArchiveTarget(row)}
-                      sx={{ color: '#E94560', '&:hover': { bgcolor: 'rgba(233,69,96,0.1)' } }}
+                      sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}
                     >
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
@@ -264,7 +264,7 @@ export default function AdminManagement() {
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PersonAddIcon sx={{ color: '#1A1A2E' }} />
+            <PersonAddIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Add Admin Staff Member</Typography>
           </Box>
           <IconButton onClick={() => setCreateOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -319,7 +319,7 @@ export default function AdminManagement() {
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setCreateOpen(false)} variant="outlined" size="small">Cancel</Button>
           <Button onClick={handleCreate} variant="contained" size="small" disabled={creating}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
             {creating ? <CircularProgress size={18} color="inherit" /> : 'Create Account'}
           </Button>
         </DialogActions>
@@ -329,7 +329,7 @@ export default function AdminManagement() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Edit — {editTarget?.full_name}</Typography>
           </Box>
           <IconButton onClick={() => setEditOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -357,7 +357,7 @@ export default function AdminManagement() {
                 </Select>
               </FormControl>
               {editTarget?.admin_role === 'admin' && (
-                <Typography sx={{ fontSize: '0.75rem', color: '#F5A623', mt: 0.5 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#FF8C00', mt: 0.5 }}>
                   Super Admin role cannot be changed
                 </Typography>
               )}
@@ -374,7 +374,7 @@ export default function AdminManagement() {
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
           <Button onClick={handleSave} variant="contained" size="small" disabled={saving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
           </Button>
         </DialogActions>
@@ -391,7 +391,7 @@ export default function AdminManagement() {
           {viewTarget && (
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                <Avatar sx={{ width: 52, height: 52, bgcolor: '#1A1A2E', fontSize: '1.3rem' }}>
+                <Avatar sx={{ width: 52, height: 52, bgcolor: '#000000', fontSize: '1.3rem' }}>
                   {(viewTarget.full_name || '?').charAt(0)}
                 </Avatar>
                 <Box>
@@ -409,7 +409,7 @@ export default function AdminManagement() {
                   ['Archived At', viewTarget.deleted_at ? new Date(viewTarget.deleted_at).toLocaleString() : '—'],
                 ].map(([label, val]) => (
                   <Grid item xs={6} key={label}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{label}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{label}</Typography>
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 500 }}>{val || '—'}</Typography>
                   </Grid>
                 ))}
@@ -420,13 +420,13 @@ export default function AdminManagement() {
                 const roleInfo = roles.find(r => r.name === viewTarget.admin_role);
                 return roleInfo?.permissions?.length ? (
                   <Box sx={{ mt: 2.5 }}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       Permissions ({roleInfo.permissions.length})
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.6 }}>
                       {roleInfo.permissions.map(p => (
                         <Chip key={p} label={p} size="small"
-                          sx={{ bgcolor: 'rgba(26,26,46,0.06)', color: '#1A1A2E', fontSize: '0.68rem', height: 20 }} />
+                          sx={{ bgcolor: 'rgba(0,0,0,0.06)', color: '#000000', fontSize: '0.68rem', height: 20 }} />
                       ))}
                     </Box>
                   </Box>
@@ -439,18 +439,18 @@ export default function AdminManagement() {
         <DialogActions sx={{ p: 2, gap: 1 }}>
           {canManageStaff && !viewTarget?.is_deleted && (
             <Button onClick={() => { openEdit(viewTarget); setViewOpen(false); }} variant="outlined" size="small"
-              startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>
+              startIcon={<EditIcon />} sx={{ borderColor: '#000000', color: '#000000' }}>
               Edit
             </Button>
           )}
-          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#000000' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveTarget} onClose={() => setArchiveTarget(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#F5A623' }} />
+          <ArchiveIcon sx={{ color: '#FF8C00' }} />
           <Typography fontWeight={700}>Archive Staff Member</Typography>
         </DialogTitle>
         <DialogContent>

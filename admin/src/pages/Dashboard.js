@@ -80,11 +80,11 @@ const MOCK_RECENT_USERS = [
 ];
 
 const STATUS_COLORS = {
-  completed: '#4CAF50',
+  completed:   '#4CAF50',
   in_progress: '#2196F3',
-  cancelled: '#E94560',
-  requested: '#F5A623',
-  accepted: '#9C27B0',
+  cancelled:   '#E53935',
+  requested:   '#FF8C00',
+  accepted:    '#9C27B0',
 };
 
 const rideColumns = [
@@ -116,7 +116,7 @@ const rideColumns = [
     headerName: 'Fare',
     align: 'right',
     renderCell: (row) => (
-      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1A1A2E' }}>
+      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#000000' }}>
         {row.fare ? `${Number(row.fare).toLocaleString()} XAF` : '—'}
       </Typography>
     ),
@@ -135,8 +135,8 @@ const userColumns = [
         label={row.role}
         size="small"
         sx={{
-          backgroundColor: row.role === 'driver' ? 'rgba(26,26,46,0.08)' : 'rgba(233,69,96,0.1)',
-          color: row.role === 'driver' ? '#1A1A2E' : '#E94560',
+          backgroundColor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(255,209,0,0.1)',
+          color: row.role === 'driver' ? '#000000' : '#FFD100',
           fontWeight: 600,
           fontSize: '0.7rem',
           height: 22,
@@ -150,8 +150,8 @@ const userColumns = [
 ];
 
 const ACCESS_ICONS = {
-  reveal_field: <RevealIcon sx={{ fontSize: 14, color: '#E94560' }} />,
-  download:     <DownloadIcon sx={{ fontSize: 14, color: '#F5A623' }} />,
+  reveal_field: <RevealIcon sx={{ fontSize: 14, color: '#FFD100' }} />,
+  download:     <DownloadIcon sx={{ fontSize: 14, color: '#FF8C00' }} />,
   view:         <ViewIcon sx={{ fontSize: 14, color: '#2196F3' }} />,
 };
 
@@ -242,11 +242,11 @@ export default function Dashboard() {
       {/* Header row */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: '#1A1A2E' }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#000000' }}>
             Overview
           </Typography>
           {lastUpdated && (
-            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mt: 0.3 }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mt: 0.3 }}>
               Last updated: {format(lastUpdated, 'HH:mm:ss')}
             </Typography>
           )}
@@ -257,11 +257,11 @@ export default function Dashboard() {
           disabled={loading}
           size="small"
           sx={{
-            color: '#1A1A2E',
-            border: '1px solid rgba(26,26,46,0.15)',
+            color: '#000000',
+            border: '1px solid rgba(0,0,0,0.15)',
             borderRadius: '8px',
             px: 2,
-            '&:hover': { backgroundColor: 'rgba(26,26,46,0.05)' },
+            '&:hover': { backgroundColor: 'rgba(0,0,0,0.05)' },
           }}
         >
           Refresh
@@ -282,7 +282,7 @@ export default function Dashboard() {
               title="Total Users"
               value={loading ? '—' : Number(stats?.totalUsers || 0).toLocaleString()}
               icon={<PeopleIcon />}
-              iconBg="#1A1A2E"
+              iconBg="#000000"
               trend={12}
               trendLabel="vs last month"
               navigateTo="/users"
@@ -296,7 +296,7 @@ export default function Dashboard() {
               title="Total Drivers"
               value={loading ? '—' : Number(stats?.totalDrivers || 0).toLocaleString()}
               icon={<DriveEtaIcon />}
-              iconBg="#E94560"
+              iconBg="#FFD100"
               trend={8}
               trendLabel="vs last month"
               navigateTo="/drivers"
@@ -310,7 +310,7 @@ export default function Dashboard() {
               title="Active Rides"
               value={loading ? '—' : Number(stats?.activeRides || 0).toLocaleString()}
               icon={<DirectionsCarIcon />}
-              iconBg="#F5A623"
+              iconBg="#FF8C00"
               subtitle="Right now"
               navigateTo="/rides"
               loading={loading}
@@ -342,7 +342,7 @@ export default function Dashboard() {
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
                   Revenue — Last 7 Days
                 </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 2 }}>
                   Total earnings in XAF
                 </Typography>
                 <RevenueLineChart data={revenueData} loading={loading} height={240} />
@@ -355,7 +355,7 @@ export default function Dashboard() {
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
                   Payment Methods
                 </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 1 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 1 }}>
                   Distribution breakdown
                 </Typography>
                 <PaymentPieChart data={paymentMethods} loading={loading} height={240} />
@@ -374,7 +374,7 @@ export default function Dashboard() {
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>
                   Rides Per Day — Last 7 Days
                 </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 2 }}>
                   Daily ride volume
                 </Typography>
                 <RidesBarChart data={ridesData} loading={loading} height={200} />
@@ -406,12 +406,12 @@ export default function Dashboard() {
             <Card sx={{ mb: 3, height: '100%' }}>
               <CardContent sx={{ p: 2.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <ShieldIcon sx={{ fontSize: 18, color: '#E94560' }} />
+                  <ShieldIcon sx={{ fontSize: 18, color: '#FFD100' }} />
                   <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
                     Recent Data Access
                   </Typography>
                 </Box>
-                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.45)', mb: 2 }}>
                   Last 10 admin data access events
                 </Typography>
                 {loading ? (
@@ -431,7 +431,7 @@ export default function Dashboard() {
                             {ACCESS_ICONS[log.action] || <ViewIcon sx={{ fontSize: 14, color: '#999' }} />}
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#1A1A2E', lineHeight: 1.3 }}>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#000000', lineHeight: 1.3 }}>
                               {log.admin_name || 'Admin'} · {log.action?.replace('_', ' ')}
                             </Typography>
                             <Typography sx={{ fontSize: '0.7rem', color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -451,7 +451,7 @@ export default function Dashboard() {
                 <Button
                   size="small" fullWidth
                   onClick={() => window.location.href = '/audit-log'}
-                  sx={{ color: '#E94560', fontSize: '0.78rem', fontWeight: 600 }}>
+                  sx={{ color: '#FFD100', fontSize: '0.78rem', fontWeight: 600 }}>
                   View Full Audit Log →
                 </Button>
               </CardContent>

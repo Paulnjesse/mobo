@@ -35,14 +35,14 @@ const PAGE_TITLES = {
 };
 
 const NOTIF_ICONS = {
-  data_access:  <AccessIcon sx={{ fontSize: 15, color: '#E94560' }} />,
+  data_access:  <AccessIcon sx={{ fontSize: 15, color: '#FFD100' }} />,
   file_upload:  <DownloadIcon sx={{ fontSize: 15, color: '#2196F3' }} />,
   staff_created: <AdminIcon  sx={{ fontSize: 15, color: '#4CAF50' }} />,
-  suspicious:   <ShieldIcon  sx={{ fontSize: 15, color: '#F5A623' }} />,
+  suspicious:   <ShieldIcon  sx={{ fontSize: 15, color: '#FF8C00' }} />,
 };
 
 const NOTIF_COLORS = {
-  data_access: '#E94560', file_upload: '#2196F3', staff_created: '#4CAF50', suspicious: '#F5A623',
+  data_access: '#FFD100', file_upload: '#2196F3', staff_created: '#4CAF50', suspicious: '#FF8C00',
 };
 
 const POLL_INTERVAL_MS = 30_000; // poll every 30 s
@@ -110,15 +110,15 @@ export default function Header() {
 
   return (
     <AppBar position="sticky" elevation={0}
-      sx={{ backgroundColor: '#ffffff', borderBottom: '1px solid rgba(26,26,46,0.08)', zIndex: 1100 }}>
-      <Box sx={{ height: 3, background: 'linear-gradient(90deg, #1A1A2E 0%, #E94560 50%, #F5A623 100%)', position: 'absolute', top: 0, left: 0, right: 0 }} />
+      sx={{ backgroundColor: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.08)', zIndex: 1100 }}>
+      <Box sx={{ height: 3, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)', position: 'absolute', top: 0, left: 0, right: 0 }} />
       <Toolbar sx={{ pt: '3px', minHeight: '64px !important', px: 3 }}>
         {/* Page title */}
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h6" sx={{ color: '#1A1A2E', fontWeight: 700, fontSize: '1.1rem' }}>
+          <Typography variant="h6" sx={{ color: '#000000', fontWeight: 700, fontSize: '1.1rem' }}>
             {pageTitle}
           </Typography>
-          <Typography sx={{ color: 'rgba(26,26,46,0.45)', fontSize: '0.72rem', mt: -0.3 }}>
+          <Typography sx={{ color: 'rgba(0,0,0,0.45)', fontSize: '0.72rem', mt: -0.3 }}>
             MOBO Ride-Hailing Platform
           </Typography>
         </Box>
@@ -126,7 +126,7 @@ export default function Header() {
         {/* Audit log shortcut — only for users with access */}
         {hasPermission('admin:audit_logs') && (
           <Tooltip title="Access Audit Log" arrow>
-            <IconButton onClick={() => navigate('/audit-log')} sx={{ mr: 0.5, color: '#1A1A2E', '&:hover': { bgcolor: 'rgba(26,26,46,0.06)' } }}>
+            <IconButton onClick={() => navigate('/audit-log')} sx={{ mr: 0.5, color: '#000000', '&:hover': { bgcolor: 'rgba(0,0,0,0.06)' } }}>
               <ShieldIcon />
             </IconButton>
           </Tooltip>
@@ -134,7 +134,7 @@ export default function Header() {
 
         {/* Notification Bell */}
         <IconButton onClick={e => setNotifAnchor(e.currentTarget)}
-          sx={{ mr: 1, color: '#1A1A2E', '&:hover': { bgcolor: 'rgba(26,26,46,0.06)' } }}>
+          sx={{ mr: 1, color: '#000000', '&:hover': { bgcolor: 'rgba(0,0,0,0.06)' } }}>
           <Badge badgeContent={unread > 0 ? unread : null} color="error" max={99}>
             <NotificationsIcon />
           </Badge>
@@ -146,16 +146,16 @@ export default function Header() {
           transformOrigin={{ horizontal: 'right', vertical: 'top' }}
           anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}>
           <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="subtitle2" fontWeight={700} color="#1A1A2E">
+            <Typography variant="subtitle2" fontWeight={700} color="#000000">
               Notifications
               {unread > 0 && (
-                <Chip label={unread} size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', bgcolor: '#E94560', color: '#fff' }} />
+                <Chip label={unread} size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', bgcolor: '#FFD100', color: '#000000' }} />
               )}
             </Typography>
             {unread > 0 && (
               <Tooltip title="Mark all as read">
                 <IconButton size="small" onClick={handleMarkAllRead}>
-                  <DoneAllIcon sx={{ fontSize: 16, color: '#1A1A2E' }} />
+                  <DoneAllIcon sx={{ fontSize: 16, color: '#000000' }} />
                 </IconButton>
               </Tooltip>
             )}
@@ -170,14 +170,14 @@ export default function Header() {
             <MenuItem key={n.id} onClick={() => handleMarkRead(n.id)}
               sx={{
                 py: 1.2, px: 2, alignItems: 'flex-start',
-                bgcolor: n.is_read ? 'transparent' : 'rgba(233,69,96,0.03)',
-                borderLeft: n.is_read ? 'none' : `3px solid ${NOTIF_COLORS[n.type] || '#E94560'}`,
+                bgcolor: n.is_read ? 'transparent' : 'rgba(255,209,0,0.03)',
+                borderLeft: n.is_read ? 'none' : `3px solid ${NOTIF_COLORS[n.type] || '#FFD100'}`,
               }}>
               <Box sx={{ mr: 1.2, mt: 0.3, flexShrink: 0 }}>
                 {NOTIF_ICONS[n.type] || <NotificationsIcon sx={{ fontSize: 15, color: '#999' }} />}
               </Box>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.8rem', fontWeight: n.is_read ? 400 : 600, color: '#1A1A2E', lineHeight: 1.3 }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: n.is_read ? 400 : 600, color: '#000000', lineHeight: 1.3 }}>
                   {n.title}
                 </Typography>
                 <Typography sx={{ fontSize: '0.72rem', color: '#888', mt: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -188,7 +188,7 @@ export default function Header() {
                 </Typography>
               </Box>
               {!n.is_read && (
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: NOTIF_COLORS[n.type] || '#E94560', flexShrink: 0, mt: 0.8, ml: 1 }} />
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: NOTIF_COLORS[n.type] || '#FFD100', flexShrink: 0, mt: 0.8, ml: 1 }} />
               )}
             </MenuItem>
           ))}
@@ -196,7 +196,7 @@ export default function Header() {
           <Divider />
           {hasPermission('admin:audit_logs') && (
             <MenuItem onClick={() => { setNotifAnchor(null); navigate('/audit-log'); }}
-              sx={{ justifyContent: 'center', color: '#E94560', fontSize: '0.82rem', fontWeight: 600, py: 1 }}>
+              sx={{ justifyContent: 'center', color: '#FFD100', fontSize: '0.82rem', fontWeight: 600, py: 1 }}>
               View Full Audit Log
             </MenuItem>
           )}
@@ -204,15 +204,15 @@ export default function Header() {
 
         {/* Admin Avatar + Menu */}
         <Box onClick={e => setAnchorEl(e.currentTarget)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer', pl: 1.5, pr: 0.5, py: 0.5, borderRadius: '40px', border: '1px solid rgba(26,26,46,0.1)', '&:hover': { bgcolor: 'rgba(26,26,46,0.04)' } }}>
-          <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #1A1A2E, #E94560)', fontSize: '0.85rem', fontWeight: 700 }}>
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer', pl: 1.5, pr: 0.5, py: 0.5, borderRadius: '40px', border: '1px solid rgba(0,0,0,0.1)', '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' } }}>
+          <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #000000, #FFD100)', fontSize: '0.85rem', fontWeight: 700 }}>
             {userInitial}
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1A1A2E', lineHeight: 1.2 }}>
+            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#000000', lineHeight: 1.2 }}>
               {user?.full_name || user?.name || 'Admin'}
             </Typography>
-            <Typography sx={{ fontSize: '0.68rem', color: 'rgba(26,26,46,0.45)', textTransform: 'capitalize' }}>
+            <Typography sx={{ fontSize: '0.68rem', color: 'rgba(0,0,0,0.45)', textTransform: 'capitalize' }}>
               {user?.admin_role?.replace(/_/g, ' ') || 'Admin'}
             </Typography>
           </Box>
@@ -223,22 +223,22 @@ export default function Header() {
           transformOrigin={{ horizontal: 'right', vertical: 'top' }}
           anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}>
           <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#1A1A2E' }}>
+            <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#000000' }}>
               {user?.full_name || user?.name || 'Admin User'}
             </Typography>
-            <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)' }}>
+            <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)' }}>
               {user?.email || ''}
             </Typography>
             <Chip label={user?.admin_role?.replace(/_/g, ' ') || 'admin'} size="small"
-              sx={{ mt: 0.5, height: 18, fontSize: '0.65rem', bgcolor: 'rgba(26,26,46,0.08)', textTransform: 'capitalize' }} />
+              sx={{ mt: 0.5, height: 18, fontSize: '0.65rem', bgcolor: 'rgba(0,0,0,0.08)', textTransform: 'capitalize' }} />
           </Box>
           <Divider />
           <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings'); }}>
             <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
             <Typography fontSize="0.85rem">Settings</Typography>
           </MenuItem>
-          <MenuItem onClick={handleLogout} sx={{ color: '#E94560' }}>
-            <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: '#E94560' }} /></ListItemIcon>
+          <MenuItem onClick={handleLogout} sx={{ color: '#FFD100' }}>
+            <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: '#FFD100' }} /></ListItemIcon>
             <Typography fontSize="0.85rem">Logout</Typography>
           </MenuItem>
         </Menu>

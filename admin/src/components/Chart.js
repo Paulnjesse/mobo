@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const COLORS = ['#1A1A2E', '#E94560', '#F5A623', '#4CAF50', '#2196F3', '#9C27B0'];
+const COLORS = ['#000000', '#FFD100', '#FF8C00', '#4CAF50', '#2196F3', '#9C27B0'];
 
 function formatXAF(value) {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -29,7 +29,7 @@ const CustomTooltip = ({ active, payload, label, currency }) => {
     return (
       <Box
         sx={{
-          backgroundColor: '#1A1A2E',
+          backgroundColor: '#000000',
           border: 'none',
           borderRadius: '8px',
           p: 1.5,
@@ -55,7 +55,7 @@ const PieCustomTooltip = ({ active, payload }) => {
     return (
       <Box
         sx={{
-          backgroundColor: '#1A1A2E',
+          backgroundColor: '#000000',
           borderRadius: '8px',
           p: 1.5,
           boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
@@ -77,16 +77,16 @@ export function RevenueLineChart({ data = [], loading = false, height = 300 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(26,26,46,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
           tickFormatter={formatXAF}
-          tick={{ fontSize: 11, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
@@ -95,10 +95,10 @@ export function RevenueLineChart({ data = [], loading = false, height = 300 }) {
           type="monotone"
           dataKey="revenue"
           name="Revenue"
-          stroke="#E94560"
+          stroke="#FFD100"
           strokeWidth={2.5}
-          dot={{ fill: '#E94560', r: 4, strokeWidth: 0 }}
-          activeDot={{ r: 6, fill: '#E94560' }}
+          dot={{ fill: '#FFD100', r: 4, strokeWidth: 0 }}
+          activeDot={{ r: 6, fill: '#FFD100' }}
         />
       </LineChart>
     </ResponsiveContainer>
@@ -112,20 +112,20 @@ export function RidesBarChart({ data = [], loading = false, height = 300 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(26,26,46,0.06)" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 11, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip content={<CustomTooltip />} />
-        <Bar dataKey="rides" name="Rides" fill="#1A1A2E" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="rides" name="Rides" fill="#000000" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -171,7 +171,7 @@ export function PaymentPieChart({ data = [], loading = false, height = 300 }) {
           iconType="circle"
           iconSize={8}
           formatter={(value) => (
-            <span style={{ fontSize: '0.78rem', color: '#1A1A2E', fontWeight: 500 }}>{value}</span>
+            <span style={{ fontSize: '0.78rem', color: '#000000', fontWeight: 500 }}>{value}</span>
           )}
         />
       </PieChart>
@@ -188,20 +188,20 @@ export function RevenueAreaChart({ data = [], loading = false, height = 260 }) {
       <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <defs>
           <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#E94560" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#E94560" stopOpacity={0} />
+            <stop offset="5%" stopColor="#FFD100" stopOpacity={0.15} />
+            <stop offset="95%" stopColor="#FFD100" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(26,26,46,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 10, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 10, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
           tickFormatter={formatXAF}
-          tick={{ fontSize: 10, fill: 'rgba(26,26,46,0.5)' }}
+          tick={{ fontSize: 10, fill: 'rgba(0,0,0,0.5)' }}
           axisLine={false}
           tickLine={false}
         />
@@ -210,10 +210,10 @@ export function RevenueAreaChart({ data = [], loading = false, height = 260 }) {
           type="monotone"
           dataKey="revenue"
           name="Revenue"
-          stroke="#E94560"
+          stroke="#FFD100"
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 5, fill: '#E94560' }}
+          activeDot={{ r: 5, fill: '#FFD100' }}
         />
       </LineChart>
     </ResponsiveContainer>

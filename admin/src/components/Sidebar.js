@@ -114,7 +114,7 @@ export default function Sidebar({ width = 240 }) {
         top: 0,
         left: 0,
         height: '100vh',
-        backgroundColor: '#1A1A2E',
+        backgroundColor: '#000000',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 1200,
@@ -136,48 +136,21 @@ export default function Sidebar({ width = 240 }) {
       >
         <Box
           sx={{
-            width: 40,
-            height: 40,
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #E94560 0%, #F5A623 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: 40, height: 40, borderRadius: '8px',
+            bgcolor: '#FFD100',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}
         >
-          <DirectionsCarIcon sx={{ color: '#fff', fontSize: 22 }} />
+          <DirectionsCarIcon sx={{ color: '#000000', fontSize: 22 }} />
         </Box>
         <Box>
-          <Typography
-            variant="h6"
-            sx={{
-              color: '#ffffff',
-              fontWeight: 700,
-              fontSize: '1.2rem',
-              lineHeight: 1,
-              letterSpacing: '0.5px',
-            }}
-          >
+          <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '1.2rem', lineHeight: 1, letterSpacing: '-0.3px' }}>
             MOBO
           </Typography>
-          <Box
-            component="span"
-            sx={{
-              display: 'inline-block',
-              background: 'linear-gradient(135deg, #E94560, #F5A623)',
-              color: '#fff',
-              fontSize: '0.6rem',
-              fontWeight: 700,
-              px: 0.8,
-              py: 0.2,
-              borderRadius: '4px',
-              letterSpacing: '1px',
-              mt: 0.3,
-            }}
-          >
-            ADMIN
-          </Box>
+          <Typography sx={{ color: '#FFD100', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', mt: 0.2 }}>
+            Admin
+          </Typography>
         </Box>
       </Box>
 
@@ -192,37 +165,21 @@ export default function Sidebar({ width = 240 }) {
                   <ListItemButton
                     onClick={() => navigate(item.path)}
                     sx={{
-                      borderRadius: '8px',
+                      borderRadius: '7px',
                       px: 1.5,
-                      py: 1,
-                      backgroundColor: active ? '#E94560' : 'transparent',
+                      py: 0.9,
+                      backgroundColor: active ? '#FFD100' : 'transparent',
                       '&:hover': {
-                        backgroundColor: active ? '#E94560' : 'rgba(255,255,255,0.07)',
+                        backgroundColor: active ? '#FFBA00' : 'rgba(255,255,255,0.07)',
                       },
-                      transition: 'all 0.2s ease',
-                      position: 'relative',
-                      overflow: 'hidden',
+                      transition: 'background-color 0.15s ease',
                     }}
                   >
-                    {active && (
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          left: 0,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          width: 3,
-                          height: '60%',
-                          backgroundColor: '#F5A623',
-                          borderRadius: '0 2px 2px 0',
-                        }}
-                      />
-                    )}
                     <ListItemIcon
                       sx={{
-                        color: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
-                        minWidth: 36,
-                        '& .MuiSvgIcon-root': { fontSize: 20 },
+                        color: active ? '#000000' : 'rgba(255,255,255,0.5)',
+                        minWidth: 34,
+                        '& .MuiSvgIcon-root': { fontSize: 19 },
                       }}
                     >
                       {item.icon}
@@ -230,9 +187,9 @@ export default function Sidebar({ width = 240 }) {
                     <ListItemText
                       primary={item.label}
                       primaryTypographyProps={{
-                        fontSize: '0.875rem',
-                        fontWeight: active ? 600 : 400,
-                        color: active ? '#ffffff' : 'rgba(255,255,255,0.7)',
+                        fontSize: '0.855rem',
+                        fontWeight: active ? 700 : 400,
+                        color: active ? '#000000' : 'rgba(255,255,255,0.65)',
                         noWrap: true,
                       }}
                     />
@@ -261,17 +218,13 @@ export default function Sidebar({ width = 240 }) {
           >
             <Box
               sx={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #E94560, #F5A623)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: 34, height: 34, borderRadius: '50%',
+                bgcolor: '#FFD100',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: '0.8rem' }}>
+              <Typography sx={{ color: '#000000', fontWeight: 800, fontSize: '0.8rem' }}>
                 {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
               </Typography>
             </Box>
@@ -299,11 +252,11 @@ export default function Sidebar({ width = 240 }) {
               borderRadius: '8px',
               px: 1.5,
               py: 0.8,
-              '&:hover': { backgroundColor: 'rgba(233,69,96,0.15)' },
+              '&:hover': { backgroundColor: 'rgba(255,209,0,0.15)' },
               transition: 'all 0.2s',
             }}
           >
-            <ListItemIcon sx={{ color: '#E94560', minWidth: 34 }}>
+            <ListItemIcon sx={{ color: '#FFD100', minWidth: 34 }}>
               <LogoutIcon sx={{ fontSize: 18 }} />
             </ListItemIcon>
             <ListItemText
@@ -311,7 +264,7 @@ export default function Sidebar({ width = 240 }) {
               primaryTypographyProps={{
                 fontSize: '0.875rem',
                 fontWeight: 500,
-                color: '#E94560',
+                color: '#FFD100',
               }}
             />
           </ListItemButton>

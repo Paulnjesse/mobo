@@ -39,12 +39,12 @@ const DEFAULT_SETTINGS = {
 function SectionTitle({ icon, title, subtitle }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-      <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: 'rgba(26,26,46,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1A1A2E' }}>
+      <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: 'rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000000' }}>
         {icon}
       </Box>
       <Box>
         <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{title}</Typography>
-        {subtitle && <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.45)' }}>{subtitle}</Typography>}
+        {subtitle && <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.45)' }}>{subtitle}</Typography>}
       </Box>
     </Box>
   );
@@ -62,7 +62,7 @@ function FareField({ label, value, onChange, unit = 'XAF', min = 0, helperText }
       helperText={helperText}
       inputProps={{ min }}
       InputProps={{
-        endAdornment: <InputAdornment position="end"><Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.5)', whiteSpace: 'nowrap' }}>{unit}</Typography></InputAdornment>,
+        endAdornment: <InputAdornment position="end"><Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}>{unit}</Typography></InputAdornment>,
       }}
       sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
     />
@@ -129,7 +129,7 @@ export default function Settings() {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress sx={{ color: '#E94560' }} />
+        <CircularProgress sx={{ color: '#FFD100' }} />
       </Box>
     );
   }
@@ -139,7 +139,7 @@ export default function Settings() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Platform Settings</Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.5)', mt: 0.3 }}>Configure MOBO platform pricing and operations</Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.5)', mt: 0.3 }}>Configure MOBO platform pricing and operations</Typography>
         </Box>
         <Button
           startIcon={saving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <SaveIcon />}
@@ -147,10 +147,10 @@ export default function Settings() {
           onClick={handleSave}
           disabled={saving || !dirty}
           sx={{
-            bgcolor: dirty ? '#1A1A2E' : 'rgba(26,26,46,0.3)',
+            bgcolor: dirty ? '#000000' : 'rgba(0,0,0,0.3)',
             borderRadius: '8px',
-            '&:hover': { bgcolor: '#0F1321' },
-            '&:disabled': { bgcolor: 'rgba(26,26,46,0.25)', color: 'rgba(255,255,255,0.6)' },
+            '&:hover': { bgcolor: '#111111' },
+            '&:disabled': { bgcolor: 'rgba(0,0,0,0.25)', color: 'rgba(255,255,255,0.6)' },
           }}
         >
           {saving ? 'Saving...' : dirty ? 'Save Changes' : 'Saved'}
@@ -220,19 +220,19 @@ export default function Settings() {
                 </Grid>
               </Grid>
               <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F8F9FA', borderRadius: '8px' }}>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.5)', mb: 0.5 }}>Revenue Split Preview</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.5)', mb: 0.5 }}>Revenue Split Preview</Typography>
                 <Box sx={{ display: 'flex', gap: 2 }}>
                   <Box>
-                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(26,26,46,0.45)' }}>Driver gets</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.45)' }}>Driver gets</Typography>
                     <Typography sx={{ fontWeight: 700, color: '#4CAF50', fontSize: '0.95rem' }}>{settings.driverCommission}%</Typography>
                   </Box>
                   <Box>
-                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(26,26,46,0.45)' }}>Platform gets</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#E94560', fontSize: '0.95rem' }}>{100 - settings.driverCommission}%</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.45)' }}>Platform gets</Typography>
+                    <Typography sx={{ fontWeight: 700, color: '#FFD100', fontSize: '0.95rem' }}>{100 - settings.driverCommission}%</Typography>
                   </Box>
                   <Box>
-                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(26,26,46,0.45)' }}>Service fee</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#F5A623', fontSize: '0.95rem' }}>{settings.serviceFeePercent}%</Typography>
+                    <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.45)' }}>Service fee</Typography>
+                    <Typography sx={{ fontWeight: 700, color: '#FF8C00', fontSize: '0.95rem' }}>{settings.serviceFeePercent}%</Typography>
                   </Box>
                 </Box>
               </Box>
@@ -303,10 +303,10 @@ export default function Settings() {
                     onDelete={() => removeCity(city)}
                     deleteIcon={<DeleteIcon sx={{ fontSize: '14px !important' }} />}
                     sx={{
-                      bgcolor: 'rgba(26,26,46,0.08)',
+                      bgcolor: 'rgba(0,0,0,0.08)',
                       fontWeight: 600,
                       fontSize: '0.82rem',
-                      '& .MuiChip-deleteIcon': { color: '#E94560', '&:hover': { color: '#c62a47' } },
+                      '& .MuiChip-deleteIcon': { color: '#FFD100', '&:hover': { color: '#c62a47' } },
                     }}
                   />
                 ))}
@@ -321,7 +321,7 @@ export default function Settings() {
                   sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                 />
                 <Button onClick={addCity} variant="outlined" size="small" startIcon={<AddIcon />}
-                  sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px', '&:hover': { bgcolor: 'rgba(26,26,46,0.05)' }, whiteSpace: 'nowrap' }}>
+                  sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px', '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' }, whiteSpace: 'nowrap' }}>
                   Add City
                 </Button>
               </Box>
@@ -331,7 +331,7 @@ export default function Settings() {
 
         {/* Fare Calculator Preview */}
         <Grid item xs={12}>
-          <Card sx={{ bgcolor: '#1A1A2E', color: '#fff' }}>
+          <Card sx={{ bgcolor: '#000000', color: '#fff' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', mb: 0.5, color: '#fff' }}>Fare Calculator Preview</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', mb: 2 }}>
@@ -355,7 +355,7 @@ export default function Settings() {
                     <Grid item xs={12} sm={4} key={example.label}>
                       <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', mb: 0.5 }}>{example.label}</Typography>
-                        <Typography sx={{ fontSize: '1.3rem', fontWeight: 800, color: '#F5A623' }}>
+                        <Typography sx={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF8C00' }}>
                           {fare.toLocaleString()} XAF
                         </Typography>
                         <Typography sx={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', mt: 0.3 }}>
@@ -376,17 +376,17 @@ export default function Settings() {
         <Box sx={{
           position: 'fixed', bottom: 24, right: 24,
           display: 'flex', gap: 1, alignItems: 'center',
-          bgcolor: '#1A1A2E', borderRadius: '12px', px: 2.5, py: 1.5,
+          bgcolor: '#000000', borderRadius: '12px', px: 2.5, py: 1.5,
           boxShadow: '0 8px 32px rgba(0,0,0,0.25)', zIndex: 999,
         }}>
           <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.82rem' }}>Unsaved changes</Typography>
           <Button
-            startIcon={saving ? <CircularProgress size={16} sx={{ color: '#1A1A2E' }} /> : <SaveIcon />}
+            startIcon={saving ? <CircularProgress size={16} sx={{ color: '#000000' }} /> : <SaveIcon />}
             variant="contained"
             onClick={handleSave}
             disabled={saving}
             size="small"
-            sx={{ bgcolor: '#E94560', borderRadius: '8px', '&:hover': { bgcolor: '#c62a47' } }}
+            sx={{ bgcolor: '#FFD100', borderRadius: '8px', '&:hover': { bgcolor: '#c62a47' } }}
           >
             {saving ? 'Saving...' : 'Save Now'}
           </Button>

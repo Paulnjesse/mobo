@@ -217,13 +217,13 @@ export default function FleetManagement() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
-  const statusColor = s => ({ active: '#4CAF50', approved: '#4CAF50', pending: '#F5A623', suspended: '#E94560', rejected: '#E94560' }[s] || '#999');
-  const statusBg = s => ({ active: 'rgba(76,175,80,0.1)', approved: 'rgba(76,175,80,0.1)', pending: 'rgba(245,166,35,0.1)', suspended: 'rgba(233,69,96,0.1)', rejected: 'rgba(233,69,96,0.1)' }[s] || 'rgba(0,0,0,0.06)');
+  const statusColor = s => ({ active: '#4CAF50', approved: '#4CAF50', pending: '#FF8C00', suspended: '#FFD100', rejected: '#FFD100' }[s] || '#999');
+  const statusBg = s => ({ active: 'rgba(76,175,80,0.1)', approved: 'rgba(76,175,80,0.1)', pending: 'rgba(255,140,0,0.1)', suspended: 'rgba(255,209,0,0.1)', rejected: 'rgba(255,209,0,0.1)' }[s] || 'rgba(0,0,0,0.06)');
 
   const columns = [
     { field: 'name', headerName: 'Fleet', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ width: 32, height: 32, bgcolor: '#1A1A2E', fontSize: '0.8rem' }}>{row.name?.charAt(0)}</Avatar>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: '#000000', fontSize: '0.8rem' }}>{row.name?.charAt(0)}</Avatar>
         <Box>
           <Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>{row.name}</Typography>
           <Typography sx={{ fontSize: '0.72rem', color: '#666' }}>Fleet #{row.fleet_number}</Typography>
@@ -240,7 +240,7 @@ export default function FleetManagement() {
     { field: 'vehicles', headerName: 'Vehicles', renderCell: row => (
       <Box sx={{ minWidth: 100 }}>
         <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, mb: 0.3 }}>{row.vehicle_count || 0}/{row.max_vehicles || 15}</Typography>
-        <LinearProgress variant="determinate" value={((row.vehicle_count || 0) / (row.max_vehicles || 15)) * 100} sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(26,26,46,0.1)', '& .MuiLinearProgress-bar': { bgcolor: '#1A1A2E' } }} />
+        <LinearProgress variant="determinate" value={((row.vehicle_count || 0) / (row.max_vehicles || 15)) * 100} sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(0,0,0,0.1)', '& .MuiLinearProgress-bar': { bgcolor: '#000000' } }} />
       </Box>
     )},
     { field: 'total_earnings', headerName: 'Earnings', renderCell: row => (
@@ -266,10 +266,10 @@ export default function FleetManagement() {
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}><StatCard title="Total Fleets" value={stats.total?.toLocaleString()} icon={<FleetIcon />} iconBg="#1A1A2E" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#F5A623" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Fleets" value={stats.total?.toLocaleString()} icon={<FleetIcon />} iconBg="#000000" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Active Fleets" value={stats.active?.toLocaleString()} icon={<CarIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Total Vehicles" value={stats.total_vehicles?.toLocaleString()} icon={<CarIcon />} iconBg="#E94560" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Vehicles" value={stats.total_vehicles?.toLocaleString()} icon={<CarIcon />} iconBg="#FFD100" loading={loading} /></Grid>
       </Grid>
 
       <Card>
@@ -303,7 +303,7 @@ export default function FleetManagement() {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Typography fontWeight={700}>{selectedFleet?.name}</Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button size="small" startIcon={<EditIcon />} variant="outlined" onClick={() => { openEditFleet(selectedFleet); setDetailOpen(false); }} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px' }}>Edit Fleet</Button>
+            <Button size="small" startIcon={<EditIcon />} variant="outlined" onClick={() => { openEditFleet(selectedFleet); setDetailOpen(false); }} sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px' }}>Edit Fleet</Button>
             <IconButton onClick={() => setDetailOpen(false)} size="small"><CloseIcon /></IconButton>
           </Box>
         </DialogTitle>
@@ -321,7 +321,7 @@ export default function FleetManagement() {
                   ['Description', selectedFleet.description],
                 ].map(([l, v]) => (
                   <Grid item xs={6} sm={3} key={l}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{l}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{l}</Typography>
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 500 }}>{v || '—'}</Typography>
                   </Grid>
                 ))}
@@ -329,7 +329,7 @@ export default function FleetManagement() {
 
               <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>Vehicles ({selectedFleet.vehicles?.length || 0})</Typography>
               {selectedFleet.vehicles?.map(v => (
-                <Box key={v.id} sx={{ display: 'flex', alignItems: 'center', p: 1.5, mb: 1, bgcolor: 'rgba(26,26,46,0.03)', borderRadius: '10px', gap: 1.5 }}>
+                <Box key={v.id} sx={{ display: 'flex', alignItems: 'center', p: 1.5, mb: 1, bgcolor: 'rgba(0,0,0,0.03)', borderRadius: '10px', gap: 1.5 }}>
                   <CarIcon sx={{ color: '#666', fontSize: 20 }} />
                   <Box sx={{ flex: 1 }}>
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{v.make} {v.model} {v.year} · {v.plate}</Typography>
@@ -338,7 +338,7 @@ export default function FleetManagement() {
                   </Box>
                   <Chip label={v.status || 'pending'} size="small" sx={{ bgcolor: statusBg(v.status), color: statusColor(v.status), fontWeight: 600, fontSize: '0.7rem', height: 20, textTransform: 'capitalize' }} />
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <IconButton size="small" onClick={() => openEditVehicle(v, selectedFleet)} sx={{ color: '#1A1A2E' }}><EditIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={() => openEditVehicle(v, selectedFleet)} sx={{ color: '#000000' }}><EditIcon fontSize="small" /></IconButton>
                     {v.status === 'pending' && (
                       <>
                         <Button size="small" color="success" variant="outlined" onClick={() => handleApproveVehicle(v, selectedFleet)} sx={{ minWidth: 0, px: 1, py: 0.3, fontSize: '0.72rem', borderRadius: '6px' }}>✓</Button>
@@ -361,7 +361,7 @@ export default function FleetManagement() {
           ) : (
             <Button onClick={() => { handleSuspendFleet(selectedFleet); setDetailOpen(false); }} color="error" variant="outlined" size="small">Suspend</Button>
           )}
-          <Button onClick={() => setDetailOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+          <Button onClick={() => setDetailOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#000000' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
@@ -369,7 +369,7 @@ export default function FleetManagement() {
       <Dialog open={editFleetOpen} onClose={() => setEditFleetOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Edit Fleet — {editFleet?.name}</Typography>
           </Box>
           <IconButton onClick={() => setEditFleetOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -399,7 +399,7 @@ export default function FleetManagement() {
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditFleetOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleSaveFleet} variant="contained" size="small" disabled={fleetSaving} sx={{ bgcolor: '#1A1A2E' }}>
+          <Button onClick={handleSaveFleet} variant="contained" size="small" disabled={fleetSaving} sx={{ bgcolor: '#000000' }}>
             {fleetSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
           </Button>
         </DialogActions>
@@ -409,7 +409,7 @@ export default function FleetManagement() {
       <Dialog open={editVehicleOpen} onClose={() => setEditVehicleOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Edit Vehicle — {editVehicle?.plate}</Typography>
           </Box>
           <IconButton onClick={() => setEditVehicleOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -441,7 +441,7 @@ export default function FleetManagement() {
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditVehicleOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleSaveVehicle} variant="contained" size="small" disabled={vehicleSaving} sx={{ bgcolor: '#1A1A2E' }}>
+          <Button onClick={handleSaveVehicle} variant="contained" size="small" disabled={vehicleSaving} sx={{ bgcolor: '#000000' }}>
             {vehicleSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
           </Button>
         </DialogActions>

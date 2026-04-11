@@ -109,10 +109,10 @@ export default function Promotions() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Promotions</Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.5)', mt: 0.3 }}>Manage promo codes and discounts</Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.5)', mt: 0.3 }}>Manage promo codes and discounts</Typography>
         </Box>
         <Button startIcon={<AddIcon />} variant="contained" onClick={() => setCreateOpen(true)}
-          sx={{ bgcolor: '#1A1A2E', borderRadius: '8px', '&:hover': { bgcolor: '#0F1321' } }}>
+          sx={{ bgcolor: '#000000', borderRadius: '8px', '&:hover': { bgcolor: '#111111' } }}>
           New Promo Code
         </Button>
       </Box>
@@ -122,16 +122,16 @@ export default function Promotions() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { label: 'Total Promos', value: promos.length, color: '#1A1A2E' },
+          { label: 'Total Promos', value: promos.length, color: '#000000' },
           { label: 'Active', value: activeCount, color: '#4CAF50' },
-          { label: 'Inactive', value: promos.length - activeCount, color: '#E94560' },
-          { label: 'Total Uses', value: totalUsed.toLocaleString(), color: '#F5A623' },
+          { label: 'Inactive', value: promos.length - activeCount, color: '#FFD100' },
+          { label: 'Total Uses', value: totalUsed.toLocaleString(), color: '#FF8C00' },
         ].map((item) => (
           <Grid item xs={6} sm={3} key={item.label}>
             <Card>
               <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
                 <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: item.color }}>{item.value}</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>{item.label}</Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>{item.label}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -141,12 +141,12 @@ export default function Promotions() {
       {/* Promo Cards */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {loading ? (
-          <Typography sx={{ color: 'rgba(26,26,46,0.45)', textAlign: 'center', py: 4 }}>Loading promotions...</Typography>
+          <Typography sx={{ color: 'rgba(0,0,0,0.45)', textAlign: 'center', py: 4 }}>Loading promotions...</Typography>
         ) : promos.length === 0 ? (
           <Card>
             <CardContent sx={{ py: 6, textAlign: 'center' }}>
-              <LocalOfferIcon sx={{ fontSize: 48, color: 'rgba(26,26,46,0.2)', mb: 1 }} />
-              <Typography sx={{ color: 'rgba(26,26,46,0.4)' }}>No promo codes yet</Typography>
+              <LocalOfferIcon sx={{ fontSize: 48, color: 'rgba(0,0,0,0.2)', mb: 1 }} />
+              <Typography sx={{ color: 'rgba(0,0,0,0.4)' }}>No promo codes yet</Typography>
             </CardContent>
           </Card>
         ) : promos.map((promo) => {
@@ -154,7 +154,7 @@ export default function Promotions() {
           const isExpired = new Date(promo.expiry) < new Date();
           return (
             <Card key={promo.id} sx={{
-              border: `1px solid ${promo.active && !isExpired ? 'rgba(76,175,80,0.2)' : 'rgba(26,26,46,0.08)'}`,
+              border: `1px solid ${promo.active && !isExpired ? 'rgba(76,175,80,0.2)' : 'rgba(0,0,0,0.08)'}`,
               opacity: isExpired ? 0.7 : 1,
             }}>
               <CardContent sx={{ p: 2.5 }}>
@@ -162,9 +162,9 @@ export default function Promotions() {
                   <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                       <Box sx={{
-                        px: 1.5, py: 0.5, bgcolor: '#1A1A2E', borderRadius: '6px',
+                        px: 1.5, py: 0.5, bgcolor: '#000000', borderRadius: '6px',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
-                        '&:hover': { bgcolor: '#E94560' }, transition: 'bgcolor 0.2s',
+                        '&:hover': { bgcolor: '#FFD100' }, transition: 'bgcolor 0.2s',
                       }}
                         onClick={() => handleCopyCode(promo.code)}
                       >
@@ -176,16 +176,16 @@ export default function Promotions() {
                       <Chip
                         label={promo.discountType === 'percent' ? `${promo.value}% OFF` : `${Number(promo.value).toLocaleString()} XAF OFF`}
                         size="small"
-                        sx={{ bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560', fontWeight: 700, fontSize: '0.78rem' }}
+                        sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 700, fontSize: '0.78rem' }}
                       />
-                      {isExpired && <Chip label="Expired" size="small" sx={{ bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560', fontSize: '0.7rem' }} />}
+                      {isExpired && <Chip label="Expired" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontSize: '0.7rem' }} />}
                     </Box>
                     {promo.description && (
-                      <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.55)', mb: 0.5 }}>{promo.description}</Typography>
+                      <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.55)', mb: 0.5 }}>{promo.description}</Typography>
                     )}
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>Min fare: {Number(promo.minFare).toLocaleString()} XAF</Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>Expires: {promo.expiry}</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>Min fare: {Number(promo.minFare).toLocaleString()} XAF</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>Expires: {promo.expiry}</Typography>
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -202,7 +202,7 @@ export default function Promotions() {
                       <Switch checked={promo.active} onChange={() => handleToggle(promo)} size="small"
                         sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#4CAF50' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#4CAF50' } }} />
                     )}
-                    <IconButton size="small" onClick={() => setDeleteConfirm(promo)} sx={{ color: '#E94560', '&:hover': { bgcolor: 'rgba(233,69,96,0.1)' } }}>
+                    <IconButton size="small" onClick={() => setDeleteConfirm(promo)} sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}>
                       <DeleteIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
@@ -211,8 +211,8 @@ export default function Promotions() {
                 {/* Usage Bar */}
                 <Box sx={{ mt: 1.5 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)' }}>Usage</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#1A1A2E' }}>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)' }}>Usage</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#000000' }}>
                       {promo.usedCount} / {promo.maxUses} uses ({usagePercent.toFixed(0)}%)
                     </Typography>
                   </Box>
@@ -221,9 +221,9 @@ export default function Promotions() {
                     value={usagePercent}
                     sx={{
                       height: 6, borderRadius: '3px',
-                      bgcolor: 'rgba(26,26,46,0.08)',
+                      bgcolor: 'rgba(0,0,0,0.08)',
                       '& .MuiLinearProgress-bar': {
-                        bgcolor: usagePercent >= 90 ? '#E94560' : usagePercent >= 70 ? '#F5A623' : '#4CAF50',
+                        bgcolor: usagePercent >= 90 ? '#FFD100' : usagePercent >= 70 ? '#FF8C00' : '#4CAF50',
                         borderRadius: '3px',
                       },
                     }}
@@ -305,16 +305,16 @@ export default function Promotions() {
 
             {/* Preview */}
             {form.code && (
-              <Box sx={{ p: 1.5, bgcolor: '#F8F9FA', borderRadius: '8px', border: '1px dashed rgba(26,26,46,0.2)' }}>
-                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.5)', mb: 0.5 }}>Preview</Typography>
+              <Box sx={{ p: 1.5, bgcolor: '#F8F9FA', borderRadius: '8px', border: '1px dashed rgba(0,0,0,0.2)' }}>
+                <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.5)', mb: 0.5 }}>Preview</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', bgcolor: '#1A1A2E', color: '#fff', px: 1, py: 0.3, borderRadius: '4px' }}>
+                  <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', bgcolor: '#000000', color: '#fff', px: 1, py: 0.3, borderRadius: '4px' }}>
                     {form.code}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#E94560' }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFD100' }}>
                     {form.discountType === 'percent' ? `${form.value}% OFF` : `${Number(form.value).toLocaleString()} XAF OFF`}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>
                     (min {Number(form.minFare).toLocaleString()} XAF)
                   </Typography>
                 </Box>
@@ -325,7 +325,7 @@ export default function Promotions() {
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setCreateOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleCreate} variant="contained" size="small" disabled={saving} sx={{ bgcolor: '#1A1A2E' }}>
+          <Button onClick={handleCreate} variant="contained" size="small" disabled={saving} sx={{ bgcolor: '#000000' }}>
             {saving ? 'Creating...' : 'Create Promo'}
           </Button>
         </DialogActions>

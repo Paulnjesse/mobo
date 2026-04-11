@@ -18,8 +18,8 @@ import { ridesAPI } from '../services/api';
 const STATUS_COLORS = {
   completed: '#4CAF50',
   in_progress: '#2196F3',
-  cancelled: '#E94560',
-  requested: '#F5A623',
+  cancelled: '#FFD100',
+  requested: '#FF8C00',
   accepted: '#9C27B0',
 };
 
@@ -140,10 +140,10 @@ export default function Rides() {
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}><StatCard title="Total Rides" value={stats.total?.toLocaleString()} icon={<DirectionsCarIcon />} iconBg="#1A1A2E" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Rides" value={stats.total?.toLocaleString()} icon={<DirectionsCarIcon />} iconBg="#000000" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Active Now" value={stats.active?.toLocaleString()} icon={<ActiveIcon />} iconBg="#2196F3" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Completed Today" value={stats.completedToday?.toLocaleString()} icon={<CheckCircleIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Cancelled Today" value={stats.cancelledToday?.toLocaleString()} icon={<CancelIcon />} iconBg="#E94560" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Cancelled Today" value={stats.cancelledToday?.toLocaleString()} icon={<CancelIcon />} iconBg="#FFD100" loading={loading} /></Grid>
       </Grid>
 
       <Card>
@@ -192,7 +192,7 @@ export default function Rides() {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box>
             <Typography fontWeight={700}>Ride Details</Typography>
-            {selectedRide && <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.5)' }}>{selectedRide.id}</Typography>}
+            {selectedRide && <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.5)' }}>{selectedRide.id}</Typography>}
           </Box>
           <IconButton onClick={() => setViewOpen(false)} size="small"><CloseIcon /></IconButton>
         </DialogTitle>
@@ -206,8 +206,8 @@ export default function Rides() {
                   color: STATUS_COLORS[selectedRide.status],
                   fontWeight: 700, fontSize: '0.78rem', height: 26, textTransform: 'capitalize',
                 }} />
-                <Chip label={selectedRide.type} size="small" sx={{ bgcolor: 'rgba(26,26,46,0.08)', fontSize: '0.78rem', height: 26 }} />
-                <Chip label={selectedRide.paymentMethod} size="small" sx={{ bgcolor: 'rgba(26,26,46,0.08)', fontSize: '0.78rem', height: 26 }} />
+                <Chip label={selectedRide.type} size="small" sx={{ bgcolor: 'rgba(0,0,0,0.08)', fontSize: '0.78rem', height: 26 }} />
+                <Chip label={selectedRide.paymentMethod} size="small" sx={{ bgcolor: 'rgba(0,0,0,0.08)', fontSize: '0.78rem', height: 26 }} />
               </Box>
 
               <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -220,29 +220,29 @@ export default function Rides() {
                   ['Duration', selectedRide.duration ? `${selectedRide.duration} min` : '—'],
                 ].map(([label, val]) => (
                   <Grid item xs={6} key={label}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{label}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{label}</Typography>
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 500 }}>{val || '—'}</Typography>
                   </Grid>
                 ))}
               </Grid>
 
               <Divider sx={{ mb: 2 }} />
-              <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', mb: 1.5, color: 'rgba(26,26,46,0.7)' }}>Route</Typography>
+              <Typography sx={{ fontWeight: 600, fontSize: '0.85rem', mb: 1.5, color: 'rgba(0,0,0,0.7)' }}>Route</Typography>
               <Box sx={{ bgcolor: '#F8F9FA', borderRadius: '8px', p: 1.5, mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: '#4CAF50', flexShrink: 0 }} />
                   <Typography sx={{ fontSize: '0.82rem' }}><strong>Pickup:</strong> {selectedRide.pickup}</Typography>
                 </Box>
-                <Box sx={{ ml: 1.25, borderLeft: '2px dashed rgba(26,26,46,0.15)', height: 16, mb: 1 }} />
+                <Box sx={{ ml: 1.25, borderLeft: '2px dashed rgba(0,0,0,0.15)', height: 16, mb: 1 }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#E94560', flexShrink: 0 }} />
+                  <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#FFD100', flexShrink: 0 }} />
                   <Typography sx={{ fontSize: '0.82rem' }}><strong>Dropoff:</strong> {selectedRide.dropoff}</Typography>
                 </Box>
               </Box>
 
-              <Box sx={{ bgcolor: '#1A1A2E', borderRadius: '10px', p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ bgcolor: '#000000', borderRadius: '10px', p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Total Fare</Typography>
-                <Typography sx={{ color: '#F5A623', fontSize: '1.3rem', fontWeight: 800 }}>
+                <Typography sx={{ color: '#FF8C00', fontSize: '1.3rem', fontWeight: 800 }}>
                   {selectedRide.fare ? `${Number(selectedRide.fare).toLocaleString()} XAF` : '—'}
                 </Typography>
               </Box>

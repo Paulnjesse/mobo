@@ -46,7 +46,7 @@ const createDriverIcon = (color) =>
   });
 
 const ONLINE_ICON = createDriverIcon('#4CAF50');
-const ON_RIDE_ICON = createDriverIcon('#E94560');
+const ON_RIDE_ICON = createDriverIcon('#FFD100');
 const OFFLINE_ICON = createDriverIcon('#9E9E9E');
 
 // Mock driver data centered on Douala/Yaoundé, Cameroon
@@ -204,7 +204,7 @@ export default function LocationMap() {
             }}
           />
           {lastUpdated && (
-            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>
               Updated: {lastUpdated.toLocaleTimeString()}
             </Typography>
           )}
@@ -228,7 +228,7 @@ export default function LocationMap() {
             onClick={fetchMapData}
             disabled={loading}
             size="small"
-            sx={{ borderRadius: '8px', color: '#1A1A2E', border: '1px solid rgba(26,26,46,0.15)', '&:hover': { bgcolor: 'rgba(26,26,46,0.05)' } }}
+            sx={{ borderRadius: '8px', color: '#000000', border: '1px solid rgba(0,0,0,0.15)', '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' } }}
           >
             Refresh
           </Button>
@@ -240,16 +240,16 @@ export default function LocationMap() {
       {/* Stats Row */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
         {[
-          { label: 'Total Drivers', value: drivers.length, color: '#1A1A2E' },
+          { label: 'Total Drivers', value: drivers.length, color: '#000000' },
           { label: 'Online', value: onlineCount, color: '#4CAF50' },
-          { label: 'On Ride', value: onRideCount, color: '#E94560' },
+          { label: 'On Ride', value: onRideCount, color: '#FFD100' },
           { label: 'Offline', value: offlineCount, color: '#9E9E9E' },
           { label: 'Active Rides', value: activeRides.length, color: '#2196F3' },
         ].map((item) => (
           <Card key={item.label} sx={{ flex: '1 1 auto', minWidth: 110 }}>
             <CardContent sx={{ p: '12px !important', textAlign: 'center' }}>
               <Typography sx={{ fontSize: '1.4rem', fontWeight: 800, color: item.color }}>{item.value}</Typography>
-              <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.55)' }}>{item.label}</Typography>
+              <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.55)' }}>{item.label}</Typography>
             </CardContent>
           </Card>
         ))}
@@ -262,7 +262,7 @@ export default function LocationMap() {
           exclusive
           onChange={(_, v) => v && setFilter(v)}
           size="small"
-          sx={{ '& .MuiToggleButton-root': { borderRadius: '8px !important', px: 2, fontSize: '0.78rem', fontWeight: 600, border: '1px solid rgba(26,26,46,0.15) !important' } }}
+          sx={{ '& .MuiToggleButton-root': { borderRadius: '8px !important', px: 2, fontSize: '0.78rem', fontWeight: 600, border: '1px solid rgba(0,0,0,0.15) !important' } }}
         >
           <ToggleButton value="all">All Drivers</ToggleButton>
           <ToggleButton value="online">Online Only</ToggleButton>
@@ -272,13 +272,13 @@ export default function LocationMap() {
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           {[
             { color: '#4CAF50', label: 'Online' },
-            { color: '#E94560', label: 'On Ride' },
+            { color: '#FFD100', label: 'On Ride' },
             { color: '#9E9E9E', label: 'Offline' },
             { color: '#2196F3', label: 'Active Route' },
           ].map((item) => (
             <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: item.color }} />
-              <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.6)' }}>{item.label}</Typography>
+              <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.6)' }}>{item.label}</Typography>
             </Box>
           ))}
         </Box>
@@ -293,7 +293,7 @@ export default function LocationMap() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               backgroundColor: 'rgba(255,255,255,0.8)',
             }}>
-              <CircularProgress sx={{ color: '#E94560' }} />
+              <CircularProgress sx={{ color: '#FFD100' }} />
             </Box>
           )}
           <MapContainer
@@ -317,20 +317,20 @@ export default function LocationMap() {
                 <Popup>
                   <Box sx={{ minWidth: 180 }}>
                     <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.5 }}>{driver.name}</Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.6)', mb: 0.3 }}>{driver.vehicle}</Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.6)', mb: 0.3 }}>{driver.vehicle}</Typography>
                     <Box sx={{ display: 'flex', gap: 0.5, mb: 0.5 }}>
                       <Chip
                         label={driver.onRide ? 'On Ride' : driver.online ? 'Online' : 'Offline'}
                         size="small"
                         sx={{
-                          bgcolor: driver.onRide ? 'rgba(233,69,96,0.1)' : driver.online ? 'rgba(76,175,80,0.1)' : 'rgba(158,158,158,0.1)',
-                          color: driver.onRide ? '#E94560' : driver.online ? '#4CAF50' : '#9E9E9E',
+                          bgcolor: driver.onRide ? 'rgba(255,209,0,0.1)' : driver.online ? 'rgba(76,175,80,0.1)' : 'rgba(158,158,158,0.1)',
+                          color: driver.onRide ? '#FFD100' : driver.online ? '#4CAF50' : '#9E9E9E',
                           fontWeight: 600, fontSize: '0.68rem', height: 20,
                         }}
                       />
                     </Box>
                     <Typography sx={{ fontSize: '0.78rem' }}>⭐ {driver.rating} rating</Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.55)' }}>{driver.city}</Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.55)' }}>{driver.city}</Typography>
                   </Box>
                 </Popup>
               </Marker>
@@ -348,7 +348,7 @@ export default function LocationMap() {
         </Box>
       </Card>
 
-      <Typography sx={{ mt: 1.5, fontSize: '0.72rem', color: 'rgba(26,26,46,0.4)', textAlign: 'center' }}>
+      <Typography sx={{ mt: 1.5, fontSize: '0.72rem', color: 'rgba(0,0,0,0.4)', textAlign: 'center' }}>
         Map data from OpenStreetMap contributors. Driver positions refresh every 30 seconds.
       </Typography>
     </Box>

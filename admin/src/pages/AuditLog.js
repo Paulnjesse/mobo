@@ -18,8 +18,8 @@ import { useAuth } from '../context/AuthContext';
 
 const ACTION_COLORS = {
   view:         { bg: 'rgba(33,150,243,0.1)',  color: '#2196F3' },
-  reveal_field: { bg: 'rgba(233,69,96,0.1)',   color: '#E94560' },
-  download:     { bg: 'rgba(245,166,35,0.1)',  color: '#F5A623' },
+  reveal_field: { bg: 'rgba(255,209,0,0.1)',   color: '#FFD100' },
+  download:     { bg: 'rgba(255,140,0,0.1)',  color: '#FF8C00' },
   upload:       { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
   verify:       { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
   archive:      { bg: 'rgba(158,158,158,0.1)', color: '#9E9E9E' },
@@ -112,7 +112,7 @@ export default function AuditLog() {
       headerName: 'Admin',
       renderCell: (row) => (
         <Box>
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#1A1A2E' }}>
+          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#000000' }}>
             {row.admin_name || row.accessed_by_name || 'Unknown'}
           </Typography>
           <Typography sx={{ fontSize: '0.7rem', color: '#999' }}>
@@ -140,7 +140,7 @@ export default function AuditLog() {
       headerName: 'Resource',
       renderCell: (row) => (
         <Box>
-          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#1A1A2E' }}>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#000000' }}>
             {RESOURCE_LABELS[row.resource_type] || row.resource_type}
           </Typography>
           <Typography sx={{ fontSize: '0.7rem', color: '#BBB', fontFamily: 'monospace' }}>
@@ -159,7 +159,7 @@ export default function AuditLog() {
           <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap' }}>
             {fields.slice(0, 3).map(f => (
               <Chip key={f} label={f} size="small"
-                sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'rgba(233,69,96,0.08)', color: '#E94560' }} />
+                sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'rgba(255,209,0,0.08)', color: '#FFD100' }} />
             ))}
             {fields.length > 3 && (
               <Chip label={`+${fields.length - 3}`} size="small"
@@ -197,21 +197,21 @@ export default function AuditLog() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <ShieldIcon sx={{ color: '#E94560' }} />
+          <ShieldIcon sx={{ color: '#FFD100' }} />
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>Audit Log</Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)' }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>
               Every data access by admin staff is recorded here
             </Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button startIcon={<RefreshIcon />} onClick={fetchLogs} disabled={loading}
-            size="small" variant="outlined" sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px' }}>
+            size="small" variant="outlined" sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px' }}>
             Refresh
           </Button>
           <Button startIcon={<DownloadIcon />} onClick={handleExportCSV} disabled={logs.length === 0}
-            size="small" variant="outlined" sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px' }}>
+            size="small" variant="outlined" sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px' }}>
             Export CSV
           </Button>
         </Box>
@@ -222,15 +222,15 @@ export default function AuditLog() {
       {/* Summary cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { label: 'Total Records', value: total.toLocaleString(), color: '#1A1A2E' },
+          { label: 'Total Records', value: total.toLocaleString(), color: '#000000' },
           { label: 'Filtered', value: logs.length.toLocaleString(), color: '#2196F3' },
-          { label: 'PII Reveals', value: logs.filter(l => l.action === 'reveal_field').length.toLocaleString(), color: '#E94560' },
-          { label: 'Downloads', value: logs.filter(l => l.action === 'download').length.toLocaleString(), color: '#F5A623' },
+          { label: 'PII Reveals', value: logs.filter(l => l.action === 'reveal_field').length.toLocaleString(), color: '#FFD100' },
+          { label: 'Downloads', value: logs.filter(l => l.action === 'download').length.toLocaleString(), color: '#FF8C00' },
         ].map(({ label, value, color }) => (
           <Grid item xs={6} sm={3} key={label}>
             <Card>
               <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Typography>
                 <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color }}>{value}</Typography>
               </CardContent>
             </Card>
@@ -301,7 +301,7 @@ export default function AuditLog() {
         <CardContent sx={{ p: 2 }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
-              <CircularProgress sx={{ color: '#1A1A2E' }} />
+              <CircularProgress sx={{ color: '#000000' }} />
             </Box>
           ) : (
             <DataTable
@@ -320,11 +320,11 @@ export default function AuditLog() {
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button size="small" variant="outlined" disabled={page === 0} onClick={() => setPage(p => p - 1)}
-                  sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px', minWidth: 80 }}>
+                  sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px', minWidth: 80 }}>
                   Previous
                 </Button>
                 <Button size="small" variant="outlined" disabled={(page + 1) * rowsPerPage >= total} onClick={() => setPage(p => p + 1)}
-                  sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px', minWidth: 80 }}>
+                  sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px', minWidth: 80 }}>
                   Next
                 </Button>
               </Box>

@@ -33,9 +33,9 @@ const EMPTY_FORM = { name: '', city: 'Douala', multiplier: 1.5, startTime: '07:0
 
 function multiplierColor(m) {
   if (m < 1.3) return '#4CAF50';
-  if (m < 1.7) return '#F5A623';
+  if (m < 1.7) return '#FF8C00';
   if (m < 2.0) return '#FF5722';
-  return '#E94560';
+  return '#FFD100';
 }
 
 export default function SurgePricing() {
@@ -121,12 +121,12 @@ export default function SurgePricing() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Surge Pricing</Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.5)', mt: 0.3 }}>
+          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.5)', mt: 0.3 }}>
             Manage dynamic pricing zones and multipliers
           </Typography>
         </Box>
         <Button startIcon={<AddIcon />} variant="contained" onClick={() => setCreateOpen(true)}
-          sx={{ bgcolor: '#1A1A2E', borderRadius: '8px', '&:hover': { bgcolor: '#0F1321' } }}>
+          sx={{ bgcolor: '#000000', borderRadius: '8px', '&:hover': { bgcolor: '#111111' } }}>
           New Surge Zone
         </Button>
       </Box>
@@ -139,8 +139,8 @@ export default function SurgePricing() {
         <Grid item xs={6} sm={3}>
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#1A1A2E' }}>{zones.length}</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>Total Zones</Typography>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#000000' }}>{zones.length}</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Total Zones</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -148,25 +148,25 @@ export default function SurgePricing() {
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
               <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#4CAF50' }}>{activeCount}</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>Active Zones</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Active Zones</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={6} sm={3}>
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#E94560' }}>{zones.length - activeCount}</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>Inactive</Typography>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#FFD100' }}>{zones.length - activeCount}</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Inactive</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={6} sm={3}>
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#F5A623' }}>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#FF8C00' }}>
                 {zones.length > 0 ? (zones.reduce((a, z) => a + z.multiplier, 0) / zones.length).toFixed(1) : '—'}x
               </Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>Avg Multiplier</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Avg Multiplier</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -176,7 +176,7 @@ export default function SurgePricing() {
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>Peak Hour Presets</Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>
+          <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 2 }}>
             Click a preset to quickly create a surge zone
           </Typography>
           <Grid container spacing={1.5}>
@@ -185,20 +185,20 @@ export default function SurgePricing() {
                 <Card
                   onClick={() => { setForm({ ...EMPTY_FORM, name: `Douala — ${preset.label}`, multiplier: preset.multiplier, startTime: preset.startTime, endTime: preset.endTime }); setCreateOpen(true); }}
                   sx={{
-                    cursor: 'pointer', border: '1px solid rgba(26,26,46,0.1)',
-                    '&:hover': { borderColor: '#E94560', boxShadow: '0 4px 16px rgba(233,69,96,0.1)', transform: 'translateY(-1px)' },
+                    cursor: 'pointer', border: '1px solid rgba(0,0,0,0.1)',
+                    '&:hover': { borderColor: '#FFD100', boxShadow: '0 4px 16px rgba(255,209,0,0.1)', transform: 'translateY(-1px)' },
                     transition: 'all 0.2s',
                   }}
                 >
                   <CardContent sx={{ p: '14px !important' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <BoltIcon sx={{ color: '#F5A623', fontSize: 18 }} />
+                      <BoltIcon sx={{ color: '#FF8C00', fontSize: 18 }} />
                       <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }}>{preset.label}</Typography>
                     </Box>
-                    <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.5)', mb: 0.5 }}>{preset.description}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.5)', mb: 0.5 }}>{preset.description}</Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Chip label={`${preset.multiplier}x`} size="small" sx={{ bgcolor: `${multiplierColor(preset.multiplier)}18`, color: multiplierColor(preset.multiplier), fontWeight: 700, fontSize: '0.8rem' }} />
-                      <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.45)' }}>{preset.startTime} – {preset.endTime}</Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.45)' }}>{preset.startTime} – {preset.endTime}</Typography>
                     </Box>
                   </CardContent>
                 </Card>
@@ -213,18 +213,18 @@ export default function SurgePricing() {
         <CardContent sx={{ p: 2.5 }}>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontSize: '0.95rem' }}>Surge Zones</Typography>
           {loading ? (
-            <Typography sx={{ color: 'rgba(26,26,46,0.45)', textAlign: 'center', py: 4 }}>Loading zones...</Typography>
+            <Typography sx={{ color: 'rgba(0,0,0,0.45)', textAlign: 'center', py: 4 }}>Loading zones...</Typography>
           ) : zones.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
-              <BoltIcon sx={{ fontSize: 48, color: 'rgba(26,26,46,0.2)', mb: 1 }} />
-              <Typography sx={{ color: 'rgba(26,26,46,0.4)' }}>No surge zones configured</Typography>
-              <Button onClick={() => setCreateOpen(true)} sx={{ mt: 1, color: '#E94560' }}>Create your first zone</Button>
+              <BoltIcon sx={{ fontSize: 48, color: 'rgba(0,0,0,0.2)', mb: 1 }} />
+              <Typography sx={{ color: 'rgba(0,0,0,0.4)' }}>No surge zones configured</Typography>
+              <Button onClick={() => setCreateOpen(true)} sx={{ mt: 1, color: '#FFD100' }}>Create your first zone</Button>
             </Box>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {zones.map((zone) => (
                 <Box key={zone.id} sx={{
-                  p: 2, borderRadius: '10px', border: `1px solid ${zone.active ? 'rgba(76,175,80,0.2)' : 'rgba(26,26,46,0.08)'}`,
+                  p: 2, borderRadius: '10px', border: `1px solid ${zone.active ? 'rgba(76,175,80,0.2)' : 'rgba(0,0,0,0.08)'}`,
                   bgcolor: zone.active ? 'rgba(76,175,80,0.02)' : '#fafafa',
                   display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap',
                 }}>
@@ -238,8 +238,8 @@ export default function SurgePricing() {
                       />
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)' }}>📍 {zone.city}</Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.55)', display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>📍 {zone.city}</Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', gap: 0.3 }}>
                         <ScheduleIcon sx={{ fontSize: 12 }} /> {zone.startTime} – {zone.endTime}
                       </Typography>
                       {zone.autoSurge && <Chip label="Auto" size="small" sx={{ bgcolor: 'rgba(33,150,243,0.1)', color: '#2196F3', fontSize: '0.68rem', height: 18 }} />}
@@ -261,7 +261,7 @@ export default function SurgePricing() {
                       size="small"
                       sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#4CAF50' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#4CAF50' } }}
                     />
-                    <IconButton size="small" onClick={() => setDeleteConfirm(zone)} sx={{ color: '#E94560', '&:hover': { bgcolor: 'rgba(233,69,96,0.1)' } }}>
+                    <IconButton size="small" onClick={() => setDeleteConfirm(zone)} sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}>
                       <DeleteIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
@@ -316,15 +316,15 @@ export default function SurgePricing() {
               </Grid>
             </Grid>
             <FormControlLabel
-              control={<Switch checked={form.autoSurge} onChange={(e) => setForm({ ...form, autoSurge: e.target.checked })} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#1A1A2E' } }} />}
-              label={<Box><Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Auto-Surge</Typography><Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)' }}>Automatically activate during peak hours</Typography></Box>}
+              control={<Switch checked={form.autoSurge} onChange={(e) => setForm({ ...form, autoSurge: e.target.checked })} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#000000' } }} />}
+              label={<Box><Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>Auto-Surge</Typography><Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)' }}>Automatically activate during peak hours</Typography></Box>}
             />
             <Box sx={{ p: 1.5, bgcolor: '#F8F9FA', borderRadius: '8px' }}>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: 0.5, color: 'rgba(26,26,46,0.6)' }}>Quick Presets</Typography>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, mb: 0.5, color: 'rgba(0,0,0,0.6)' }}>Quick Presets</Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 {PEAK_PRESETS.map((p) => (
                   <Chip key={p.label} label={p.label} size="small" onClick={() => applyPreset(p)} clickable
-                    sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560' } }} />
+                    sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100' } }} />
                 ))}
               </Box>
             </Box>
@@ -333,7 +333,7 @@ export default function SurgePricing() {
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setCreateOpen(false)} variant="outlined" size="small">Cancel</Button>
-          <Button onClick={handleCreate} variant="contained" size="small" disabled={saving} sx={{ bgcolor: '#1A1A2E' }}>
+          <Button onClick={handleCreate} variant="contained" size="small" disabled={saving} sx={{ bgcolor: '#000000' }}>
             {saving ? 'Creating...' : 'Create Zone'}
           </Button>
         </DialogActions>

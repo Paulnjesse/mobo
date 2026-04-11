@@ -209,7 +209,7 @@ export default function Drivers() {
   const columns = [
     { field: 'name', headerName: 'Driver', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#1A1A2E' }}>{getName(row)?.charAt(0)}</Avatar>
+        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#000000' }}>{getName(row)?.charAt(0)}</Avatar>
         <Box>
           <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{getName(row)}</Typography>
           <Typography sx={{ fontSize: '0.7rem', color: '#666' }}>{row.city}</Typography>
@@ -223,7 +223,7 @@ export default function Drivers() {
     }},
     { field: 'rating', headerName: 'Rating', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <StarIcon sx={{ fontSize: 14, color: '#F5A623' }} />
+        <StarIcon sx={{ fontSize: 14, color: '#FF8C00' }} />
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{row.rating}</Typography>
       </Box>
     )},
@@ -232,11 +232,11 @@ export default function Drivers() {
       <Chip label={row.is_online ? 'Online' : 'Offline'} size="small" sx={{ bgcolor: row.is_online ? 'rgba(76,175,80,0.1)' : 'rgba(0,0,0,0.06)', color: row.is_online ? '#4CAF50' : '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'is_approved', headerName: 'Approval', renderCell: row => (
-      <Chip label={row.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: row.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(245,166,35,0.1)', color: row.is_approved ? '#4CAF50' : '#F5A623', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+      <Chip label={row.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: row.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: row.is_approved ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'is_suspended', headerName: 'Status', renderCell: row => (
       row.is_suspended
-        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : <Chip label="Active" size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
   ];
@@ -270,10 +270,10 @@ export default function Drivers() {
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}><StatCard title="Total Drivers" value={stats.total?.toLocaleString()} icon={<CarIcon />} iconBg="#1A1A2E" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Drivers" value={stats.total?.toLocaleString()} icon={<CarIcon />} iconBg="#000000" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Online Now" value={stats.online?.toLocaleString()} icon={<OnlineIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#F5A623" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#E94560" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#FFD100" loading={loading} /></Grid>
       </Grid>
 
       <Card>
@@ -309,7 +309,7 @@ export default function Drivers() {
                 {canArchive && !row.is_deleted && (
                   <Tooltip title="Archive Driver" arrow>
                     <IconButton size="small" onClick={() => setArchiveConfirm(row)}
-                      sx={{ color: '#F5A623', '&:hover': { bgcolor: 'rgba(245,166,35,0.1)' } }}>
+                      sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
@@ -325,7 +325,7 @@ export default function Drivers() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Edit Driver — {editDriver && getName(editDriver)}</Typography>
           </Box>
           <IconButton onClick={() => setEditOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -402,7 +402,7 @@ export default function Drivers() {
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
           {editTab !== 2 && (
             <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
-              sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+              sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
               {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
             </Button>
           )}
@@ -420,11 +420,11 @@ export default function Drivers() {
           {selectedDriver && (
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                <Avatar sx={{ width: 56, height: 56, bgcolor: '#1A1A2E', fontSize: '1.4rem' }}>{getName(selectedDriver)?.charAt(0)}</Avatar>
+                <Avatar sx={{ width: 56, height: 56, bgcolor: '#000000', fontSize: '1.4rem' }}>{getName(selectedDriver)?.charAt(0)}</Avatar>
                 <Box>
                   <Typography fontWeight={700} fontSize="1rem">{getName(selectedDriver)}</Typography>
                   <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                    <Chip label={selectedDriver.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: selectedDriver.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(245,166,35,0.1)', color: selectedDriver.is_approved ? '#4CAF50' : '#F5A623', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                    <Chip label={selectedDriver.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: selectedDriver.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: selectedDriver.is_approved ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
                     <Chip label={selectedDriver.is_online ? 'Online' : 'Offline'} size="small" sx={{ bgcolor: selectedDriver.is_online ? 'rgba(76,175,80,0.15)' : 'rgba(0,0,0,0.06)', color: selectedDriver.is_online ? '#4CAF50' : '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
                   </Box>
                 </Box>
@@ -458,7 +458,7 @@ export default function Drivers() {
                   ['Total Earnings', `${Number(selectedDriver.total_earnings || 0).toLocaleString()} XAF`],
                 ].map(([l, v]) => (
                   <Grid item xs={6} key={l}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{l}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{l}</Typography>
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 500 }}>{v || '—'}</Typography>
                   </Grid>
                 ))}
@@ -476,7 +476,7 @@ export default function Drivers() {
                       ['Wheelchair', selectedDriver.vehicle.is_wheelchair_accessible ? 'Yes' : 'No'],
                     ].map(([l, v]) => (
                       <Grid item xs={6} key={l}>
-                        <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{l}</Typography>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{l}</Typography>
                         <Typography sx={{ fontSize: '0.88rem', fontWeight: 500, textTransform: 'capitalize' }}>{v || '—'}</Typography>
                       </Grid>
                     ))}
@@ -488,7 +488,7 @@ export default function Drivers() {
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          {canWrite && <Button onClick={() => { openEdit(selectedDriver); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
+          {canWrite && <Button onClick={() => { openEdit(selectedDriver); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#000000', color: '#000000' }}>Edit</Button>}
           {canApprove && !selectedDriver?.is_approved && !selectedDriver?.is_deleted && (
             <Button onClick={() => { handleApprove(selectedDriver); setViewOpen(false); }} color="success" variant="outlined" size="small">Approve</Button>
           )}
@@ -500,14 +500,14 @@ export default function Drivers() {
           {canArchive && !selectedDriver?.is_deleted && (
             <Button onClick={() => { setArchiveConfirm(selectedDriver); setViewOpen(false); }} color="warning" variant="outlined" size="small" startIcon={<ArchiveIcon />}>Archive</Button>
           )}
-          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#000000' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#F5A623' }} />
+          <ArchiveIcon sx={{ color: '#FF8C00' }} />
           <Typography fontWeight={700}>Archive Driver</Typography>
         </DialogTitle>
         <DialogContent>

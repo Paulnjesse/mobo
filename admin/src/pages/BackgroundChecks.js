@@ -55,11 +55,11 @@ const MOCK_DRIVERS = Array.from({ length: 28 }, (_, i) => {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  not_checked: { label: 'Not Checked', color: '#E94560', bg: 'rgba(233,69,96,0.1)' },
-  pending:     { label: 'Pending',     color: '#F5A623', bg: 'rgba(245,166,35,0.1)' },
+  not_checked: { label: 'Not Checked', color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
+  pending:     { label: 'Pending',     color: '#FF8C00', bg: 'rgba(255,140,0,0.1)' },
   clear:       { label: 'Clear',       color: '#4CAF50', bg: 'rgba(76,175,80,0.1)'  },
-  flagged:     { label: 'Flagged ⚠️',  color: '#E94560', bg: 'rgba(233,69,96,0.1)' },
-  expired:     { label: 'Expired',     color: '#E94560', bg: 'rgba(233,69,96,0.1)' },
+  flagged:     { label: 'Flagged ⚠️',  color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
+  expired:     { label: 'Expired',     color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
 };
 
 function StatusChip({ status }) {
@@ -110,10 +110,10 @@ const EMPTY_FORM = {
 const inputSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
-    '&:hover fieldset': { borderColor: '#1A1A2E' },
-    '&.Mui-focused fieldset': { borderColor: '#1A1A2E' },
+    '&:hover fieldset': { borderColor: '#000000' },
+    '&.Mui-focused fieldset': { borderColor: '#000000' },
   },
-  '& .MuiInputLabel-root.Mui-focused': { color: '#1A1A2E' },
+  '& .MuiInputLabel-root.Mui-focused': { color: '#000000' },
 };
 
 // ─── main component ──────────────────────────────────────────────────────────
@@ -259,8 +259,8 @@ export default function BackgroundChecks() {
 
   const daysChip = (days) => {
     if (days == null) return '—';
-    if (days < 0) return <Chip label="Overdue" size="small" sx={{ bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
-    if (days < 30) return <Chip label={`${days}d`} size="small" sx={{ bgcolor: 'rgba(245,166,35,0.1)', color: '#F5A623', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
+    if (days < 0) return <Chip label="Overdue" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
+    if (days < 30) return <Chip label={`${days}d`} size="small" sx={{ bgcolor: 'rgba(255,140,0,0.1)', color: '#FF8C00', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
     return <Typography sx={{ fontSize: '0.82rem' }}>{days}d</Typography>;
   };
 
@@ -273,7 +273,7 @@ export default function BackgroundChecks() {
           startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
           onClick={fetchDrivers}
           disabled={loading}
-          sx={{ borderRadius: '8px', borderColor: '#1A1A2E', color: '#1A1A2E', fontWeight: 600 }}
+          sx={{ borderRadius: '8px', borderColor: '#000000', color: '#000000', fontWeight: 600 }}
         >
           Refresh
         </Button>
@@ -289,7 +289,7 @@ export default function BackgroundChecks() {
             title="Total Drivers"
             value={stats.total.toLocaleString()}
             icon={<VerifiedIcon />}
-            iconBg="#1A1A2E"
+            iconBg="#000000"
             loading={loading}
           />
         </Grid>
@@ -298,7 +298,7 @@ export default function BackgroundChecks() {
             title="Not Checked"
             value={stats.notChecked.toLocaleString()}
             icon={<ExpiredIcon />}
-            iconBg="#E94560"
+            iconBg="#FFD100"
             loading={loading}
           />
         </Grid>
@@ -307,7 +307,7 @@ export default function BackgroundChecks() {
             title="Expiring Soon"
             value={stats.expiringSoon.toLocaleString()}
             icon={<PendingIcon />}
-            iconBg="#F5A623"
+            iconBg="#FF8C00"
             loading={loading}
           />
         </Grid>
@@ -316,7 +316,7 @@ export default function BackgroundChecks() {
             title="Flagged"
             value={stats.flagged.toLocaleString()}
             icon={<WarningIcon />}
-            iconBg="#E94560"
+            iconBg="#FFD100"
             loading={loading}
           />
         </Grid>
@@ -365,7 +365,7 @@ export default function BackgroundChecks() {
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
-                        color: 'rgba(26,26,46,0.45)',
+                        color: 'rgba(0,0,0,0.45)',
                         borderBottom: '1px solid rgba(0,0,0,0.08)',
                         whiteSpace: 'nowrap',
                       }}
@@ -379,12 +379,12 @@ export default function BackgroundChecks() {
                 {loading ? (
                   <tr>
                     <td colSpan={8} style={{ padding: '32px', textAlign: 'center' }}>
-                      <CircularProgress size={28} sx={{ color: '#1A1A2E' }} />
+                      <CircularProgress size={28} sx={{ color: '#000000' }} />
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'rgba(26,26,46,0.4)', fontSize: '0.88rem' }}>
+                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'rgba(0,0,0,0.4)', fontSize: '0.88rem' }}>
                       No drivers found.
                     </td>
                   </tr>
@@ -398,23 +398,23 @@ export default function BackgroundChecks() {
                           borderBottom: '1px solid rgba(0,0,0,0.05)',
                           transition: 'background 0.15s',
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(26,26,46,0.02)'}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         {/* Driver */}
                         <td style={{ padding: '10px 12px' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#1A1A2E' }}>
+                            <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#000000' }}>
                               {getName(driver)?.charAt(0)}
                             </Avatar>
                             <Typography sx={{ fontSize: '0.83rem', fontWeight: 600 }}>{getName(driver)}</Typography>
                           </Box>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.7)' }}>{driver.phone}</Typography>
+                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)' }}>{driver.phone}</Typography>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.7)' }}>{driver.city}</Typography>
+                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)' }}>{driver.city}</Typography>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <Typography sx={{ fontSize: '0.8rem' }}>{bc.last_check_date?.substring(0, 10) || '—'}</Typography>
@@ -440,8 +440,8 @@ export default function BackgroundChecks() {
                                 py: 0.4,
                                 px: 1.2,
                                 borderRadius: '6px',
-                                borderColor: '#1A1A2E',
-                                color: '#1A1A2E',
+                                borderColor: '#000000',
+                                color: '#000000',
                                 fontWeight: 600,
                                 minWidth: 'auto',
                               }}
@@ -459,7 +459,7 @@ export default function BackgroundChecks() {
           </Box>
 
           {!loading && (
-            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.4)', mt: 1.5, textAlign: 'right' }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.4)', mt: 1.5, textAlign: 'right' }}>
               {filtered.length} of {drivers.length} drivers shown
             </Typography>
           )}
@@ -476,7 +476,7 @@ export default function BackgroundChecks() {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E', fontSize: 20 }} />
+            <EditIcon sx={{ color: '#000000', fontSize: 20 }} />
             <Typography fontWeight={700}>
               Update Background Check — {editDriver && getName(editDriver)}
             </Typography>
@@ -556,7 +556,7 @@ export default function BackgroundChecks() {
             variant="contained"
             size="small"
             disabled={saving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px', fontWeight: 700 }}
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px', fontWeight: 700 }}
           >
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Save'}
           </Button>

@@ -223,7 +223,7 @@ function IncidentDetailModal({ incident, open, onClose, onResolve }) {
                   <Paper
                     key={idx}
                     variant="outlined"
-                    sx={{ p: 1.5, borderRadius: 2, borderLeft: '3px solid #E94560' }}
+                    sx={{ p: 1.5, borderRadius: 2, borderLeft: '3px solid #FFD100' }}
                   >
                     <Typography variant="caption" color="text.secondary">
                       {msg.sender_name} — {new Date(msg.created_at).toLocaleString()}
@@ -428,7 +428,7 @@ export default function SafetyReports() {
             <ShieldIcon sx={{ color: '#D32F2F', fontSize: 26 }} />
           </Avatar>
           <Box>
-            <Typography variant="h5" fontWeight={700} color="#1A1A2E">
+            <Typography variant="h5" fontWeight={700} color="#000000">
               Safety Reports
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -598,7 +598,7 @@ export default function SafetyReports() {
                       </TableCell>
                       <TableCell align="center">
                         <Tooltip title="View Details">
-                          <IconButton size="small" onClick={() => openModal(incident)} sx={{ color: '#1A1A2E' }}>
+                          <IconButton size="small" onClick={() => openModal(incident)} sx={{ color: '#000000' }}>
                             <VisibilityIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>

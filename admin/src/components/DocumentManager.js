@@ -36,7 +36,7 @@ const DOC_TYPE_OPTIONS = Object.entries(DOC_TYPE_LABELS);
 
 function FileTypeIcon({ mimeType }) {
   if (mimeType?.startsWith('image/')) return <ImageIcon sx={{ fontSize: 28, color: '#2196F3' }} />;
-  if (mimeType === 'application/pdf') return <PdfIcon sx={{ fontSize: 28, color: '#E94560' }} />;
+  if (mimeType === 'application/pdf') return <PdfIcon sx={{ fontSize: 28, color: '#FFD100' }} />;
   return <FileIcon sx={{ fontSize: 28, color: '#9E9E9E' }} />;
 }
 
@@ -145,7 +145,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
       {success && <Alert severity="success" sx={{ mb: 1.5, borderRadius: '8px', py: 0.5 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
       {canWrite && (
-        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: '10px', border: '1.5px dashed rgba(26,26,46,0.2)', bgcolor: '#FAFAFA' }}>
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: '10px', border: '1.5px dashed rgba(0,0,0,0.2)', bgcolor: '#FAFAFA' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <Box
               component="select"
@@ -153,7 +153,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
               onChange={e => setDocType(e.target.value)}
               disabled={uploading}
               sx={{
-                border: '1px solid rgba(26,26,46,0.2)', borderRadius: '8px',
+                border: '1px solid rgba(0,0,0,0.2)', borderRadius: '8px',
                 px: 1.5, py: 0.8, fontSize: '0.82rem', cursor: 'pointer',
                 bgcolor: '#fff', outline: 'none', flex: 1, minWidth: 160,
               }}
@@ -175,7 +175,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
               disabled={uploading}
               size="small"
               variant="contained"
-              sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px', whiteSpace: 'nowrap' }}
+              sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px', whiteSpace: 'nowrap' }}
             >
               {uploading ? 'Encrypting…' : 'Upload & Encrypt'}
             </Button>
@@ -191,7 +191,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-          <CircularProgress size={24} sx={{ color: '#1A1A2E' }} />
+          <CircularProgress size={24} sx={{ color: '#000000' }} />
         </Box>
       ) : docs.length === 0 ? (
         <Typography sx={{ color: '#BBB', fontSize: '0.82rem', textAlign: 'center', py: 2 }}>
@@ -214,7 +214,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
                     <Chip
                       label={DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
                       size="small"
-                      sx={{ bgcolor: 'rgba(26,26,46,0.08)', fontSize: '0.65rem', height: 18 }}
+                      sx={{ bgcolor: 'rgba(0,0,0,0.08)', fontSize: '0.65rem', height: 18 }}
                     />
                     {doc.verified && (
                       <Chip
@@ -252,7 +252,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
                   {canArchive && (
                     <Tooltip title="Archive document" arrow>
                       <IconButton size="small" onClick={() => handleArchive(doc)}
-                        sx={{ color: '#F5A623', '&:hover': { bgcolor: 'rgba(245,166,35,0.1)' } }}>
+                        sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
                         <ArchiveIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Tooltip>

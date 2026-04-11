@@ -305,7 +305,7 @@ export default function Disputes() {
                   >
                     <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{fmtDate(d.created_at)}</TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: '0.78rem', fontFamily: 'monospace', color: '#1A1A2E', fontWeight: 600 }}>
+                      <Typography sx={{ fontSize: '0.78rem', fontFamily: 'monospace', color: '#000000', fontWeight: 600 }}>
                         #{String(d.ride_id || d.id).slice(-6).toUpperCase()}
                       </Typography>
                     </TableCell>
@@ -335,7 +335,7 @@ export default function Disputes() {
                         <IconButton
                           size="small"
                           onClick={(e) => { e.stopPropagation(); openDialog(d); }}
-                          sx={{ color: '#1A1A2E' }}
+                          sx={{ color: '#000000' }}
                         >
                           <ViewIcon fontSize="small" />
                         </IconButton>

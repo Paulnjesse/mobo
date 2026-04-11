@@ -217,15 +217,15 @@ export default function TwoFactorSetup() {
   const inputSx = {
     '& .MuiOutlinedInput-root': {
       borderRadius: '10px',
-      '&:hover fieldset': { borderColor: '#1A1A2E' },
-      '&.Mui-focused fieldset': { borderColor: '#1A1A2E' },
+      '&:hover fieldset': { borderColor: '#000000' },
+      '&.Mui-focused fieldset': { borderColor: '#000000' },
     },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#1A1A2E' },
+    '& .MuiInputLabel-root.Mui-focused': { color: '#000000' },
   };
 
   const primaryBtn = {
-    bgcolor: '#1A1A2E',
-    '&:hover': { bgcolor: '#2d2d4e' },
+    bgcolor: '#000000',
+    '&:hover': { bgcolor: '#222222' },
     borderRadius: '10px',
     fontWeight: 700,
     py: 1.2,
@@ -234,7 +234,7 @@ export default function TwoFactorSetup() {
   if (phase === 'loading') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-        <CircularProgress sx={{ color: '#1A1A2E' }} />
+        <CircularProgress sx={{ color: '#000000' }} />
       </Box>
     );
   }
@@ -242,7 +242,7 @@ export default function TwoFactorSetup() {
   return (
     <Box sx={{ maxWidth: 640, mx: 'auto', py: 4, px: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <SecurityIcon sx={{ fontSize: 28, color: '#1A1A2E' }} />
+        <SecurityIcon sx={{ fontSize: 28, color: '#000000' }} />
         <Typography variant="h5" fontWeight={700}>
           Two-Factor Authentication
         </Typography>
@@ -262,7 +262,7 @@ export default function TwoFactorSetup() {
       {/* ── ACTIVE STATE ── */}
       {phase === 'active' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #1A1A2E 0%, #4CAF50 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #4CAF50 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
               <Box
@@ -284,7 +284,7 @@ export default function TwoFactorSetup() {
                   />
                 </Box>
                 {status?.verified_at && (
-                  <Typography sx={{ fontSize: '0.82rem', color: 'rgba(26,26,46,0.55)', mt: 0.3 }}>
+                  <Typography sx={{ fontSize: '0.82rem', color: 'rgba(0,0,0,0.55)', mt: 0.3 }}>
                     Enabled on {new Date(status.verified_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                   </Typography>
                 )}
@@ -295,10 +295,10 @@ export default function TwoFactorSetup() {
               {status?.backup_codes_remaining != null && (
                 <Grid item xs={12} sm={6}>
                   <Paper variant="outlined" sx={{ p: 2, borderRadius: '10px', textAlign: 'center' }}>
-                    <Typography sx={{ fontSize: '2rem', fontWeight: 800, color: '#1A1A2E' }}>
+                    <Typography sx={{ fontSize: '2rem', fontWeight: 800, color: '#000000' }}>
                       {status.backup_codes_remaining}
                     </Typography>
-                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.55)', fontWeight: 600 }}>
+                    <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.55)', fontWeight: 600 }}>
                       Backup Codes Remaining
                     </Typography>
                   </Paper>
@@ -323,7 +323,7 @@ export default function TwoFactorSetup() {
       {/* ── INACTIVE STATE ── */}
       {phase === 'inactive' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #1A1A2E 0%, #E94560 50%, #F5A623 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Alert
               severity="info"
@@ -337,7 +337,7 @@ export default function TwoFactorSetup() {
             <Typography fontWeight={700} sx={{ mb: 1 }}>
               Enable Two-Factor Authentication
             </Typography>
-            <Typography sx={{ fontSize: '0.88rem', color: 'rgba(26,26,46,0.6)', mb: 3 }}>
+            <Typography sx={{ fontSize: '0.88rem', color: 'rgba(0,0,0,0.6)', mb: 3 }}>
               Once enabled, you'll be asked for a 6-digit code each time you log in.
             </Typography>
 
@@ -357,7 +357,7 @@ export default function TwoFactorSetup() {
       {/* ── SETUP STEP (show QR + secret) ── */}
       {phase === 'setup' && setupData && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #1A1A2E 0%, #E94560 50%, #F5A623 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Typography fontWeight={700} fontSize="1.05rem" sx={{ mb: 2 }}>
               Scan the QR Code
@@ -388,7 +388,7 @@ export default function TwoFactorSetup() {
             </Box>
 
             {/* Secret key */}
-            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'rgba(26,26,46,0.55)', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'rgba(0,0,0,0.55)', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Or enter this key manually
             </Typography>
             <SecretBox secret={setupData.secret} onCopy={handleCopySecret} />
@@ -400,7 +400,7 @@ export default function TwoFactorSetup() {
 
             {/* Instructions */}
             <Paper variant="outlined" sx={{ p: 2, borderRadius: '10px', mt: 3, bgcolor: '#FAFBFC' }}>
-              <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.4, color: 'rgba(26,26,46,0.55)' }}>
+              <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, mb: 1.5, textTransform: 'uppercase', letterSpacing: 0.4, color: 'rgba(0,0,0,0.55)' }}>
                 Setup instructions
               </Typography>
               {[
@@ -413,14 +413,14 @@ export default function TwoFactorSetup() {
                   <Box
                     sx={{
                       width: 22, height: 22, borderRadius: '50%',
-                      bgcolor: '#1A1A2E', color: '#fff',
+                      bgcolor: '#000000', color: '#fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '0.72rem', fontWeight: 700, flexShrink: 0, mt: 0.1,
                     }}
                   >
                     {i + 1}
                   </Box>
-                  <Typography sx={{ fontSize: '0.85rem', color: 'rgba(26,26,46,0.75)' }}>{step}</Typography>
+                  <Typography sx={{ fontSize: '0.85rem', color: 'rgba(0,0,0,0.75)' }}>{step}</Typography>
                 </Box>
               ))}
             </Paper>
@@ -429,7 +429,7 @@ export default function TwoFactorSetup() {
               <Button
                 variant="outlined"
                 onClick={() => setPhase('inactive')}
-                sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#1A1A2E', color: '#1A1A2E' }}
+                sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#000000', color: '#000000' }}
               >
                 Cancel
               </Button>
@@ -448,12 +448,12 @@ export default function TwoFactorSetup() {
       {/* ── VERIFY STEP ── */}
       {phase === 'verify' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #1A1A2E 0%, #E94560 50%, #F5A623 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Typography fontWeight={700} fontSize="1.05rem" sx={{ mb: 0.5 }}>
               Verify & Activate
             </Typography>
-            <Typography sx={{ fontSize: '0.88rem', color: 'rgba(26,26,46,0.6)', mb: 3 }}>
+            <Typography sx={{ fontSize: '0.88rem', color: 'rgba(0,0,0,0.6)', mb: 3 }}>
               Enter the 6-digit code from your authenticator app to confirm setup.
             </Typography>
 
@@ -472,7 +472,7 @@ export default function TwoFactorSetup() {
               <Button
                 variant="outlined"
                 onClick={() => setPhase('setup')}
-                sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#1A1A2E', color: '#1A1A2E' }}
+                sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#000000', color: '#000000' }}
               >
                 Back
               </Button>
@@ -493,7 +493,7 @@ export default function TwoFactorSetup() {
       {/* ── DONE — show backup codes ── */}
       {phase === 'done' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #4CAF50 0%, #1A1A2E 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #4CAF50 0%, #000000 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <CheckCircleIcon sx={{ fontSize: 32, color: '#4CAF50' }} />
@@ -519,7 +519,7 @@ export default function TwoFactorSetup() {
                     variant="outlined"
                     startIcon={<DownloadIcon />}
                     onClick={handleDownloadCodes}
-                    sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#1A1A2E', color: '#1A1A2E' }}
+                    sx={{ borderRadius: '10px', fontWeight: 700, borderColor: '#000000', color: '#000000' }}
                   >
                     Download Codes
                   </Button>

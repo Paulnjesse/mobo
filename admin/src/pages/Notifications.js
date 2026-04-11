@@ -121,11 +121,11 @@ export default function Notifications() {
   };
 
   const targetIcon = { all: <PeopleIcon sx={{ fontSize: 14 }} />, riders: <PeopleIcon sx={{ fontSize: 14 }} />, drivers: <DriveEtaIcon sx={{ fontSize: 14 }} /> };
-  const targetColors = { all: '#1A1A2E', riders: '#E94560', drivers: '#F5A623', specific: '#2196F3' };
+  const targetColors = { all: '#000000', riders: '#FFD100', drivers: '#FF8C00', specific: '#2196F3' };
 
   const historyColumns = [
     { field: 'title', headerName: 'Title', renderCell: (row) => <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{row.title}</Typography> },
-    { field: 'message', headerName: 'Message', renderCell: (row) => <Typography sx={{ fontSize: '0.78rem', color: 'rgba(26,26,46,0.6)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.message}</Typography> },
+    { field: 'message', headerName: 'Message', renderCell: (row) => <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.6)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.message}</Typography> },
     {
       field: 'target', headerName: 'Target',
       renderCell: (row) => (
@@ -142,10 +142,10 @@ export default function Notifications() {
         const rate = row.sentCount > 0 ? Math.round((row.readCount / row.sentCount) * 100) : 0;
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 40, height: 4, bgcolor: 'rgba(26,26,46,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
-              <Box sx={{ width: `${rate}%`, height: '100%', bgcolor: rate > 60 ? '#4CAF50' : rate > 30 ? '#F5A623' : '#E94560', borderRadius: '2px' }} />
+            <Box sx={{ width: 40, height: 4, bgcolor: 'rgba(0,0,0,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+              <Box sx={{ width: `${rate}%`, height: '100%', bgcolor: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF8C00' : '#FFD100', borderRadius: '2px' }} />
             </Box>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: rate > 60 ? '#4CAF50' : rate > 30 ? '#F5A623' : '#E94560' }}>{rate}%</Typography>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF8C00' : '#FFD100' }}>{rate}%</Typography>
           </Box>
         );
       },
@@ -168,10 +168,10 @@ export default function Notifications() {
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
         {[
-          { label: 'Sent Today', value: Number(stats.sentToday || 0).toLocaleString(), icon: <SendIcon />, color: '#1A1A2E' },
+          { label: 'Sent Today', value: Number(stats.sentToday || 0).toLocaleString(), icon: <SendIcon />, color: '#000000' },
           { label: 'Read Rate', value: `${stats.readRate || 0}%`, icon: <CheckIcon />, color: '#4CAF50' },
-          { label: 'Total Notifications', value: history.length.toLocaleString(), icon: <NotificationsIcon />, color: '#E94560' },
-          { label: 'Avg Read Rate', value: `${history.length > 0 ? Math.round(history.reduce((a, n) => a + (n.sentCount > 0 ? (n.readCount / n.sentCount) * 100 : 0), 0) / history.length) : 0}%`, icon: <CheckIcon />, color: '#F5A623' },
+          { label: 'Total Notifications', value: history.length.toLocaleString(), icon: <NotificationsIcon />, color: '#FFD100' },
+          { label: 'Avg Read Rate', value: `${history.length > 0 ? Math.round(history.reduce((a, n) => a + (n.sentCount > 0 ? (n.readCount / n.sentCount) * 100 : 0), 0) / history.length) : 0}%`, icon: <CheckIcon />, color: '#FF8C00' },
         ].map((item) => (
           <Grid item xs={6} sm={3} key={item.label}>
             <Card>
@@ -182,7 +182,7 @@ export default function Notifications() {
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: '1.3rem', fontWeight: 800, color: item.color, lineHeight: 1 }}>{item.value}</Typography>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.55)', mt: 0.2 }}>{item.label}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.55)', mt: 0.2 }}>{item.label}</Typography>
                   </Box>
                 </Box>
               </CardContent>
@@ -197,7 +197,7 @@ export default function Notifications() {
           <Card sx={{ position: 'sticky', top: 80 }}>
             <CardContent sx={{ p: 2.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <NotificationsIcon sx={{ color: '#E94560', fontSize: 20 }} />
+                <NotificationsIcon sx={{ color: '#FFD100', fontSize: 20 }} />
                 <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Send Notification</Typography>
               </Box>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -214,7 +214,7 @@ export default function Notifications() {
                     inputProps={{ maxLength: 500 }}
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                   />
-                  <Typography sx={{ fontSize: '0.7rem', color: charCount > 450 ? '#E94560' : 'rgba(26,26,46,0.4)', textAlign: 'right', mt: 0.3 }}>
+                  <Typography sx={{ fontSize: '0.7rem', color: charCount > 450 ? '#FFD100' : 'rgba(0,0,0,0.4)', textAlign: 'right', mt: 0.3 }}>
                     {charCount}/500
                   </Typography>
                 </Box>
@@ -237,8 +237,8 @@ export default function Notifications() {
 
                 {/* Estimated reach */}
                 <Box sx={{ bgcolor: '#F8F9FA', borderRadius: '8px', p: 1.5 }}>
-                  <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.5 }}>Estimated Reach</Typography>
-                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#1A1A2E' }}>
+                  <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.5 }}>Estimated Reach</Typography>
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#000000' }}>
                     {form.target === 'all' ? '~1,560' : form.target === 'riders' ? '~1,248' : form.target === 'drivers' ? '~312' : '1'} users
                   </Typography>
                 </Box>
@@ -247,7 +247,7 @@ export default function Notifications() {
                   variant="contained" onClick={handleSend} disabled={sending || !form.title || !form.message}
                   startIcon={sending ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <SendIcon />}
                   fullWidth
-                  sx={{ bgcolor: '#E94560', py: 1.2, borderRadius: '8px', fontWeight: 700, '&:hover': { bgcolor: '#c62a47' }, '&:disabled': { bgcolor: 'rgba(233,69,96,0.4)' } }}
+                  sx={{ bgcolor: '#FFD100', py: 1.2, borderRadius: '8px', fontWeight: 700, '&:hover': { bgcolor: '#c62a47' }, '&:disabled': { bgcolor: 'rgba(255,209,0,0.4)' } }}
                 >
                   {sending ? 'Sending...' : 'Send Notification'}
                 </Button>

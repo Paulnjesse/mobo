@@ -200,26 +200,26 @@ export default function Users() {
   const columns = [
     { field: 'name', headerName: 'Name', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#1A1A2E' }}>{getName(row)?.charAt(0)}</Avatar>
+        <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#000000' }}>{getName(row)?.charAt(0)}</Avatar>
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 500 }}>{getName(row)}</Typography>
       </Box>
     )},
     { field: 'phone', headerName: 'Phone' },
     { field: 'email', headerName: 'Email' },
     { field: 'role', headerName: 'Role', renderCell: row => (
-      <Chip label={row.role} size="small" sx={{ bgcolor: row.role === 'driver' ? 'rgba(26,26,46,0.08)' : 'rgba(233,69,96,0.1)', color: row.role === 'driver' ? '#1A1A2E' : '#E94560', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
+      <Chip label={row.role} size="small" sx={{ bgcolor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(255,209,0,0.1)', color: row.role === 'driver' ? '#000000' : '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
     )},
     { field: 'country', headerName: 'Country', width: 70 },
     { field: 'verified', headerName: 'Verified', renderCell: row => (
-      <Chip label={isVerified(row) ? 'Verified' : 'Unverified'} size="small" sx={{ bgcolor: isVerified(row) ? 'rgba(76,175,80,0.1)' : 'rgba(245,166,35,0.1)', color: isVerified(row) ? '#4CAF50' : '#F5A623', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+      <Chip label={isVerified(row) ? 'Verified' : 'Unverified'} size="small" sx={{ bgcolor: isVerified(row) ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: isVerified(row) ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'loyalty_points', headerName: 'Points', align: 'right', renderCell: row => row.loyalty_points || row.loyaltyPoints || 0 },
     { field: 'subscription_plan', headerName: 'Plan', renderCell: row => (
-      <Chip label={row.subscription_plan || 'none'} size="small" sx={{ bgcolor: row.subscription_plan === 'premium' ? 'rgba(233,69,96,0.1)' : row.subscription_plan === 'basic' ? 'rgba(245,166,35,0.1)' : 'rgba(0,0,0,0.06)', color: row.subscription_plan === 'premium' ? '#E94560' : row.subscription_plan === 'basic' ? '#F5A623' : '#666', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
+      <Chip label={row.subscription_plan || 'none'} size="small" sx={{ bgcolor: row.subscription_plan === 'premium' ? 'rgba(255,209,0,0.1)' : row.subscription_plan === 'basic' ? 'rgba(255,140,0,0.1)' : 'rgba(0,0,0,0.06)', color: row.subscription_plan === 'premium' ? '#FFD100' : row.subscription_plan === 'basic' ? '#FF8C00' : '#666', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
     )},
     { field: 'suspended', headerName: 'Status', renderCell: row => (
       isSuspended(row)
-        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : <Chip label="Active" size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
   ];
@@ -246,16 +246,16 @@ export default function Users() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>User Management</Typography>
         <Button startIcon={<DownloadIcon />} onClick={handleExportCSV} variant="outlined" size="small"
-          sx={{ borderColor: '#1A1A2E', color: '#1A1A2E', borderRadius: '8px' }}>Export CSV</Button>
+          sx={{ borderColor: '#000000', color: '#000000', borderRadius: '8px' }}>Export CSV</Button>
       </Box>
 
       {success && <Alert severity="success" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setSuccess('')}>{success}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}><StatCard title="Total Users" value={stats.total?.toLocaleString()} icon={<PeopleIcon />} iconBg="#1A1A2E" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Riders" value={stats.riders?.toLocaleString()} icon={<PeopleIcon />} iconBg="#E94560" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Drivers" value={stats.drivers?.toLocaleString()} icon={<DriveEtaIcon />} iconBg="#F5A623" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Users" value={stats.total?.toLocaleString()} icon={<PeopleIcon />} iconBg="#000000" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Riders" value={stats.riders?.toLocaleString()} icon={<PeopleIcon />} iconBg="#FFD100" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Drivers" value={stats.drivers?.toLocaleString()} icon={<DriveEtaIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#9E9E9E" loading={loading} /></Grid>
       </Grid>
 
@@ -293,7 +293,7 @@ export default function Users() {
                 ? (
                   <Tooltip title="Archive user" arrow>
                     <IconButton size="small" onClick={() => setArchiveConfirm(row)}
-                      sx={{ color: '#F5A623', '&:hover': { bgcolor: 'rgba(245,166,35,0.1)' } }}>
+                      sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
@@ -308,7 +308,7 @@ export default function Users() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Edit User — {editUser && (editUser.full_name || editUser.name)}</Typography>
           </Box>
           <IconButton onClick={() => setEditOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -366,7 +366,7 @@ export default function Users() {
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
           {editTab === 0 && (
             <Button onClick={handleEditSave} variant="contained" size="small" disabled={editSaving}
-              sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+              sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
               {editSaving ? <CircularProgress size={18} color="inherit" /> : 'Save Changes'}
             </Button>
           )}
@@ -384,11 +384,11 @@ export default function Users() {
           {selectedUser && (
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                <Avatar sx={{ width: 56, height: 56, bgcolor: '#1A1A2E', fontSize: '1.4rem' }}>{getName(selectedUser)?.charAt(0)}</Avatar>
+                <Avatar sx={{ width: 56, height: 56, bgcolor: '#000000', fontSize: '1.4rem' }}>{getName(selectedUser)?.charAt(0)}</Avatar>
                 <Box>
                   <Typography fontWeight={700} fontSize="1rem">{getName(selectedUser)}</Typography>
-                  <Chip label={selectedUser.role} size="small" sx={{ mt: 0.5, textTransform: 'capitalize', bgcolor: 'rgba(26,26,46,0.08)' }} />
-                  {isSuspended(selectedUser) && <Chip label="Suspended" size="small" sx={{ ml: 0.5, bgcolor: 'rgba(233,69,96,0.1)', color: '#E94560' }} />}
+                  <Chip label={selectedUser.role} size="small" sx={{ mt: 0.5, textTransform: 'capitalize', bgcolor: 'rgba(0,0,0,0.08)' }} />
+                  {isSuspended(selectedUser) && <Chip label="Suspended" size="small" sx={{ ml: 0.5, bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100' }} />}
                 </Box>
               </Box>
 
@@ -427,7 +427,7 @@ export default function Users() {
                   ['Joined', selectedUser.joined || selectedUser.created_at],
                 ].map(([label, val]) => (
                   <Grid item xs={6} key={label}>
-                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.3 }}>{label}</Typography>
+                    <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.3 }}>{label}</Typography>
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 500 }}>{val || '—'}</Typography>
                   </Grid>
                 ))}
@@ -437,7 +437,7 @@ export default function Users() {
         </DialogContent>
         <Divider />
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          {canWrite && <Button onClick={() => { setEditTab(0); openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>Edit</Button>}
+          {canWrite && <Button onClick={() => { setEditTab(0); openEdit(selectedUser); setViewOpen(false); }} variant="outlined" size="small" startIcon={<EditIcon />} sx={{ borderColor: '#000000', color: '#000000' }}>Edit</Button>}
           {canSuspend && (isSuspended(selectedUser) ? (
             <Button onClick={() => { handleUnsuspend(selectedUser); setViewOpen(false); }} color="success" variant="outlined" size="small">Unsuspend</Button>
           ) : (
@@ -446,14 +446,14 @@ export default function Users() {
           {canArchive && !selectedUser?.is_deleted && (
             <Button onClick={() => { setArchiveConfirm(selectedUser); setViewOpen(false); }} color="warning" variant="outlined" size="small" startIcon={<ArchiveIcon />}>Archive</Button>
           )}
-          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#000000' }}>Close</Button>
         </DialogActions>
       </Dialog>
 
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#F5A623' }} />
+          <ArchiveIcon sx={{ color: '#FF8C00' }} />
           <Typography fontWeight={700}>Archive User</Typography>
         </DialogTitle>
         <DialogContent>

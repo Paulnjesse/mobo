@@ -20,8 +20,8 @@ import api from '../services/api';
 
 const SEVERITY_CONFIG = {
   low:    { label: 'Low',    color: '#1565C0', bg: 'rgba(21,101,192,0.1)'  },
-  medium: { label: 'Medium', color: '#F5A623', bg: 'rgba(245,166,35,0.1)'  },
-  high:   { label: 'High',   color: '#E94560', bg: 'rgba(233,69,96,0.1)'   },
+  medium: { label: 'Medium', color: '#FF8C00', bg: 'rgba(255,140,0,0.1)'  },
+  high:   { label: 'High',   color: '#FFD100', bg: 'rgba(255,209,0,0.1)'   },
 };
 
 const ZONE_TYPE_LABELS = {
@@ -140,10 +140,10 @@ const EMPTY_FORM = {
 const inputSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
-    '&:hover fieldset': { borderColor: '#1A1A2E' },
-    '&.Mui-focused fieldset': { borderColor: '#1A1A2E' },
+    '&:hover fieldset': { borderColor: '#000000' },
+    '&.Mui-focused fieldset': { borderColor: '#000000' },
   },
-  '& .MuiInputLabel-root.Mui-focused': { color: '#1A1A2E' },
+  '& .MuiInputLabel-root.Mui-focused': { color: '#000000' },
 };
 
 // ─── main component ──────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ export default function SafetyZones() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <LocationIcon sx={{ fontSize: 28, color: '#1A1A2E' }} />
+          <LocationIcon sx={{ fontSize: 28, color: '#000000' }} />
           <Typography variant="h5" fontWeight={700}>Safety Zones Manager</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -296,7 +296,7 @@ export default function SafetyZones() {
             startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
             onClick={fetchZones}
             disabled={loading}
-            sx={{ borderRadius: '8px', borderColor: '#1A1A2E', color: '#1A1A2E', fontWeight: 600 }}
+            sx={{ borderRadius: '8px', borderColor: '#000000', color: '#000000', fontWeight: 600 }}
           >
             Refresh
           </Button>
@@ -304,7 +304,7 @@ export default function SafetyZones() {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={openCreate}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px', fontWeight: 700 }}
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px', fontWeight: 700 }}
           >
             Add Safety Zone
           </Button>
@@ -330,7 +330,7 @@ export default function SafetyZones() {
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
-                        color: 'rgba(26,26,46,0.45)',
+                        color: 'rgba(0,0,0,0.45)',
                         borderBottom: '1px solid rgba(0,0,0,0.08)',
                         whiteSpace: 'nowrap',
                       }}
@@ -344,12 +344,12 @@ export default function SafetyZones() {
                 {loading ? (
                   <tr>
                     <td colSpan={9} style={{ padding: '32px', textAlign: 'center' }}>
-                      <CircularProgress size={28} sx={{ color: '#1A1A2E' }} />
+                      <CircularProgress size={28} sx={{ color: '#000000' }} />
                     </td>
                   </tr>
                 ) : zones.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: 'rgba(26,26,46,0.4)', fontSize: '0.88rem' }}>
+                    <td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: 'rgba(0,0,0,0.4)', fontSize: '0.88rem' }}>
                       No safety zones found. Click "Add Safety Zone" to create one.
                     </td>
                   </tr>
@@ -358,28 +358,28 @@ export default function SafetyZones() {
                     <tr
                       key={zone.id || zone._id || idx}
                       style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(26,26,46,0.02)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <td style={{ padding: '10px 12px' }}>
                         <Typography sx={{ fontSize: '0.83rem', fontWeight: 600 }}>{zone.name}</Typography>
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.7)' }}>{zone.city}</Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)' }}>{zone.city}</Typography>
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <Chip
                           label={ZONE_TYPE_LABELS[zone.zone_type] || zone.zone_type}
                           size="small"
                           sx={{
-                            bgcolor: zone.zone_type === 'surge' ? 'rgba(245,166,35,0.1)' : 'rgba(233,69,96,0.1)',
-                            color: zone.zone_type === 'surge' ? '#F5A623' : '#E94560',
+                            bgcolor: zone.zone_type === 'surge' ? 'rgba(255,140,0,0.1)' : 'rgba(255,209,0,0.1)',
+                            color: zone.zone_type === 'surge' ? '#FF8C00' : '#FFD100',
                             fontWeight: 700, fontSize: '0.7rem', height: 22,
                           }}
                         />
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.7)', textTransform: 'capitalize' }}>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)', textTransform: 'capitalize' }}>
                           {zone.incident_type ? zone.incident_type.replace('_', ' ') : '—'}
                         </Typography>
                       </td>
@@ -388,7 +388,7 @@ export default function SafetyZones() {
                       </td>
                       <td style={{ padding: '10px 12px', maxWidth: 220 }}>
                         <Tooltip title={zone.alert_message || ''}>
-                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.75)' }}>
+                          <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.75)' }}>
                             {truncate(zone.alert_message)}
                           </Typography>
                         </Tooltip>
@@ -405,7 +405,7 @@ export default function SafetyZones() {
                         />
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(26,26,46,0.7)' }}>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.7)' }}>
                           {zone.ends_at ? new Date(zone.ends_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                         </Typography>
                       </td>
@@ -416,7 +416,7 @@ export default function SafetyZones() {
                               size="small"
                               variant="outlined"
                               onClick={() => openEdit(zone)}
-                              sx={{ fontSize: '0.7rem', py: 0.3, px: 1, borderRadius: '6px', borderColor: '#1A1A2E', color: '#1A1A2E', fontWeight: 600, minWidth: 'auto' }}
+                              sx={{ fontSize: '0.7rem', py: 0.3, px: 1, borderRadius: '6px', borderColor: '#000000', color: '#000000', fontWeight: 600, minWidth: 'auto' }}
                             >
                               Edit
                             </Button>
@@ -444,7 +444,7 @@ export default function SafetyZones() {
           </Box>
 
           {!loading && (
-            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.4)', mt: 1.5, textAlign: 'right' }}>
+            <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.4)', mt: 1.5, textAlign: 'right' }}>
               {zones.length} zone{zones.length !== 1 ? 's' : ''} total
             </Typography>
           )}
@@ -461,7 +461,7 @@ export default function SafetyZones() {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {editZone ? <EditIcon sx={{ color: '#1A1A2E', fontSize: 20 }} /> : <AddIcon sx={{ color: '#1A1A2E', fontSize: 20 }} />}
+            {editZone ? <EditIcon sx={{ color: '#000000', fontSize: 20 }} /> : <AddIcon sx={{ color: '#000000', fontSize: 20 }} />}
             <Typography fontWeight={700}>{editZone ? `Edit Zone — ${editZone.name}` : 'Add Safety Zone'}</Typography>
           </Box>
           <IconButton onClick={() => setDialogOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -580,7 +580,7 @@ export default function SafetyZones() {
 
             {/* Coordinates section */}
             <Grid item xs={12}>
-              <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(26,26,46,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, mb: 1 }}>
+              <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, mb: 1 }}>
                 Zone Coordinates (center + radius)
               </Typography>
             </Grid>
@@ -630,7 +630,7 @@ export default function SafetyZones() {
             variant="contained"
             size="small"
             disabled={saving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px', fontWeight: 700 }}
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px', fontWeight: 700 }}
           >
             {saving ? <CircularProgress size={18} color="inherit" /> : (editZone ? 'Save Changes' : 'Create Zone')}
           </Button>

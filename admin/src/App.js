@@ -35,64 +35,99 @@ import { CopyProtectionProvider } from './components/CopyProtection';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1A1A2E',
+      main: '#000000',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#E94560',
-      contrastText: '#ffffff',
+      main: '#FFD100',
+      contrastText: '#000000',  // black text on FREE NOW yellow
     },
     warning: {
-      main: '#F5A623',
+      main: '#FF8C00',
+    },
+    error: {
+      main: '#E53935',
     },
     background: {
-      default: '#F8F9FA',
+      default: '#F5F5F5',
       paper: '#ffffff',
     },
   },
   typography: {
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    h4: { fontWeight: 700 },
+    h4: { fontWeight: 800 },
     h5: { fontWeight: 700 },
     h6: { fontWeight: 600 },
   },
   shape: {
-    borderRadius: 10,
+    borderRadius: 8,
   },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
-          fontWeight: 600,
-          borderRadius: 8,
+          fontWeight: 700,
+          borderRadius: 6,
+          letterSpacing: '0.1px',
         },
+        containedPrimary: {
+          backgroundColor: '#000000',
+          color: '#ffffff',
+          '&:hover': { backgroundColor: '#222222' },
+        },
+        containedSecondary: {
+          backgroundColor: '#FFD100',
+          color: '#000000',
+          '&:hover': { backgroundColor: '#FFBA00' },
+        },
+      },
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 600,
+          '&.Mui-selected': { color: '#000000' },
+        },
+      },
+    },
+    MuiTabs: {
+      styleOverrides: {
+        indicator: { backgroundColor: '#FFD100', height: 3 },
       },
     },
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
-          boxShadow: '0 2px 12px rgba(26,26,46,0.08)',
+          borderRadius: 10,
+          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(0,0,0,0.06)',
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
+        root: { borderRadius: 10 },
       },
     },
     MuiTableHead: {
       styleOverrides: {
         root: {
           '& .MuiTableCell-head': {
-            backgroundColor: '#F8F9FA',
-            fontWeight: 600,
-            color: '#1A1A2E',
+            backgroundColor: '#F5F5F5',
+            fontWeight: 700,
+            color: '#000000',
+            fontSize: '0.78rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.4px',
           },
         },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { fontWeight: 600 },
       },
     },
   },

@@ -7,7 +7,7 @@ export default function StatCard({
   title,
   value,
   icon,
-  iconBg = '#1A1A2E',
+  iconBg = '#000000',
   iconColor = '#ffffff',
   trend,
   trendLabel,
@@ -47,7 +47,7 @@ export default function StatCard({
         '&:hover': navigateTo
           ? {
               transform: 'translateY(-2px)',
-              boxShadow: '0 8px 24px rgba(26,26,46,0.14)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
             }
           : {},
         overflow: 'hidden',
@@ -94,19 +94,19 @@ export default function StatCard({
                 px: 1,
                 py: 0.4,
                 borderRadius: '20px',
-                backgroundColor: isPositive ? 'rgba(76,175,80,0.1)' : 'rgba(233,69,96,0.1)',
+                backgroundColor: isPositive ? 'rgba(76,175,80,0.1)' : 'rgba(255,209,0,0.1)',
               }}
             >
               {isPositive ? (
                 <TrendingUpIcon sx={{ fontSize: 14, color: '#4CAF50' }} />
               ) : (
-                <TrendingDownIcon sx={{ fontSize: 14, color: '#E94560' }} />
+                <TrendingDownIcon sx={{ fontSize: 14, color: '#FFD100' }} />
               )}
               <Typography
                 sx={{
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  color: isPositive ? '#4CAF50' : '#E94560',
+                  color: isPositive ? '#4CAF50' : '#FFD100',
                 }}
               >
                 {Math.abs(trend)}%
@@ -119,7 +119,7 @@ export default function StatCard({
           sx={{
             fontSize: '1.75rem',
             fontWeight: 700,
-            color: '#1A1A2E',
+            color: '#000000',
             lineHeight: 1.1,
             mb: 0.5,
           }}
@@ -130,7 +130,7 @@ export default function StatCard({
           sx={{
             fontSize: '0.82rem',
             fontWeight: 500,
-            color: 'rgba(26,26,46,0.6)',
+            color: 'rgba(0,0,0,0.6)',
           }}
         >
           {title}
@@ -139,7 +139,7 @@ export default function StatCard({
           <Typography
             sx={{
               fontSize: '0.72rem',
-              color: 'rgba(26,26,46,0.4)',
+              color: 'rgba(0,0,0,0.4)',
               mt: 0.3,
             }}
           >
@@ -150,7 +150,7 @@ export default function StatCard({
           <Typography
             sx={{
               fontSize: '0.72rem',
-              color: 'rgba(26,26,46,0.4)',
+              color: 'rgba(0,0,0,0.4)',
               mt: 0.3,
             }}
           >

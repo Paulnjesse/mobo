@@ -132,7 +132,7 @@ export default function AdsManagement() {
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}
-          sx={{ bgcolor: '#E94560', '&:hover': { bgcolor: '#c73652' } }}>
+          sx={{ bgcolor: '#FFD100', '&:hover': { bgcolor: '#c73652' } }}>
           New Ad
         </Button>
       </Box>
@@ -142,9 +142,9 @@ export default function AdsManagement() {
       {/* Stats cards */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mb: 3 }}>
         {[
-          { label: 'Total Ads',    value: ads.length,                  icon: <CampaignIcon />, color: '#1A1A2E' },
+          { label: 'Total Ads',    value: ads.length,                  icon: <CampaignIcon />, color: '#000000' },
           { label: 'Active',       value: activeCount,                  icon: <VisibilityIcon />, color: '#00A651' },
-          { label: 'Sponsored',    value: bizCount,                     icon: <StoreIcon />, color: '#E94560' },
+          { label: 'Sponsored',    value: bizCount,                     icon: <StoreIcon />, color: '#FFD100' },
           { label: 'Total Clicks', value: totalClicks.toLocaleString(), icon: <BarChartIcon />, color: '#0077CC' },
         ].map((s) => (
           <Card key={s.label}>
@@ -310,7 +310,7 @@ export default function AdsManagement() {
                   <Box key={c} onClick={() => setForm({ ...form, color: c })}
                     sx={{
                       width: 28, height: 28, borderRadius: '50%', bgcolor: c, cursor: 'pointer',
-                      border: form.color === c ? '3px solid #1A1A2E' : '2px solid transparent',
+                      border: form.color === c ? '3px solid #000000' : '2px solid transparent',
                     }} />
                 ))}
                 <TextField size="small" value={form.color}
@@ -365,7 +365,7 @@ export default function AdsManagement() {
         <DialogActions>
           <Button onClick={() => setDialog(null)}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={saving || !form.title || !form.subtitle}
-            sx={{ bgcolor: '#E94560', '&:hover': { bgcolor: '#c73652' } }}>
+            sx={{ bgcolor: '#FFD100', '&:hover': { bgcolor: '#c73652' } }}>
             {saving ? <CircularProgress size={20} color="inherit" /> : dialog === 'create' ? 'Create Ad' : 'Save Changes'}
           </Button>
         </DialogActions>

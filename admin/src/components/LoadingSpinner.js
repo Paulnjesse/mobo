@@ -18,7 +18,7 @@ export default function LoadingSpinner({ message = 'Loading...', fullPage = fals
         <CircularProgress
           size={56}
           thickness={3}
-          sx={{ color: '#E94560' }}
+          sx={{ color: '#FFD100' }}
         />
         <Box
           sx={{
@@ -37,7 +37,7 @@ export default function LoadingSpinner({ message = 'Loading...', fullPage = fals
               width: 32,
               height: 32,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #1A1A2E, #E94560)',
+              background: 'linear-gradient(135deg, #000000, #FFD100)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -50,7 +50,7 @@ export default function LoadingSpinner({ message = 'Loading...', fullPage = fals
       {message && (
         <Typography
           sx={{
-            color: 'rgba(26,26,46,0.5)',
+            color: 'rgba(0,0,0,0.5)',
             fontSize: '0.85rem',
             fontWeight: 500,
           }}

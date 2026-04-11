@@ -75,19 +75,19 @@ const STATUS_CHIP = {
   pending:         { label: 'Pending',         bg: 'rgba(0,0,0,0.06)',         color: '#666' },
   driver_assigned: { label: 'Driver Assigned', bg: 'rgba(33,150,243,0.1)',     color: '#1976D2' },
   driver_arriving: { label: 'Driver Arriving', bg: 'rgba(33,150,243,0.1)',     color: '#1976D2' },
-  picked_up:       { label: 'Picked Up',       bg: 'rgba(245,166,35,0.12)',    color: '#E65100' },
-  in_transit:      { label: 'In Transit',      bg: 'rgba(245,166,35,0.12)',    color: '#E65100' },
+  picked_up:       { label: 'Picked Up',       bg: 'rgba(255,140,0,0.12)',    color: '#E65100' },
+  in_transit:      { label: 'In Transit',      bg: 'rgba(255,140,0,0.12)',    color: '#E65100' },
   delivered:       { label: 'Delivered',       bg: 'rgba(76,175,80,0.12)',     color: '#388E3C' },
   cancelled:       { label: 'Cancelled',       bg: 'rgba(0,0,0,0.06)',         color: '#999' },
-  failed:          { label: 'Failed',          bg: 'rgba(233,69,96,0.12)',     color: '#C62828' },
+  failed:          { label: 'Failed',          bg: 'rgba(255,209,0,0.12)',     color: '#C62828' },
 };
 
 const SIZE_CHIP = {
   envelope:    { bg: 'rgba(0,0,0,0.06)',         color: '#555' },
   small:       { bg: 'rgba(33,150,243,0.1)',     color: '#1565C0' },
-  medium:      { bg: 'rgba(245,166,35,0.1)',     color: '#E65100' },
+  medium:      { bg: 'rgba(255,140,0,0.1)',     color: '#E65100' },
   large:       { bg: 'rgba(156,39,176,0.1)',     color: '#6A1B9A' },
-  extra_large: { bg: 'rgba(233,69,96,0.12)',     color: '#B71C1C' },
+  extra_large: { bg: 'rgba(255,209,0,0.12)',     color: '#B71C1C' },
 };
 
 function StatusChip({ status }) {
@@ -420,7 +420,7 @@ export default function Deliveries() {
           size="small"
           startIcon={<DownloadIcon />}
           onClick={() => exportCSV(filtered)}
-          sx={{ borderRadius: '8px', borderColor: '#1A1A2E', color: '#1A1A2E', fontWeight: 600 }}
+          sx={{ borderRadius: '8px', borderColor: '#000000', color: '#000000', fontWeight: 600 }}
         >
           Export CSV
         </Button>
@@ -440,7 +440,7 @@ export default function Deliveries() {
       {/* ── Summary cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={4} md={2}>
-          <StatCard title="Total Deliveries" value={stats.total_deliveries?.toLocaleString()} icon={<DeliveryIcon />} iconBg="#1A1A2E" loading={loading} />
+          <StatCard title="Total Deliveries" value={stats.total_deliveries?.toLocaleString()} icon={<DeliveryIcon />} iconBg="#000000" loading={loading} />
         </Grid>
         <Grid item xs={6} sm={4} md={2}>
           <StatCard title="Pending" value={stats.pending?.toLocaleString()} icon={<PendingIcon />} iconBg="#757575" loading={loading} />
@@ -537,7 +537,7 @@ export default function Deliveries() {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <DeliveryIcon sx={{ color: '#1A1A2E' }} />
+            <DeliveryIcon sx={{ color: '#000000' }} />
             <Box>
               <Typography fontWeight={700} fontSize="1rem">
                 Delivery #{shortId(selected?.id)}
@@ -721,7 +721,7 @@ export default function Deliveries() {
             onClick={() => setDetailOpen(false)}
             variant="contained"
             size="small"
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px', ml: 'auto' }}
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px', ml: 'auto' }}
           >
             Close
           </Button>

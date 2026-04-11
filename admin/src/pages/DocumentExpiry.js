@@ -183,7 +183,7 @@ function ExpiryTable({ rows, onSendReminder, remindersSent }) {
                 {/* Driver */}
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#1A1A2E' }}>
+                    <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: '#000000' }}>
                       {(row.driver.name || row.driver.full_name || '?').charAt(0)}
                     </Avatar>
                     <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
@@ -251,8 +251,8 @@ function ExpiryTable({ rows, onSendReminder, remindersSent }) {
                       textTransform: 'none',
                       fontWeight: 700,
                       minWidth: 120,
-                      bgcolor: sent ? undefined : '#1A1A2E',
-                      '&:hover': { bgcolor: sent ? undefined : '#2d2d4e' },
+                      bgcolor: sent ? undefined : '#000000',
+                      '&:hover': { bgcolor: sent ? undefined : '#222222' },
                     }}
                   >
                     {sent ? 'Sent' : 'Send Reminder'}
@@ -343,25 +343,25 @@ export default function DocumentExpiry() {
           value={tab}
           onChange={(_, v) => setTab(v)}
           sx={{ borderBottom: '1px solid rgba(0,0,0,0.08)', px: 2 }}
-          TabIndicatorProps={{ sx: { bgcolor: '#1A1A2E' } }}
+          TabIndicatorProps={{ sx: { bgcolor: '#000000' } }}
         >
           <Tab
             label={`License Expiry${!loading ? ` (${buildRows(drivers, 'license').length})` : ''}`}
-            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#1A1A2E' } }}
+            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#000000' } }}
           />
           <Tab
             label={`Insurance Expiry${!loading ? ` (${buildRows(drivers, 'insurance').length})` : ''}`}
-            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#1A1A2E' } }}
+            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#000000' } }}
           />
           <Tab
             label={`All Expiring${!loading ? ` (${allRows.length})` : ''}`}
-            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#1A1A2E' } }}
+            sx={{ fontWeight: 700, fontSize: '0.82rem', textTransform: 'none', '&.Mui-selected': { color: '#000000' } }}
           />
         </Tabs>
 
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
-            <CircularProgress size={32} sx={{ color: '#1A1A2E' }} />
+            <CircularProgress size={32} sx={{ color: '#000000' }} />
             <Typography sx={{ mt: 2, color: '#666' }}>Loading driver documents...</Typography>
           </Box>
         ) : (

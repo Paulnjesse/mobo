@@ -28,8 +28,8 @@ const CATEGORY_LABELS = {
 };
 
 const ROLE_COLORS = {
-  admin: '#E94560', full_admin: '#1A1A2E', support: '#2196F3',
-  finance: '#4CAF50', ops: '#F5A623', read_write: '#9C27B0', read_only: '#666',
+  admin: '#FFD100', full_admin: '#000000', support: '#2196F3',
+  finance: '#4CAF50', ops: '#FF8C00', read_write: '#9C27B0', read_only: '#666',
 };
 
 function groupByCategory(permissions) {
@@ -112,7 +112,7 @@ export default function RoleManagement() {
             <Accordion key={cat} defaultExpanded={false}
               sx={{ mb: 0.5, '&:before': { display: 'none' }, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', borderRadius: '8px !important' }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}
-                sx={{ borderRadius: '8px', bgcolor: selectedCount > 0 ? 'rgba(26,26,46,0.04)' : 'transparent' }}>
+                sx={{ borderRadius: '8px', bgcolor: selectedCount > 0 ? 'rgba(0,0,0,0.04)' : 'transparent' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
                   <Typography sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
                     {CATEGORY_LABELS[cat] || cat}
@@ -122,15 +122,15 @@ export default function RoleManagement() {
                     size="small"
                     sx={{
                       bgcolor: selectedCount === catPerms.length ? 'rgba(76,175,80,0.12)' :
-                               selectedCount > 0 ? 'rgba(245,166,35,0.12)' : 'rgba(0,0,0,0.07)',
+                               selectedCount > 0 ? 'rgba(255,140,0,0.12)' : 'rgba(0,0,0,0.07)',
                       color: selectedCount === catPerms.length ? '#4CAF50' :
-                             selectedCount > 0 ? '#F5A623' : '#999',
+                             selectedCount > 0 ? '#FF8C00' : '#999',
                       fontWeight: 600, fontSize: '0.7rem', height: 20,
                     }}
                   />
                   <Box sx={{ flex: 1 }} />
                   <Button size="small" onClick={e => { e.stopPropagation(); toggleAll(cat); }}
-                    sx={{ fontSize: '0.72rem', minWidth: 'auto', px: 1, color: '#1A1A2E' }}>
+                    sx={{ fontSize: '0.72rem', minWidth: 'auto', px: 1, color: '#000000' }}>
                     {selectedCount === catPerms.length ? 'None' : 'All'}
                   </Button>
                 </Box>
@@ -224,13 +224,13 @@ export default function RoleManagement() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <SecurityIcon sx={{ color: '#1A1A2E', fontSize: 28 }} />
+          <SecurityIcon sx={{ color: '#000000', fontSize: 28 }} />
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Role & Permission Management</Typography>
         </Box>
         {canManageRoles && (
           <Button startIcon={<AddIcon />} variant="contained" size="small"
             onClick={() => setCreateOpen(true)}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' }, borderRadius: '8px' }}>
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' }, borderRadius: '8px' }}>
             Create Role
           </Button>
         )}
@@ -241,25 +241,25 @@ export default function RoleManagement() {
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-          <CircularProgress sx={{ color: '#1A1A2E' }} />
+          <CircularProgress sx={{ color: '#000000' }} />
         </Box>
       ) : (
         <>
           {/* Active roles */}
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1A1A2E', mb: 1.5, textTransform: 'uppercase', fontSize: '0.72rem', letterSpacing: 0.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#000000', mb: 1.5, textTransform: 'uppercase', fontSize: '0.72rem', letterSpacing: 0.5 }}>
             Active Roles ({activeRoles.length})
           </Typography>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             {activeRoles.map(role => {
               const permCount = role.permissions?.length || 0;
-              const color = ROLE_COLORS[role.name] || '#1A1A2E';
+              const color = ROLE_COLORS[role.name] || '#000000';
               return (
                 <Grid item xs={12} sm={6} md={4} key={role.id}>
-                  <Card sx={{ borderRadius: '12px', border: '1px solid rgba(26,26,46,0.08)', position: 'relative', overflow: 'visible' }}>
+                  <Card sx={{ borderRadius: '12px', border: '1px solid rgba(0,0,0,0.08)', position: 'relative', overflow: 'visible' }}>
                     {role.is_system && (
                       <Box sx={{ position: 'absolute', top: -8, right: 12 }}>
                         <Chip label="System" size="small"
-                          sx={{ bgcolor: 'rgba(26,26,46,0.9)', color: '#fff', fontSize: '0.65rem', height: 18, fontWeight: 600 }} />
+                          sx={{ bgcolor: 'rgba(0,0,0,0.9)', color: '#fff', fontSize: '0.65rem', height: 18, fontWeight: 600 }} />
                       </Box>
                     )}
                     <CardContent sx={{ p: 2 }}>
@@ -271,20 +271,20 @@ export default function RoleManagement() {
                         <Box sx={{ display: 'flex', gap: 0.3 }}>
                           <Tooltip title="View Details" arrow>
                             <IconButton size="small" onClick={() => { setViewTarget(role); setViewOpen(true); }}>
-                              <SecurityIcon sx={{ fontSize: 15, color: '#1A1A2E' }} />
+                              <SecurityIcon sx={{ fontSize: 15, color: '#000000' }} />
                             </IconButton>
                           </Tooltip>
                           {canManageRoles && (
                             <Tooltip title="Edit Permissions" arrow>
                               <IconButton size="small" onClick={() => openEdit(role)}>
-                                <EditIcon sx={{ fontSize: 15, color: '#F5A623' }} />
+                                <EditIcon sx={{ fontSize: 15, color: '#FF8C00' }} />
                               </IconButton>
                             </Tooltip>
                           )}
                           {canManageRoles && !role.is_system && (
                             <Tooltip title="Archive Role" arrow>
                               <IconButton size="small" onClick={() => setArchiveTarget(role)}>
-                                <ArchiveIcon sx={{ fontSize: 15, color: '#E94560' }} />
+                                <ArchiveIcon sx={{ fontSize: 15, color: '#FFD100' }} />
                               </IconButton>
                             </Tooltip>
                           )}
@@ -304,7 +304,7 @@ export default function RoleManagement() {
                         <Chip label={`${permCount} permission${permCount !== 1 ? 's' : ''}`}
                           size="small"
                           icon={<CheckBoxIcon style={{ fontSize: 12 }} />}
-                          sx={{ bgcolor: 'rgba(26,26,46,0.07)', color: '#1A1A2E', fontSize: '0.72rem', height: 22, fontWeight: 600 }} />
+                          sx={{ bgcolor: 'rgba(0,0,0,0.07)', color: '#000000', fontSize: '0.72rem', height: 22, fontWeight: 600 }} />
                         {role.created_by_name && (
                           <Typography sx={{ fontSize: '0.7rem', color: '#aaa' }}>
                             by {role.created_by_name}
@@ -347,7 +347,7 @@ export default function RoleManagement() {
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AddIcon sx={{ color: '#1A1A2E' }} />
+            <AddIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>Create Custom Role</Typography>
           </Box>
           <IconButton onClick={() => setCreateOpen(false)} size="small"><CloseIcon /></IconButton>
@@ -386,7 +386,7 @@ export default function RoleManagement() {
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setCreateOpen(false)} variant="outlined" size="small">Cancel</Button>
           <Button onClick={handleCreate} variant="contained" size="small" disabled={creating}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
             {creating ? <CircularProgress size={18} color="inherit" /> : 'Create Role'}
           </Button>
         </DialogActions>
@@ -396,7 +396,7 @@ export default function RoleManagement() {
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EditIcon sx={{ color: '#1A1A2E' }} />
+            <EditIcon sx={{ color: '#000000' }} />
             <Typography fontWeight={700}>
               Edit Role — {editTarget?.display_name}
               {editTarget?.is_system && <Chip label="System" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem' }} />}
@@ -437,7 +437,7 @@ export default function RoleManagement() {
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <Button onClick={() => setEditOpen(false)} variant="outlined" size="small">Cancel</Button>
           <Button onClick={handleSave} variant="contained" size="small" disabled={saving}
-            sx={{ bgcolor: '#1A1A2E', '&:hover': { bgcolor: '#2d2d4e' } }}>
+            sx={{ bgcolor: '#000000', '&:hover': { bgcolor: '#222222' } }}>
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Save Permissions'}
           </Button>
         </DialogActions>
@@ -463,13 +463,13 @@ export default function RoleManagement() {
                 const categories = CATEGORY_ORDER.filter(c => grouped[c]);
                 return categories.length ? categories.map(cat => (
                   <Box key={cat} sx={{ mb: 1.5 }}>
-                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#1A1A2E', mb: 0.5, textTransform: 'uppercase' }}>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#000000', mb: 0.5, textTransform: 'uppercase' }}>
                       {CATEGORY_LABELS[cat] || cat}
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {grouped[cat].map(p => (
                         <Chip key={p.name} label={p.name.split(':')[1]} size="small"
-                          sx={{ bgcolor: 'rgba(26,26,46,0.07)', color: '#1A1A2E', fontSize: '0.7rem', height: 20 }} />
+                          sx={{ bgcolor: 'rgba(0,0,0,0.07)', color: '#000000', fontSize: '0.7rem', height: 20 }} />
                       ))}
                     </Box>
                   </Box>
@@ -485,11 +485,11 @@ export default function RoleManagement() {
           {canManageRoles && !viewTarget?.deleted_at && (
             <Button onClick={() => { openEdit(viewTarget); setViewOpen(false); }}
               variant="outlined" size="small" startIcon={<EditIcon />}
-              sx={{ borderColor: '#1A1A2E', color: '#1A1A2E' }}>
+              sx={{ borderColor: '#000000', color: '#000000' }}>
               Edit Permissions
             </Button>
           )}
-          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#1A1A2E' }}>Close</Button>
+          <Button onClick={() => setViewOpen(false)} variant="contained" size="small" sx={{ bgcolor: '#000000' }}>Close</Button>
         </DialogActions>
       </Dialog>
 

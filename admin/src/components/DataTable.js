@@ -74,9 +74,9 @@ export default function DataTable({
   const skeletonRows = Array.from({ length: 5 });
 
   return (
-    <Paper elevation={0} sx={{ border: '1px solid rgba(26,26,46,0.08)', borderRadius: '12px', overflow: 'hidden' }}>
+    <Paper elevation={0} sx={{ border: '1px solid rgba(0,0,0,0.08)', borderRadius: '12px', overflow: 'hidden' }}>
       {/* Search Bar */}
-      <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid rgba(26,26,46,0.06)', backgroundColor: '#fafafa' }}>
+      <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid rgba(0,0,0,0.06)', backgroundColor: '#fafafa' }}>
         <TextField
           size="small"
           placeholder={searchPlaceholder}
@@ -86,7 +86,7 @@ export default function DataTable({
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 18, color: 'rgba(26,26,46,0.4)' }} />
+                <SearchIcon sx={{ fontSize: 18, color: 'rgba(0,0,0,0.4)' }} />
               </InputAdornment>
             ),
           }}
@@ -112,10 +112,10 @@ export default function DataTable({
                   sx={{
                     fontWeight: 600,
                     fontSize: '0.78rem',
-                    color: 'rgba(26,26,46,0.7)',
+                    color: 'rgba(0,0,0,0.7)',
                     py: 1.5,
                     whiteSpace: 'nowrap',
-                    borderBottom: '2px solid rgba(26,26,46,0.08)',
+                    borderBottom: '2px solid rgba(0,0,0,0.08)',
                     backgroundColor: '#F8F9FA',
                     ...(col.width ? { width: col.width } : {}),
                   }}
@@ -129,9 +129,9 @@ export default function DataTable({
                   sx={{
                     fontWeight: 600,
                     fontSize: '0.78rem',
-                    color: 'rgba(26,26,46,0.7)',
+                    color: 'rgba(0,0,0,0.7)',
                     py: 1.5,
-                    borderBottom: '2px solid rgba(26,26,46,0.08)',
+                    borderBottom: '2px solid rgba(0,0,0,0.08)',
                     backgroundColor: '#F8F9FA',
                     width: 140,
                   }}
@@ -165,7 +165,7 @@ export default function DataTable({
                     align="center"
                     sx={{ py: 6 }}
                   >
-                    <Typography sx={{ color: 'rgba(26,26,46,0.4)', fontSize: '0.9rem' }}>
+                    <Typography sx={{ color: 'rgba(0,0,0,0.4)', fontSize: '0.9rem' }}>
                       {emptyMessage}
                     </Typography>
                   </TableCell>
@@ -178,7 +178,7 @@ export default function DataTable({
                       key={row.id || row._id || rowIdx}
                       hover
                       sx={{
-                        '&:hover': { backgroundColor: 'rgba(26,26,46,0.025)' },
+                        '&:hover': { backgroundColor: 'rgba(0,0,0,0.025)' },
                         opacity: isSuspended ? 0.7 : 1,
                       }}
                     >
@@ -189,8 +189,8 @@ export default function DataTable({
                           sx={{
                             py: 1.2,
                             fontSize: '0.82rem',
-                            color: '#1A1A2E',
-                            borderBottom: '1px solid rgba(26,26,46,0.05)',
+                            color: '#000000',
+                            borderBottom: '1px solid rgba(0,0,0,0.05)',
                             whiteSpace: col.noWrap ? 'nowrap' : 'normal',
                           }}
                         >
@@ -204,7 +204,7 @@ export default function DataTable({
                         </TableCell>
                       ))}
                       {actions && (
-                        <TableCell align="right" sx={{ py: 1, borderBottom: '1px solid rgba(26,26,46,0.05)' }}>
+                        <TableCell align="right" sx={{ py: 1, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.3 }}>
                             {extraActions && extraActions(row)}
                             {onView && (
@@ -212,7 +212,7 @@ export default function DataTable({
                                 <IconButton
                                   size="small"
                                   onClick={() => onView(row)}
-                                  sx={{ color: '#1A1A2E', '&:hover': { backgroundColor: 'rgba(26,26,46,0.08)' } }}
+                                  sx={{ color: '#000000', '&:hover': { backgroundColor: 'rgba(0,0,0,0.08)' } }}
                                 >
                                   <VisibilityIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -223,7 +223,7 @@ export default function DataTable({
                                 <IconButton
                                   size="small"
                                   onClick={() => onEdit(row)}
-                                  sx={{ color: '#F5A623', '&:hover': { backgroundColor: 'rgba(245,166,35,0.1)' } }}
+                                  sx={{ color: '#FF8C00', '&:hover': { backgroundColor: 'rgba(255,140,0,0.1)' } }}
                                 >
                                   <EditIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -245,7 +245,7 @@ export default function DataTable({
                                   <IconButton
                                     size="small"
                                     onClick={() => onSuspend(row)}
-                                    sx={{ color: '#E94560', '&:hover': { backgroundColor: 'rgba(233,69,96,0.1)' } }}
+                                    sx={{ color: '#FFD100', '&:hover': { backgroundColor: 'rgba(255,209,0,0.1)' } }}
                                   >
                                     <BlockIcon sx={{ fontSize: 16 }} />
                                   </IconButton>
@@ -257,7 +257,7 @@ export default function DataTable({
                                 <IconButton
                                   size="small"
                                   onClick={() => onDelete(row)}
-                                  sx={{ color: '#E94560', '&:hover': { backgroundColor: 'rgba(233,69,96,0.1)' } }}
+                                  sx={{ color: '#FFD100', '&:hover': { backgroundColor: 'rgba(255,209,0,0.1)' } }}
                                 >
                                   <DeleteIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -282,7 +282,7 @@ export default function DataTable({
         onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
         rowsPerPageOptions={rowsPerPageOptions}
         sx={{
-          borderTop: '1px solid rgba(26,26,46,0.06)',
+          borderTop: '1px solid rgba(0,0,0,0.06)',
           '& .MuiTablePagination-toolbar': { fontSize: '0.8rem' },
           '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: '0.8rem' },
         }}

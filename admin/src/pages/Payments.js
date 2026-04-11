@@ -48,8 +48,8 @@ const MOCK_PAYMENT_METHODS = [
 
 const STATUS_COLORS = {
   completed: '#4CAF50',
-  pending: '#F5A623',
-  failed: '#E94560',
+  pending: '#FF8C00',
+  failed: '#FFD100',
   refunded: '#2196F3',
 };
 
@@ -118,7 +118,7 @@ export default function Payments() {
     {
       field: 'amount', headerName: 'Amount', align: 'right',
       renderCell: (row) => (
-        <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1A1A2E' }}>
+        <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#000000' }}>
           {Number(row.amount).toLocaleString()} XAF
         </Typography>
       ),
@@ -156,10 +156,10 @@ export default function Payments() {
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '8px' }} onClose={() => setError('')}>{error}</Alert>}
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={3}><StatCard title="Revenue Today" value={`${Number(stats.today || 0).toLocaleString()} XAF`} icon={<WalletIcon />} iconBg="#1A1A2E" trend={5} loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="This Month" value={`${Number(stats.month || 0).toLocaleString()} XAF`} icon={<TrendingUpIcon />} iconBg="#E94560" trend={12} loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending" value={Number(stats.pending || 0).toLocaleString()} icon={<PendingIcon />} iconBg="#F5A623" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Failed" value={Number(stats.failed || 0).toLocaleString()} icon={<FailedIcon />} iconBg="#E94560" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Revenue Today" value={`${Number(stats.today || 0).toLocaleString()} XAF`} icon={<WalletIcon />} iconBg="#000000" trend={5} loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="This Month" value={`${Number(stats.month || 0).toLocaleString()} XAF`} icon={<TrendingUpIcon />} iconBg="#FFD100" trend={12} loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending" value={Number(stats.pending || 0).toLocaleString()} icon={<PendingIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Failed" value={Number(stats.failed || 0).toLocaleString()} icon={<FailedIcon />} iconBg="#FFD100" loading={loading} /></Grid>
       </Grid>
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
@@ -167,7 +167,7 @@ export default function Payments() {
           <Card>
             <CardContent sx={{ p: 2.5 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>Revenue — Last 30 Days</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 2 }}>Total earnings in XAF</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 2 }}>Total earnings in XAF</Typography>
               <RevenueAreaChart data={revenueChart} loading={loading} height={240} />
             </CardContent>
           </Card>
@@ -176,7 +176,7 @@ export default function Payments() {
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, fontSize: '0.95rem' }}>Payment Methods</Typography>
-              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(26,26,46,0.45)', mb: 1 }}>Distribution</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)', mb: 1 }}>Distribution</Typography>
               <PaymentPieChart data={methodBreakdown} loading={loading} height={240} />
             </CardContent>
           </Card>

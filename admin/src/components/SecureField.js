@@ -54,7 +54,7 @@ export default function SecureField({
 
   return (
     <Box sx={{ position: 'relative', ...sx }}>
-      <Typography sx={{ fontSize: '0.72rem', color: 'rgba(26,26,46,0.5)', mb: 0.2 }}>
+      <Typography sx={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.5)', mb: 0.2 }}>
         {label}
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -64,7 +64,7 @@ export default function SecureField({
             fontFamily: revealed ? 'inherit' : 'monospace',
             fontSize: '0.88rem',
             fontWeight: 500,
-            color: revealed ? '#1A1A2E' : '#9E9E9E',
+            color: revealed ? '#000000' : '#9E9E9E',
             letterSpacing: revealed ? 'normal' : '0.1em',
             transition: 'all 0.2s',
             flex: 1,
@@ -83,9 +83,9 @@ export default function SecureField({
               disabled={loading}
               sx={{
                 p: 0.3,
-                color: revealed ? '#E94560' : '#1A1A2E',
+                color: revealed ? '#FFD100' : '#000000',
                 opacity: 0.7,
-                '&:hover': { opacity: 1, bgcolor: 'rgba(26,26,46,0.06)' },
+                '&:hover': { opacity: 1, bgcolor: 'rgba(0,0,0,0.06)' },
               }}
             >
               {loading
@@ -106,13 +106,13 @@ export default function SecureField({
             mt: 0.4,
             height: 16,
             fontSize: '0.62rem',
-            bgcolor: 'rgba(233,69,96,0.08)',
-            color: '#E94560',
+            bgcolor: 'rgba(255,209,0,0.08)',
+            color: '#FFD100',
           }}
         />
       )}
       {error && (
-        <Typography sx={{ fontSize: '0.7rem', color: '#E94560', mt: 0.3 }}>{error}</Typography>
+        <Typography sx={{ fontSize: '0.7rem', color: '#FFD100', mt: 0.3 }}>{error}</Typography>
       )}
     </Box>
   );
