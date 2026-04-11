@@ -125,7 +125,7 @@ export function RidesBarChart({ data = [], loading = false, height = 300 }) {
           tickLine={false}
         />
         <Tooltip content={<CustomTooltip />} />
-        <Bar dataKey="rides" name="Rides" fill="#000000" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="rides" name="Rides" fill="#E31837" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

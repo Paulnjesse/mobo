@@ -178,7 +178,7 @@ export default function DataTable({
                       key={row.id || row._id || rowIdx}
                       hover
                       sx={{
-                        '&:hover': { backgroundColor: 'rgba(0,0,0,0.025)' },
+                        '&:hover': { backgroundColor: 'rgba(227,24,55,0.04)' },
                         opacity: isSuspended ? 0.7 : 1,
                       }}
                     >

@@ -49,7 +49,7 @@ const theme = createTheme({
       main: '#E53935',
     },
     background: {
-      default: '#F7F7F7',
+      default: '#FFFFFF',
       paper: '#ffffff',
     },
   },
@@ -68,7 +68,7 @@ const theme = createTheme({
         root: {
           textTransform: 'none',
           fontWeight: 700,
-          borderRadius: 6,
+          borderRadius: 50,
           letterSpacing: '0.1px',
         },
         containedPrimary: {
@@ -142,7 +142,7 @@ function ProtectedLayout() {
   }
   return (
     <CopyProtectionProvider>
-      <Box sx={{ display: 'flex', minHeight: '100vh', background: '#F8F9FA' }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', background: '#FFFFFF' }}>
         <Sidebar width={SIDEBAR_WIDTH} />
         <Box
           component="main"

@@ -111,8 +111,7 @@ export default function Header() {
   return (
     <AppBar position="sticky" elevation={0}
       sx={{ backgroundColor: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.08)', zIndex: 1100 }}>
-      <Box sx={{ height: 3, background: 'linear-gradient(90deg, #000000 0%, #E31837 50%, #FF6B35 100%)', position: 'absolute', top: 0, left: 0, right: 0 }} />
-      <Toolbar sx={{ pt: '3px', minHeight: '64px !important', px: 3 }}>
+      <Toolbar sx={{ minHeight: '64px !important', px: 3 }}>
         {/* Page title */}
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="h6" sx={{ color: '#000000', fontWeight: 700, fontSize: '1.1rem' }}>
