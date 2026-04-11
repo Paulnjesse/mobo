@@ -323,7 +323,7 @@ export default function TwoFactorSetup() {
       {/* ── INACTIVE STATE ── */}
       {phase === 'inactive' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #E31837 50%, #FF6B35 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Alert
               severity="info"
@@ -357,7 +357,7 @@ export default function TwoFactorSetup() {
       {/* ── SETUP STEP (show QR + secret) ── */}
       {phase === 'setup' && setupData && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #E31837 50%, #FF6B35 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Typography fontWeight={700} fontSize="1.05rem" sx={{ mb: 2 }}>
               Scan the QR Code
@@ -448,7 +448,7 @@ export default function TwoFactorSetup() {
       {/* ── VERIFY STEP ── */}
       {phase === 'verify' && (
         <Card sx={{ borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
-          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)' }} />
+          <Box sx={{ height: 4, background: 'linear-gradient(90deg, #000000 0%, #E31837 50%, #FF6B35 100%)' }} />
           <CardContent sx={{ p: 3 }}>
             <Typography fontWeight={700} fontSize="1.05rem" sx={{ mb: 0.5 }}>
               Verify & Activate

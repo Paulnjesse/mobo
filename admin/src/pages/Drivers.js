@@ -223,7 +223,7 @@ export default function Drivers() {
     }},
     { field: 'rating', headerName: 'Rating', renderCell: row => (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <StarIcon sx={{ fontSize: 14, color: '#FF8C00' }} />
+        <StarIcon sx={{ fontSize: 14, color: '#FF6B35' }} />
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{row.rating}</Typography>
       </Box>
     )},
@@ -232,11 +232,11 @@ export default function Drivers() {
       <Chip label={row.is_online ? 'Online' : 'Offline'} size="small" sx={{ bgcolor: row.is_online ? 'rgba(76,175,80,0.1)' : 'rgba(0,0,0,0.06)', color: row.is_online ? '#4CAF50' : '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'is_approved', headerName: 'Approval', renderCell: row => (
-      <Chip label={row.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: row.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: row.is_approved ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+      <Chip label={row.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: row.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,107,53,0.1)', color: row.is_approved ? '#4CAF50' : '#FF6B35', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'is_suspended', headerName: 'Status', renderCell: row => (
       row.is_suspended
-        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : <Chip label="Active" size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
   ];
@@ -272,8 +272,8 @@ export default function Drivers() {
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}><StatCard title="Total Drivers" value={stats.total?.toLocaleString()} icon={<CarIcon />} iconBg="#000000" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Online Now" value={stats.online?.toLocaleString()} icon={<OnlineIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#FFD100" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF6B35" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#E31837" loading={loading} /></Grid>
       </Grid>
 
       <Card>
@@ -309,7 +309,7 @@ export default function Drivers() {
                 {canArchive && !row.is_deleted && (
                   <Tooltip title="Archive Driver" arrow>
                     <IconButton size="small" onClick={() => setArchiveConfirm(row)}
-                      sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
+                      sx={{ color: '#FF6B35', '&:hover': { bgcolor: 'rgba(255,107,53,0.1)' } }}>
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
@@ -424,7 +424,7 @@ export default function Drivers() {
                 <Box>
                   <Typography fontWeight={700} fontSize="1rem">{getName(selectedDriver)}</Typography>
                   <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                    <Chip label={selectedDriver.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: selectedDriver.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: selectedDriver.is_approved ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                    <Chip label={selectedDriver.is_approved ? 'Approved' : 'Pending'} size="small" sx={{ bgcolor: selectedDriver.is_approved ? 'rgba(76,175,80,0.1)' : 'rgba(255,107,53,0.1)', color: selectedDriver.is_approved ? '#4CAF50' : '#FF6B35', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
                     <Chip label={selectedDriver.is_online ? 'Online' : 'Offline'} size="small" sx={{ bgcolor: selectedDriver.is_online ? 'rgba(76,175,80,0.15)' : 'rgba(0,0,0,0.06)', color: selectedDriver.is_online ? '#4CAF50' : '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
                   </Box>
                 </Box>
@@ -507,7 +507,7 @@ export default function Drivers() {
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#FF8C00' }} />
+          <ArchiveIcon sx={{ color: '#FF6B35' }} />
           <Typography fontWeight={700}>Archive Driver</Typography>
         </DialogTitle>
         <DialogContent>

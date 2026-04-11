@@ -18,8 +18,8 @@ import { useAuth } from '../context/AuthContext';
 
 const ACTION_COLORS = {
   view:         { bg: 'rgba(33,150,243,0.1)',  color: '#2196F3' },
-  reveal_field: { bg: 'rgba(255,209,0,0.1)',   color: '#FFD100' },
-  download:     { bg: 'rgba(255,140,0,0.1)',  color: '#FF8C00' },
+  reveal_field: { bg: 'rgba(227,24,55,0.1)',   color: '#E31837' },
+  download:     { bg: 'rgba(255,107,53,0.1)',  color: '#FF6B35' },
   upload:       { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
   verify:       { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
   archive:      { bg: 'rgba(158,158,158,0.1)', color: '#9E9E9E' },
@@ -159,7 +159,7 @@ export default function AuditLog() {
           <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap' }}>
             {fields.slice(0, 3).map(f => (
               <Chip key={f} label={f} size="small"
-                sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'rgba(255,209,0,0.08)', color: '#FFD100' }} />
+                sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'rgba(227,24,55,0.08)', color: '#E31837' }} />
             ))}
             {fields.length > 3 && (
               <Chip label={`+${fields.length - 3}`} size="small"
@@ -197,7 +197,7 @@ export default function AuditLog() {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <ShieldIcon sx={{ color: '#FFD100' }} />
+          <ShieldIcon sx={{ color: '#E31837' }} />
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>Audit Log</Typography>
             <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>
@@ -224,8 +224,8 @@ export default function AuditLog() {
         {[
           { label: 'Total Records', value: total.toLocaleString(), color: '#000000' },
           { label: 'Filtered', value: logs.length.toLocaleString(), color: '#2196F3' },
-          { label: 'PII Reveals', value: logs.filter(l => l.action === 'reveal_field').length.toLocaleString(), color: '#FFD100' },
-          { label: 'Downloads', value: logs.filter(l => l.action === 'download').length.toLocaleString(), color: '#FF8C00' },
+          { label: 'PII Reveals', value: logs.filter(l => l.action === 'reveal_field').length.toLocaleString(), color: '#E31837' },
+          { label: 'Downloads', value: logs.filter(l => l.action === 'download').length.toLocaleString(), color: '#FF6B35' },
         ].map(({ label, value, color }) => (
           <Grid item xs={6} sm={3} key={label}>
             <Card>

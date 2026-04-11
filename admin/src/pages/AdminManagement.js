@@ -22,11 +22,11 @@ import { adminMgmtAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const ROLE_COLORS = {
-  admin:      { bg: 'rgba(255,209,0,0.1)',   color: '#FFD100' },
+  admin:      { bg: 'rgba(227,24,55,0.1)',   color: '#E31837' },
   full_admin: { bg: 'rgba(0,0,0,0.1)',    color: '#000000' },
   support:    { bg: 'rgba(33,150,243,0.1)',  color: '#2196F3' },
   finance:    { bg: 'rgba(76,175,80,0.1)',   color: '#4CAF50' },
-  ops:        { bg: 'rgba(255,140,0,0.1)',  color: '#FF8C00' },
+  ops:        { bg: 'rgba(255,107,53,0.1)',  color: '#FF6B35' },
   read_write: { bg: 'rgba(156,39,176,0.1)', color: '#9C27B0' },
   read_only:  { bg: 'rgba(0,0,0,0.07)',     color: '#666' },
 };
@@ -177,7 +177,7 @@ export default function AdminManagement() {
         ? <Chip label="Archived" size="small" sx={{ bgcolor: 'rgba(0,0,0,0.07)', color: '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : row.is_active
           ? <Chip label="Active"   size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
-          : <Chip label="Inactive" size="small" sx={{ bgcolor: 'rgba(255,140,0,0.1)', color: '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+          : <Chip label="Inactive" size="small" sx={{ bgcolor: 'rgba(255,107,53,0.1)', color: '#FF6B35', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'created_by_name', headerName: 'Created By', renderCell: row => (
       <Typography sx={{ fontSize: '0.8rem', color: '#666' }}>{row.created_by_name || 'System'}</Typography>
@@ -225,7 +225,7 @@ export default function AdminManagement() {
           <StatCard title="Archived" value={stats.archived} icon={<ArchiveIcon />} iconBg="#9E9E9E" loading={loading} />
         </Grid>
         <Grid item xs={6} sm={3}>
-          <StatCard title="Role Types" value={Object.keys(stats.byRole).length} icon={<AdminIcon />} iconBg="#FF8C00" loading={loading} />
+          <StatCard title="Role Types" value={Object.keys(stats.byRole).length} icon={<AdminIcon />} iconBg="#FF6B35" loading={loading} />
         </Grid>
       </Grid>
 
@@ -246,7 +246,7 @@ export default function AdminManagement() {
                     <IconButton
                       size="small"
                       onClick={() => setArchiveTarget(row)}
-                      sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}
+                      sx={{ color: '#E31837', '&:hover': { bgcolor: 'rgba(227,24,55,0.1)' } }}
                     >
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
@@ -357,7 +357,7 @@ export default function AdminManagement() {
                 </Select>
               </FormControl>
               {editTarget?.admin_role === 'admin' && (
-                <Typography sx={{ fontSize: '0.75rem', color: '#FF8C00', mt: 0.5 }}>
+                <Typography sx={{ fontSize: '0.75rem', color: '#FF6B35', mt: 0.5 }}>
                   Super Admin role cannot be changed
                 </Typography>
               )}
@@ -450,7 +450,7 @@ export default function AdminManagement() {
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveTarget} onClose={() => setArchiveTarget(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#FF8C00' }} />
+          <ArchiveIcon sx={{ color: '#FF6B35' }} />
           <Typography fontWeight={700}>Archive Staff Member</Typography>
         </DialogTitle>
         <DialogContent>

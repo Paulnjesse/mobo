@@ -28,8 +28,8 @@ const CATEGORY_LABELS = {
 };
 
 const ROLE_COLORS = {
-  admin: '#FFD100', full_admin: '#000000', support: '#2196F3',
-  finance: '#4CAF50', ops: '#FF8C00', read_write: '#9C27B0', read_only: '#666',
+  admin: '#E31837', full_admin: '#000000', support: '#2196F3',
+  finance: '#4CAF50', ops: '#FF6B35', read_write: '#9C27B0', read_only: '#666',
 };
 
 function groupByCategory(permissions) {
@@ -122,9 +122,9 @@ export default function RoleManagement() {
                     size="small"
                     sx={{
                       bgcolor: selectedCount === catPerms.length ? 'rgba(76,175,80,0.12)' :
-                               selectedCount > 0 ? 'rgba(255,140,0,0.12)' : 'rgba(0,0,0,0.07)',
+                               selectedCount > 0 ? 'rgba(255,107,53,0.12)' : 'rgba(0,0,0,0.07)',
                       color: selectedCount === catPerms.length ? '#4CAF50' :
-                             selectedCount > 0 ? '#FF8C00' : '#999',
+                             selectedCount > 0 ? '#FF6B35' : '#999',
                       fontWeight: 600, fontSize: '0.7rem', height: 20,
                     }}
                   />
@@ -277,14 +277,14 @@ export default function RoleManagement() {
                           {canManageRoles && (
                             <Tooltip title="Edit Permissions" arrow>
                               <IconButton size="small" onClick={() => openEdit(role)}>
-                                <EditIcon sx={{ fontSize: 15, color: '#FF8C00' }} />
+                                <EditIcon sx={{ fontSize: 15, color: '#FF6B35' }} />
                               </IconButton>
                             </Tooltip>
                           )}
                           {canManageRoles && !role.is_system && (
                             <Tooltip title="Archive Role" arrow>
                               <IconButton size="small" onClick={() => setArchiveTarget(role)}>
-                                <ArchiveIcon sx={{ fontSize: 15, color: '#FFD100' }} />
+                                <ArchiveIcon sx={{ fontSize: 15, color: '#E31837' }} />
                               </IconButton>
                             </Tooltip>
                           )}

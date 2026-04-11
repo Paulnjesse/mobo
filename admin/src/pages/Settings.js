@@ -129,7 +129,7 @@ export default function Settings() {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <CircularProgress sx={{ color: '#FFD100' }} />
+        <CircularProgress sx={{ color: '#E31837' }} />
       </Box>
     );
   }
@@ -228,11 +228,11 @@ export default function Settings() {
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.45)' }}>Platform gets</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#FFD100', fontSize: '0.95rem' }}>{100 - settings.driverCommission}%</Typography>
+                    <Typography sx={{ fontWeight: 700, color: '#E31837', fontSize: '0.95rem' }}>{100 - settings.driverCommission}%</Typography>
                   </Box>
                   <Box>
                     <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.45)' }}>Service fee</Typography>
-                    <Typography sx={{ fontWeight: 700, color: '#FF8C00', fontSize: '0.95rem' }}>{settings.serviceFeePercent}%</Typography>
+                    <Typography sx={{ fontWeight: 700, color: '#FF6B35', fontSize: '0.95rem' }}>{settings.serviceFeePercent}%</Typography>
                   </Box>
                 </Box>
               </Box>
@@ -306,7 +306,7 @@ export default function Settings() {
                       bgcolor: 'rgba(0,0,0,0.08)',
                       fontWeight: 600,
                       fontSize: '0.82rem',
-                      '& .MuiChip-deleteIcon': { color: '#FFD100', '&:hover': { color: '#c62a47' } },
+                      '& .MuiChip-deleteIcon': { color: '#E31837', '&:hover': { color: '#c62a47' } },
                     }}
                   />
                 ))}
@@ -355,7 +355,7 @@ export default function Settings() {
                     <Grid item xs={12} sm={4} key={example.label}>
                       <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <Typography sx={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', mb: 0.5 }}>{example.label}</Typography>
-                        <Typography sx={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF8C00' }}>
+                        <Typography sx={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF6B35' }}>
                           {fare.toLocaleString()} XAF
                         </Typography>
                         <Typography sx={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', mt: 0.3 }}>
@@ -386,7 +386,7 @@ export default function Settings() {
             onClick={handleSave}
             disabled={saving}
             size="small"
-            sx={{ bgcolor: '#FFD100', borderRadius: '8px', '&:hover': { bgcolor: '#c62a47' } }}
+            sx={{ bgcolor: '#E31837', borderRadius: '8px', '&:hover': { bgcolor: '#c62a47' } }}
           >
             {saving ? 'Saving...' : 'Save Now'}
           </Button>

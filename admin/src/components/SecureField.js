@@ -83,7 +83,7 @@ export default function SecureField({
               disabled={loading}
               sx={{
                 p: 0.3,
-                color: revealed ? '#FFD100' : '#000000',
+                color: revealed ? '#E31837' : '#000000',
                 opacity: 0.7,
                 '&:hover': { opacity: 1, bgcolor: 'rgba(0,0,0,0.06)' },
               }}
@@ -106,13 +106,13 @@ export default function SecureField({
             mt: 0.4,
             height: 16,
             fontSize: '0.62rem',
-            bgcolor: 'rgba(255,209,0,0.08)',
-            color: '#FFD100',
+            bgcolor: 'rgba(227,24,55,0.08)',
+            color: '#E31837',
           }}
         />
       )}
       {error && (
-        <Typography sx={{ fontSize: '0.7rem', color: '#FFD100', mt: 0.3 }}>{error}</Typography>
+        <Typography sx={{ fontSize: '0.7rem', color: '#E31837', mt: 0.3 }}>{error}</Typography>
       )}
     </Box>
   );

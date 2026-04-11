@@ -132,7 +132,7 @@ export default function AdsManagement() {
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}
-          sx={{ bgcolor: '#FFD100', '&:hover': { bgcolor: '#c73652' } }}>
+          sx={{ bgcolor: '#E31837', '&:hover': { bgcolor: '#c73652' } }}>
           New Ad
         </Button>
       </Box>
@@ -144,7 +144,7 @@ export default function AdsManagement() {
         {[
           { label: 'Total Ads',    value: ads.length,                  icon: <CampaignIcon />, color: '#000000' },
           { label: 'Active',       value: activeCount,                  icon: <VisibilityIcon />, color: '#00A651' },
-          { label: 'Sponsored',    value: bizCount,                     icon: <StoreIcon />, color: '#FFD100' },
+          { label: 'Sponsored',    value: bizCount,                     icon: <StoreIcon />, color: '#E31837' },
           { label: 'Total Clicks', value: totalClicks.toLocaleString(), icon: <BarChartIcon />, color: '#0077CC' },
         ].map((s) => (
           <Card key={s.label}>
@@ -365,7 +365,7 @@ export default function AdsManagement() {
         <DialogActions>
           <Button onClick={() => setDialog(null)}>Cancel</Button>
           <Button onClick={handleSave} variant="contained" disabled={saving || !form.title || !form.subtitle}
-            sx={{ bgcolor: '#FFD100', '&:hover': { bgcolor: '#c73652' } }}>
+            sx={{ bgcolor: '#E31837', '&:hover': { bgcolor: '#c73652' } }}>
             {saving ? <CircularProgress size={20} color="inherit" /> : dialog === 'create' ? 'Create Ad' : 'Save Changes'}
           </Button>
         </DialogActions>

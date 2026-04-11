@@ -55,11 +55,11 @@ const MOCK_DRIVERS = Array.from({ length: 28 }, (_, i) => {
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  not_checked: { label: 'Not Checked', color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
-  pending:     { label: 'Pending',     color: '#FF8C00', bg: 'rgba(255,140,0,0.1)' },
+  not_checked: { label: 'Not Checked', color: '#E31837', bg: 'rgba(227,24,55,0.1)' },
+  pending:     { label: 'Pending',     color: '#FF6B35', bg: 'rgba(255,107,53,0.1)' },
   clear:       { label: 'Clear',       color: '#4CAF50', bg: 'rgba(76,175,80,0.1)'  },
-  flagged:     { label: 'Flagged ⚠️',  color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
-  expired:     { label: 'Expired',     color: '#FFD100', bg: 'rgba(255,209,0,0.1)' },
+  flagged:     { label: 'Flagged ⚠️',  color: '#E31837', bg: 'rgba(227,24,55,0.1)' },
+  expired:     { label: 'Expired',     color: '#E31837', bg: 'rgba(227,24,55,0.1)' },
 };
 
 function StatusChip({ status }) {
@@ -259,8 +259,8 @@ export default function BackgroundChecks() {
 
   const daysChip = (days) => {
     if (days == null) return '—';
-    if (days < 0) return <Chip label="Overdue" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
-    if (days < 30) return <Chip label={`${days}d`} size="small" sx={{ bgcolor: 'rgba(255,140,0,0.1)', color: '#FF8C00', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
+    if (days < 0) return <Chip label="Overdue" size="small" sx={{ bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
+    if (days < 30) return <Chip label={`${days}d`} size="small" sx={{ bgcolor: 'rgba(255,107,53,0.1)', color: '#FF6B35', fontWeight: 700, fontSize: '0.7rem', height: 20 }} />;
     return <Typography sx={{ fontSize: '0.82rem' }}>{days}d</Typography>;
   };
 
@@ -298,7 +298,7 @@ export default function BackgroundChecks() {
             title="Not Checked"
             value={stats.notChecked.toLocaleString()}
             icon={<ExpiredIcon />}
-            iconBg="#FFD100"
+            iconBg="#E31837"
             loading={loading}
           />
         </Grid>
@@ -307,7 +307,7 @@ export default function BackgroundChecks() {
             title="Expiring Soon"
             value={stats.expiringSoon.toLocaleString()}
             icon={<PendingIcon />}
-            iconBg="#FF8C00"
+            iconBg="#FF6B35"
             loading={loading}
           />
         </Grid>
@@ -316,7 +316,7 @@ export default function BackgroundChecks() {
             title="Flagged"
             value={stats.flagged.toLocaleString()}
             icon={<WarningIcon />}
-            iconBg="#FFD100"
+            iconBg="#E31837"
             loading={loading}
           />
         </Grid>

@@ -83,7 +83,7 @@ const STATUS_COLORS = {
   completed:   '#4CAF50',
   in_progress: '#2196F3',
   cancelled:   '#E53935',
-  requested:   '#FF8C00',
+  requested:   '#FF6B35',
   accepted:    '#9C27B0',
 };
 
@@ -135,8 +135,8 @@ const userColumns = [
         label={row.role}
         size="small"
         sx={{
-          backgroundColor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(255,209,0,0.1)',
-          color: row.role === 'driver' ? '#000000' : '#FFD100',
+          backgroundColor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(227,24,55,0.1)',
+          color: row.role === 'driver' ? '#000000' : '#E31837',
           fontWeight: 600,
           fontSize: '0.7rem',
           height: 22,
@@ -150,8 +150,8 @@ const userColumns = [
 ];
 
 const ACCESS_ICONS = {
-  reveal_field: <RevealIcon sx={{ fontSize: 14, color: '#FFD100' }} />,
-  download:     <DownloadIcon sx={{ fontSize: 14, color: '#FF8C00' }} />,
+  reveal_field: <RevealIcon sx={{ fontSize: 14, color: '#E31837' }} />,
+  download:     <DownloadIcon sx={{ fontSize: 14, color: '#FF6B35' }} />,
   view:         <ViewIcon sx={{ fontSize: 14, color: '#2196F3' }} />,
 };
 
@@ -296,7 +296,7 @@ export default function Dashboard() {
               title="Total Drivers"
               value={loading ? '—' : Number(stats?.totalDrivers || 0).toLocaleString()}
               icon={<DriveEtaIcon />}
-              iconBg="#FFD100"
+              iconBg="#E31837"
               trend={8}
               trendLabel="vs last month"
               navigateTo="/drivers"
@@ -310,7 +310,7 @@ export default function Dashboard() {
               title="Active Rides"
               value={loading ? '—' : Number(stats?.activeRides || 0).toLocaleString()}
               icon={<DirectionsCarIcon />}
-              iconBg="#FF8C00"
+              iconBg="#FF6B35"
               subtitle="Right now"
               navigateTo="/rides"
               loading={loading}
@@ -406,7 +406,7 @@ export default function Dashboard() {
             <Card sx={{ mb: 3, height: '100%' }}>
               <CardContent sx={{ p: 2.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <ShieldIcon sx={{ fontSize: 18, color: '#FFD100' }} />
+                  <ShieldIcon sx={{ fontSize: 18, color: '#E31837' }} />
                   <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
                     Recent Data Access
                   </Typography>
@@ -451,7 +451,7 @@ export default function Dashboard() {
                 <Button
                   size="small" fullWidth
                   onClick={() => window.location.href = '/audit-log'}
-                  sx={{ color: '#FFD100', fontSize: '0.78rem', fontWeight: 600 }}>
+                  sx={{ color: '#E31837', fontSize: '0.78rem', fontWeight: 600 }}>
                   View Full Audit Log →
                 </Button>
               </CardContent>

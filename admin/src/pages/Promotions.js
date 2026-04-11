@@ -124,8 +124,8 @@ export default function Promotions() {
         {[
           { label: 'Total Promos', value: promos.length, color: '#000000' },
           { label: 'Active', value: activeCount, color: '#4CAF50' },
-          { label: 'Inactive', value: promos.length - activeCount, color: '#FFD100' },
-          { label: 'Total Uses', value: totalUsed.toLocaleString(), color: '#FF8C00' },
+          { label: 'Inactive', value: promos.length - activeCount, color: '#E31837' },
+          { label: 'Total Uses', value: totalUsed.toLocaleString(), color: '#FF6B35' },
         ].map((item) => (
           <Grid item xs={6} sm={3} key={item.label}>
             <Card>
@@ -164,7 +164,7 @@ export default function Promotions() {
                       <Box sx={{
                         px: 1.5, py: 0.5, bgcolor: '#000000', borderRadius: '6px',
                         display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
-                        '&:hover': { bgcolor: '#FFD100' }, transition: 'bgcolor 0.2s',
+                        '&:hover': { bgcolor: '#E31837' }, transition: 'bgcolor 0.2s',
                       }}
                         onClick={() => handleCopyCode(promo.code)}
                       >
@@ -176,9 +176,9 @@ export default function Promotions() {
                       <Chip
                         label={promo.discountType === 'percent' ? `${promo.value}% OFF` : `${Number(promo.value).toLocaleString()} XAF OFF`}
                         size="small"
-                        sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 700, fontSize: '0.78rem' }}
+                        sx={{ bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837', fontWeight: 700, fontSize: '0.78rem' }}
                       />
-                      {isExpired && <Chip label="Expired" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontSize: '0.7rem' }} />}
+                      {isExpired && <Chip label="Expired" size="small" sx={{ bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837', fontSize: '0.7rem' }} />}
                     </Box>
                     {promo.description && (
                       <Typography sx={{ fontSize: '0.78rem', color: 'rgba(0,0,0,0.55)', mb: 0.5 }}>{promo.description}</Typography>
@@ -202,7 +202,7 @@ export default function Promotions() {
                       <Switch checked={promo.active} onChange={() => handleToggle(promo)} size="small"
                         sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#4CAF50' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#4CAF50' } }} />
                     )}
-                    <IconButton size="small" onClick={() => setDeleteConfirm(promo)} sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}>
+                    <IconButton size="small" onClick={() => setDeleteConfirm(promo)} sx={{ color: '#E31837', '&:hover': { bgcolor: 'rgba(227,24,55,0.1)' } }}>
                       <DeleteIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
@@ -223,7 +223,7 @@ export default function Promotions() {
                       height: 6, borderRadius: '3px',
                       bgcolor: 'rgba(0,0,0,0.08)',
                       '& .MuiLinearProgress-bar': {
-                        bgcolor: usagePercent >= 90 ? '#FFD100' : usagePercent >= 70 ? '#FF8C00' : '#4CAF50',
+                        bgcolor: usagePercent >= 90 ? '#E31837' : usagePercent >= 70 ? '#FF6B35' : '#4CAF50',
                         borderRadius: '3px',
                       },
                     }}
@@ -311,7 +311,7 @@ export default function Promotions() {
                   <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.9rem', bgcolor: '#000000', color: '#fff', px: 1, py: 0.3, borderRadius: '4px' }}>
                     {form.code}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#FFD100' }}>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#E31837' }}>
                     {form.discountType === 'percent' ? `${form.value}% OFF` : `${Number(form.value).toLocaleString()} XAF OFF`}
                   </Typography>
                   <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.45)' }}>

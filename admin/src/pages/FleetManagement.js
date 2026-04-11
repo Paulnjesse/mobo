@@ -217,8 +217,8 @@ export default function FleetManagement() {
     setTimeout(() => setSuccess(''), 3000);
   };
 
-  const statusColor = s => ({ active: '#4CAF50', approved: '#4CAF50', pending: '#FF8C00', suspended: '#FFD100', rejected: '#FFD100' }[s] || '#999');
-  const statusBg = s => ({ active: 'rgba(76,175,80,0.1)', approved: 'rgba(76,175,80,0.1)', pending: 'rgba(255,140,0,0.1)', suspended: 'rgba(255,209,0,0.1)', rejected: 'rgba(255,209,0,0.1)' }[s] || 'rgba(0,0,0,0.06)');
+  const statusColor = s => ({ active: '#4CAF50', approved: '#4CAF50', pending: '#FF6B35', suspended: '#E31837', rejected: '#E31837' }[s] || '#999');
+  const statusBg = s => ({ active: 'rgba(76,175,80,0.1)', approved: 'rgba(76,175,80,0.1)', pending: 'rgba(255,107,53,0.1)', suspended: 'rgba(227,24,55,0.1)', rejected: 'rgba(227,24,55,0.1)' }[s] || 'rgba(0,0,0,0.06)');
 
   const columns = [
     { field: 'name', headerName: 'Fleet', renderCell: row => (
@@ -267,9 +267,9 @@ export default function FleetManagement() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}><StatCard title="Total Fleets" value={stats.total?.toLocaleString()} icon={<FleetIcon />} iconBg="#000000" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending Approval" value={stats.pending?.toLocaleString()} icon={<CheckIcon />} iconBg="#FF6B35" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Active Fleets" value={stats.active?.toLocaleString()} icon={<CarIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Total Vehicles" value={stats.total_vehicles?.toLocaleString()} icon={<CarIcon />} iconBg="#FFD100" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Total Vehicles" value={stats.total_vehicles?.toLocaleString()} icon={<CarIcon />} iconBg="#E31837" loading={loading} /></Grid>
       </Grid>
 
       <Card>

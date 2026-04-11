@@ -207,19 +207,19 @@ export default function Users() {
     { field: 'phone', headerName: 'Phone' },
     { field: 'email', headerName: 'Email' },
     { field: 'role', headerName: 'Role', renderCell: row => (
-      <Chip label={row.role} size="small" sx={{ bgcolor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(255,209,0,0.1)', color: row.role === 'driver' ? '#000000' : '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
+      <Chip label={row.role} size="small" sx={{ bgcolor: row.role === 'driver' ? 'rgba(0,0,0,0.08)' : 'rgba(227,24,55,0.1)', color: row.role === 'driver' ? '#000000' : '#E31837', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
     )},
     { field: 'country', headerName: 'Country', width: 70 },
     { field: 'verified', headerName: 'Verified', renderCell: row => (
-      <Chip label={isVerified(row) ? 'Verified' : 'Unverified'} size="small" sx={{ bgcolor: isVerified(row) ? 'rgba(76,175,80,0.1)' : 'rgba(255,140,0,0.1)', color: isVerified(row) ? '#4CAF50' : '#FF8C00', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+      <Chip label={isVerified(row) ? 'Verified' : 'Unverified'} size="small" sx={{ bgcolor: isVerified(row) ? 'rgba(76,175,80,0.1)' : 'rgba(255,107,53,0.1)', color: isVerified(row) ? '#4CAF50' : '#FF6B35', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
     { field: 'loyalty_points', headerName: 'Points', align: 'right', renderCell: row => row.loyalty_points || row.loyaltyPoints || 0 },
     { field: 'subscription_plan', headerName: 'Plan', renderCell: row => (
-      <Chip label={row.subscription_plan || 'none'} size="small" sx={{ bgcolor: row.subscription_plan === 'premium' ? 'rgba(255,209,0,0.1)' : row.subscription_plan === 'basic' ? 'rgba(255,140,0,0.1)' : 'rgba(0,0,0,0.06)', color: row.subscription_plan === 'premium' ? '#FFD100' : row.subscription_plan === 'basic' ? '#FF8C00' : '#666', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
+      <Chip label={row.subscription_plan || 'none'} size="small" sx={{ bgcolor: row.subscription_plan === 'premium' ? 'rgba(227,24,55,0.1)' : row.subscription_plan === 'basic' ? 'rgba(255,107,53,0.1)' : 'rgba(0,0,0,0.06)', color: row.subscription_plan === 'premium' ? '#E31837' : row.subscription_plan === 'basic' ? '#FF6B35' : '#666', fontWeight: 600, fontSize: '0.7rem', height: 22, textTransform: 'capitalize' }} />
     )},
     { field: 'suspended', headerName: 'Status', renderCell: row => (
       isSuspended(row)
-        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+        ? <Chip label="Suspended" size="small" sx={{ bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
         : <Chip label="Active" size="small" sx={{ bgcolor: 'rgba(76,175,80,0.1)', color: '#4CAF50', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
     )},
   ];
@@ -254,8 +254,8 @@ export default function Users() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}><StatCard title="Total Users" value={stats.total?.toLocaleString()} icon={<PeopleIcon />} iconBg="#000000" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Riders" value={stats.riders?.toLocaleString()} icon={<PeopleIcon />} iconBg="#FFD100" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Drivers" value={stats.drivers?.toLocaleString()} icon={<DriveEtaIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Riders" value={stats.riders?.toLocaleString()} icon={<PeopleIcon />} iconBg="#E31837" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Drivers" value={stats.drivers?.toLocaleString()} icon={<DriveEtaIcon />} iconBg="#FF6B35" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Suspended" value={stats.suspended?.toLocaleString()} icon={<BlockIcon />} iconBg="#9E9E9E" loading={loading} /></Grid>
       </Grid>
 
@@ -293,7 +293,7 @@ export default function Users() {
                 ? (
                   <Tooltip title="Archive user" arrow>
                     <IconButton size="small" onClick={() => setArchiveConfirm(row)}
-                      sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
+                      sx={{ color: '#FF6B35', '&:hover': { bgcolor: 'rgba(255,107,53,0.1)' } }}>
                       <ArchiveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
@@ -388,7 +388,7 @@ export default function Users() {
                 <Box>
                   <Typography fontWeight={700} fontSize="1rem">{getName(selectedUser)}</Typography>
                   <Chip label={selectedUser.role} size="small" sx={{ mt: 0.5, textTransform: 'capitalize', bgcolor: 'rgba(0,0,0,0.08)' }} />
-                  {isSuspended(selectedUser) && <Chip label="Suspended" size="small" sx={{ ml: 0.5, bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100' }} />}
+                  {isSuspended(selectedUser) && <Chip label="Suspended" size="small" sx={{ ml: 0.5, bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837' }} />}
                 </Box>
               </Box>
 
@@ -453,7 +453,7 @@ export default function Users() {
       {/* ── ARCHIVE CONFIRM ── */}
       <Dialog open={!!archiveConfirm} onClose={() => setArchiveConfirm(null)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ArchiveIcon sx={{ color: '#FF8C00' }} />
+          <ArchiveIcon sx={{ color: '#FF6B35' }} />
           <Typography fontWeight={700}>Archive User</Typography>
         </DialogTitle>
         <DialogContent>

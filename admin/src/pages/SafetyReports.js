@@ -223,7 +223,7 @@ function IncidentDetailModal({ incident, open, onClose, onResolve }) {
                   <Paper
                     key={idx}
                     variant="outlined"
-                    sx={{ p: 1.5, borderRadius: 2, borderLeft: '3px solid #FFD100' }}
+                    sx={{ p: 1.5, borderRadius: 2, borderLeft: '3px solid #E31837' }}
                   >
                     <Typography variant="caption" color="text.secondary">
                       {msg.sender_name} — {new Date(msg.created_at).toLocaleString()}

@@ -33,9 +33,9 @@ const EMPTY_FORM = { name: '', city: 'Douala', multiplier: 1.5, startTime: '07:0
 
 function multiplierColor(m) {
   if (m < 1.3) return '#4CAF50';
-  if (m < 1.7) return '#FF8C00';
+  if (m < 1.7) return '#FF6B35';
   if (m < 2.0) return '#FF5722';
-  return '#FFD100';
+  return '#E31837';
 }
 
 export default function SurgePricing() {
@@ -155,7 +155,7 @@ export default function SurgePricing() {
         <Grid item xs={6} sm={3}>
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#FFD100' }}>{zones.length - activeCount}</Typography>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#E31837' }}>{zones.length - activeCount}</Typography>
               <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Inactive</Typography>
             </CardContent>
           </Card>
@@ -163,7 +163,7 @@ export default function SurgePricing() {
         <Grid item xs={6} sm={3}>
           <Card>
             <CardContent sx={{ p: '16px !important', textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#FF8C00' }}>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 800, color: '#FF6B35' }}>
                 {zones.length > 0 ? (zones.reduce((a, z) => a + z.multiplier, 0) / zones.length).toFixed(1) : '—'}x
               </Typography>
               <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.55)' }}>Avg Multiplier</Typography>
@@ -186,13 +186,13 @@ export default function SurgePricing() {
                   onClick={() => { setForm({ ...EMPTY_FORM, name: `Douala — ${preset.label}`, multiplier: preset.multiplier, startTime: preset.startTime, endTime: preset.endTime }); setCreateOpen(true); }}
                   sx={{
                     cursor: 'pointer', border: '1px solid rgba(0,0,0,0.1)',
-                    '&:hover': { borderColor: '#FFD100', boxShadow: '0 4px 16px rgba(255,209,0,0.1)', transform: 'translateY(-1px)' },
+                    '&:hover': { borderColor: '#E31837', boxShadow: '0 4px 16px rgba(227,24,55,0.1)', transform: 'translateY(-1px)' },
                     transition: 'all 0.2s',
                   }}
                 >
                   <CardContent sx={{ p: '14px !important' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <BoltIcon sx={{ color: '#FF8C00', fontSize: 18 }} />
+                      <BoltIcon sx={{ color: '#FF6B35', fontSize: 18 }} />
                       <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }}>{preset.label}</Typography>
                     </Box>
                     <Typography sx={{ fontSize: '0.75rem', color: 'rgba(0,0,0,0.5)', mb: 0.5 }}>{preset.description}</Typography>
@@ -218,7 +218,7 @@ export default function SurgePricing() {
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <BoltIcon sx={{ fontSize: 48, color: 'rgba(0,0,0,0.2)', mb: 1 }} />
               <Typography sx={{ color: 'rgba(0,0,0,0.4)' }}>No surge zones configured</Typography>
-              <Button onClick={() => setCreateOpen(true)} sx={{ mt: 1, color: '#FFD100' }}>Create your first zone</Button>
+              <Button onClick={() => setCreateOpen(true)} sx={{ mt: 1, color: '#E31837' }}>Create your first zone</Button>
             </Box>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -261,7 +261,7 @@ export default function SurgePricing() {
                       size="small"
                       sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#4CAF50' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#4CAF50' } }}
                     />
-                    <IconButton size="small" onClick={() => setDeleteConfirm(zone)} sx={{ color: '#FFD100', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)' } }}>
+                    <IconButton size="small" onClick={() => setDeleteConfirm(zone)} sx={{ color: '#E31837', '&:hover': { bgcolor: 'rgba(227,24,55,0.1)' } }}>
                       <DeleteIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
@@ -324,7 +324,7 @@ export default function SurgePricing() {
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 {PEAK_PRESETS.map((p) => (
                   <Chip key={p.label} label={p.label} size="small" onClick={() => applyPreset(p)} clickable
-                    sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,209,0,0.1)', color: '#FFD100' } }} />
+                    sx={{ fontSize: '0.72rem', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(227,24,55,0.1)', color: '#E31837' } }} />
                 ))}
               </Box>
             </Box>

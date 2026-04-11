@@ -48,8 +48,8 @@ const MOCK_PAYMENT_METHODS = [
 
 const STATUS_COLORS = {
   completed: '#4CAF50',
-  pending: '#FF8C00',
-  failed: '#FFD100',
+  pending: '#FF6B35',
+  failed: '#E31837',
   refunded: '#2196F3',
 };
 
@@ -157,9 +157,9 @@ export default function Payments() {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} sm={3}><StatCard title="Revenue Today" value={`${Number(stats.today || 0).toLocaleString()} XAF`} icon={<WalletIcon />} iconBg="#000000" trend={5} loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="This Month" value={`${Number(stats.month || 0).toLocaleString()} XAF`} icon={<TrendingUpIcon />} iconBg="#FFD100" trend={12} loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Pending" value={Number(stats.pending || 0).toLocaleString()} icon={<PendingIcon />} iconBg="#FF8C00" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Failed" value={Number(stats.failed || 0).toLocaleString()} icon={<FailedIcon />} iconBg="#FFD100" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="This Month" value={`${Number(stats.month || 0).toLocaleString()} XAF`} icon={<TrendingUpIcon />} iconBg="#E31837" trend={12} loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Pending" value={Number(stats.pending || 0).toLocaleString()} icon={<PendingIcon />} iconBg="#FF6B35" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Failed" value={Number(stats.failed || 0).toLocaleString()} icon={<FailedIcon />} iconBg="#E31837" loading={loading} /></Grid>
       </Grid>
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>

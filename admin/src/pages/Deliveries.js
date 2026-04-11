@@ -75,19 +75,19 @@ const STATUS_CHIP = {
   pending:         { label: 'Pending',         bg: 'rgba(0,0,0,0.06)',         color: '#666' },
   driver_assigned: { label: 'Driver Assigned', bg: 'rgba(33,150,243,0.1)',     color: '#1976D2' },
   driver_arriving: { label: 'Driver Arriving', bg: 'rgba(33,150,243,0.1)',     color: '#1976D2' },
-  picked_up:       { label: 'Picked Up',       bg: 'rgba(255,140,0,0.12)',    color: '#E65100' },
-  in_transit:      { label: 'In Transit',      bg: 'rgba(255,140,0,0.12)',    color: '#E65100' },
+  picked_up:       { label: 'Picked Up',       bg: 'rgba(255,107,53,0.12)',    color: '#E65100' },
+  in_transit:      { label: 'In Transit',      bg: 'rgba(255,107,53,0.12)',    color: '#E65100' },
   delivered:       { label: 'Delivered',       bg: 'rgba(76,175,80,0.12)',     color: '#388E3C' },
   cancelled:       { label: 'Cancelled',       bg: 'rgba(0,0,0,0.06)',         color: '#999' },
-  failed:          { label: 'Failed',          bg: 'rgba(255,209,0,0.12)',     color: '#C62828' },
+  failed:          { label: 'Failed',          bg: 'rgba(227,24,55,0.12)',     color: '#C62828' },
 };
 
 const SIZE_CHIP = {
   envelope:    { bg: 'rgba(0,0,0,0.06)',         color: '#555' },
   small:       { bg: 'rgba(33,150,243,0.1)',     color: '#1565C0' },
-  medium:      { bg: 'rgba(255,140,0,0.1)',     color: '#E65100' },
+  medium:      { bg: 'rgba(255,107,53,0.1)',     color: '#E65100' },
   large:       { bg: 'rgba(156,39,176,0.1)',     color: '#6A1B9A' },
-  extra_large: { bg: 'rgba(255,209,0,0.12)',     color: '#B71C1C' },
+  extra_large: { bg: 'rgba(227,24,55,0.12)',     color: '#B71C1C' },
 };
 
 function StatusChip({ status }) {

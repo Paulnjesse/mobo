@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const COLORS = ['#000000', '#FFD100', '#FF8C00', '#4CAF50', '#2196F3', '#9C27B0'];
+const COLORS = ['#000000', '#E31837', '#FF6B35', '#4CAF50', '#2196F3', '#9C27B0'];
 
 function formatXAF(value) {
   if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
@@ -95,10 +95,10 @@ export function RevenueLineChart({ data = [], loading = false, height = 300 }) {
           type="monotone"
           dataKey="revenue"
           name="Revenue"
-          stroke="#FFD100"
+          stroke="#E31837"
           strokeWidth={2.5}
-          dot={{ fill: '#FFD100', r: 4, strokeWidth: 0 }}
-          activeDot={{ r: 6, fill: '#FFD100' }}
+          dot={{ fill: '#E31837', r: 4, strokeWidth: 0 }}
+          activeDot={{ r: 6, fill: '#E31837' }}
         />
       </LineChart>
     </ResponsiveContainer>
@@ -188,8 +188,8 @@ export function RevenueAreaChart({ data = [], loading = false, height = 260 }) {
       <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
         <defs>
           <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#FFD100" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#FFD100" stopOpacity={0} />
+            <stop offset="5%" stopColor="#E31837" stopOpacity={0.15} />
+            <stop offset="95%" stopColor="#E31837" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -210,10 +210,10 @@ export function RevenueAreaChart({ data = [], loading = false, height = 260 }) {
           type="monotone"
           dataKey="revenue"
           name="Revenue"
-          stroke="#FFD100"
+          stroke="#E31837"
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 5, fill: '#FFD100' }}
+          activeDot={{ r: 5, fill: '#E31837' }}
         />
       </LineChart>
     </ResponsiveContainer>

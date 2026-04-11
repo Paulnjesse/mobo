@@ -94,19 +94,19 @@ export default function StatCard({
                 px: 1,
                 py: 0.4,
                 borderRadius: '20px',
-                backgroundColor: isPositive ? 'rgba(76,175,80,0.1)' : 'rgba(255,209,0,0.1)',
+                backgroundColor: isPositive ? 'rgba(76,175,80,0.1)' : 'rgba(227,24,55,0.1)',
               }}
             >
               {isPositive ? (
                 <TrendingUpIcon sx={{ fontSize: 14, color: '#4CAF50' }} />
               ) : (
-                <TrendingDownIcon sx={{ fontSize: 14, color: '#FFD100' }} />
+                <TrendingDownIcon sx={{ fontSize: 14, color: '#E31837' }} />
               )}
               <Typography
                 sx={{
                   fontSize: '0.72rem',
                   fontWeight: 700,
-                  color: isPositive ? '#4CAF50' : '#FFD100',
+                  color: isPositive ? '#4CAF50' : '#E31837',
                 }}
               >
                 {Math.abs(trend)}%

@@ -49,7 +49,7 @@ const CATEGORY_LABELS = {
 };
 
 const STATUS_CHIPS = {
-  open: { label: 'Open', color: '#FF8C00', bg: 'rgba(255,140,0,0.12)' },
+  open: { label: 'Open', color: '#FF6B35', bg: 'rgba(255,107,53,0.12)' },
   under_review: { label: 'Under Review', color: '#1565C0', bg: 'rgba(21,101,192,0.1)' },
   resolved: { label: 'Resolved', color: '#2E7D32', bg: 'rgba(46,125,50,0.1)' },
   dismissed: { label: 'Dismissed', color: '#757575', bg: 'rgba(0,0,0,0.06)' },

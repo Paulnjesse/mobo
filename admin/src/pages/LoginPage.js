@@ -87,7 +87,7 @@ export default function LoginPage() {
   const inputSx = {
     '& .MuiOutlinedInput-root': {
       borderRadius: '6px',
-      backgroundColor: '#F5F5F5',
+      backgroundColor: '#F7F7F7',
       '& fieldset': { borderColor: 'transparent' },
       '&:hover fieldset': { borderColor: '#000000' },
       '&.Mui-focused fieldset': { borderColor: '#000000', borderWidth: 2 },
@@ -98,15 +98,15 @@ export default function LoginPage() {
 
   const yellowBtn = {
     py: 1.6,
-    bgcolor: '#FFD100',
-    color: '#000000',
+    bgcolor: '#E31837',
+    color: '#ffffff',
     borderRadius: '6px',
     fontSize: '0.95rem',
     fontWeight: 800,
     letterSpacing: '0.2px',
     boxShadow: 'none',
-    '&:hover': { bgcolor: '#FFBA00', boxShadow: 'none' },
-    '&:disabled': { bgcolor: '#F5F5F5', color: '#999' },
+    '&:hover': { bgcolor: '#C4132D', boxShadow: 'none' },
+    '&:disabled': { bgcolor: '#F7F7F7', color: '#999' },
   };
 
   return (
@@ -124,17 +124,17 @@ export default function LoginPage() {
         overflow: 'hidden',
       }}>
         {/* Decorative circles */}
-        <Box sx={{ position: 'absolute', width: 440, height: 440, borderRadius: '50%', bgcolor: '#FFD100', opacity: 0.07, top: -100, right: -130 }} />
-        <Box sx={{ position: 'absolute', width: 260, height: 260, borderRadius: '50%', bgcolor: '#FFD100', opacity: 0.05, bottom: 40, left: -80 }} />
+        <Box sx={{ position: 'absolute', width: 440, height: 440, borderRadius: '50%', bgcolor: '#E31837', opacity: 0.07, top: -100, right: -130 }} />
+        <Box sx={{ position: 'absolute', width: 260, height: 260, borderRadius: '50%', bgcolor: '#E31837', opacity: 0.05, bottom: 40, left: -80 }} />
 
         {/* Logo */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative', zIndex: 1 }}>
-          <Box sx={{ width: 48, height: 48, borderRadius: '10px', bgcolor: '#FFD100', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <DirectionsCarIcon sx={{ color: '#000000', fontSize: 26 }} />
+          <Box sx={{ width: 48, height: 48, borderRadius: '10px', bgcolor: '#E31837', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <DirectionsCarIcon sx={{ color: '#ffffff', fontSize: 26 }} />
           </Box>
           <Box>
             <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '1.5rem', lineHeight: 1, letterSpacing: '-0.5px' }}>MOBO</Typography>
-            <Typography sx={{ color: '#FFD100', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2.5px', textTransform: 'uppercase', mt: 0.3 }}>Admin Console</Typography>
+            <Typography sx={{ color: '#E31837', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2.5px', textTransform: 'uppercase', mt: 0.3 }}>Admin Console</Typography>
           </Box>
         </Box>
 
@@ -142,7 +142,7 @@ export default function LoginPage() {
         <Box sx={{ position: 'relative', zIndex: 1 }}>
           <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '2.8rem', lineHeight: 1.12, letterSpacing: '-1px', mb: 2.5 }}>
             Manage your<br />
-            <Box component="span" sx={{ color: '#FFD100' }}>ride-hailing</Box><br />
+            <Box component="span" sx={{ color: '#E31837' }}>ride-hailing</Box><br />
             platform.
           </Typography>
           <Typography sx={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.92rem', lineHeight: 1.65 }}>
@@ -153,8 +153,8 @@ export default function LoginPage() {
           {/* Feature pills */}
           <Box sx={{ display: 'flex', gap: 1, mt: 3, flexWrap: 'wrap' }}>
             {['Live Map', 'Fraud Detection', 'RBAC', 'Audit Logs'].map(f => (
-              <Box key={f} sx={{ px: 1.5, py: 0.5, borderRadius: '20px', border: '1px solid rgba(255,209,0,0.3)', bgcolor: 'rgba(255,209,0,0.08)' }}>
-                <Typography sx={{ color: '#FFD100', fontSize: '0.72rem', fontWeight: 600 }}>{f}</Typography>
+              <Box key={f} sx={{ px: 1.5, py: 0.5, borderRadius: '20px', border: '1px solid rgba(227,24,55,0.3)', bgcolor: 'rgba(227,24,55,0.08)' }}>
+                <Typography sx={{ color: '#E31837', fontSize: '0.72rem', fontWeight: 600 }}>{f}</Typography>
               </Box>
             ))}
           </Box>
@@ -172,7 +172,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 1.5, mb: 5 }}>
             <Box sx={{ width: 42, height: 42, borderRadius: '8px', bgcolor: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <DirectionsCarIcon sx={{ color: '#FFD100', fontSize: 22 }} />
+              <DirectionsCarIcon sx={{ color: '#E31837', fontSize: 22 }} />
             </Box>
             <Typography sx={{ fontWeight: 800, fontSize: '1.3rem', color: '#000000' }}>MOBO Admin</Typography>
           </Box>
@@ -243,8 +243,8 @@ export default function LoginPage() {
           {/* ══ STEP 2 — 2FA ══ */}
           {step === 2 && (
             <>
-              <Box sx={{ width: 52, height: 52, borderRadius: '10px', bgcolor: '#FFD100', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 3 }}>
-                <TwoFAIcon sx={{ color: '#000000', fontSize: 26 }} />
+              <Box sx={{ width: 52, height: 52, borderRadius: '10px', bgcolor: '#E31837', display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 3 }}>
+                <TwoFAIcon sx={{ color: '#ffffff', fontSize: 26 }} />
               </Box>
 
               <Typography sx={{ fontWeight: 800, fontSize: '2rem', color: '#000000', mb: 0.5, letterSpacing: '-0.5px', lineHeight: 1.2 }}>

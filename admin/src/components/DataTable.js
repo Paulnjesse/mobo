@@ -223,7 +223,7 @@ export default function DataTable({
                                 <IconButton
                                   size="small"
                                   onClick={() => onEdit(row)}
-                                  sx={{ color: '#FF8C00', '&:hover': { backgroundColor: 'rgba(255,140,0,0.1)' } }}
+                                  sx={{ color: '#FF6B35', '&:hover': { backgroundColor: 'rgba(255,107,53,0.1)' } }}
                                 >
                                   <EditIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -245,7 +245,7 @@ export default function DataTable({
                                   <IconButton
                                     size="small"
                                     onClick={() => onSuspend(row)}
-                                    sx={{ color: '#FFD100', '&:hover': { backgroundColor: 'rgba(255,209,0,0.1)' } }}
+                                    sx={{ color: '#E31837', '&:hover': { backgroundColor: 'rgba(227,24,55,0.1)' } }}
                                   >
                                     <BlockIcon sx={{ fontSize: 16 }} />
                                   </IconButton>
@@ -257,7 +257,7 @@ export default function DataTable({
                                 <IconButton
                                   size="small"
                                   onClick={() => onDelete(row)}
-                                  sx={{ color: '#FFD100', '&:hover': { backgroundColor: 'rgba(255,209,0,0.1)' } }}
+                                  sx={{ color: '#E31837', '&:hover': { backgroundColor: 'rgba(227,24,55,0.1)' } }}
                                 >
                                   <DeleteIcon sx={{ fontSize: 16 }} />
                                 </IconButton>

@@ -138,8 +138,8 @@ export default function FoodManagement() {
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { label: 'Restaurants', value: restaurants.length, icon: <RestaurantIcon />, color: '#FFD100' },
-          { label: 'Active Orders', value: pendingCount, icon: <OrderIcon />, color: '#FF8C00' },
+          { label: 'Restaurants', value: restaurants.length, icon: <RestaurantIcon />, color: '#E31837' },
+          { label: 'Active Orders', value: pendingCount, icon: <OrderIcon />, color: '#FF6B35' },
           { label: 'Revenue (delivered)', value: fmt(totalRevenue), icon: <CheckCircle />, color: '#16a34a' },
           { label: 'Total Orders', value: orders.length, icon: <HourglassEmpty />, color: '#7c3aed' },
         ].map((s, i) => (

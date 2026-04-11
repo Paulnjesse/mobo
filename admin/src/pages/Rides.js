@@ -18,8 +18,8 @@ import { ridesAPI } from '../services/api';
 const STATUS_COLORS = {
   completed: '#4CAF50',
   in_progress: '#2196F3',
-  cancelled: '#FFD100',
-  requested: '#FF8C00',
+  cancelled: '#E31837',
+  requested: '#FF6B35',
   accepted: '#9C27B0',
 };
 
@@ -143,7 +143,7 @@ export default function Rides() {
         <Grid item xs={6} sm={3}><StatCard title="Total Rides" value={stats.total?.toLocaleString()} icon={<DirectionsCarIcon />} iconBg="#000000" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Active Now" value={stats.active?.toLocaleString()} icon={<ActiveIcon />} iconBg="#2196F3" loading={loading} /></Grid>
         <Grid item xs={6} sm={3}><StatCard title="Completed Today" value={stats.completedToday?.toLocaleString()} icon={<CheckCircleIcon />} iconBg="#4CAF50" loading={loading} /></Grid>
-        <Grid item xs={6} sm={3}><StatCard title="Cancelled Today" value={stats.cancelledToday?.toLocaleString()} icon={<CancelIcon />} iconBg="#FFD100" loading={loading} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard title="Cancelled Today" value={stats.cancelledToday?.toLocaleString()} icon={<CancelIcon />} iconBg="#E31837" loading={loading} /></Grid>
       </Grid>
 
       <Card>
@@ -235,14 +235,14 @@ export default function Rides() {
                 </Box>
                 <Box sx={{ ml: 1.25, borderLeft: '2px dashed rgba(0,0,0,0.15)', height: 16, mb: 1 }} />
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#FFD100', flexShrink: 0 }} />
+                  <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: '#E31837', flexShrink: 0 }} />
                   <Typography sx={{ fontSize: '0.82rem' }}><strong>Dropoff:</strong> {selectedRide.dropoff}</Typography>
                 </Box>
               </Box>
 
               <Box sx={{ bgcolor: '#000000', borderRadius: '10px', p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem' }}>Total Fare</Typography>
-                <Typography sx={{ color: '#FF8C00', fontSize: '1.3rem', fontWeight: 800 }}>
+                <Typography sx={{ color: '#FF6B35', fontSize: '1.3rem', fontWeight: 800 }}>
                   {selectedRide.fare ? `${Number(selectedRide.fare).toLocaleString()} XAF` : '—'}
                 </Typography>
               </Box>

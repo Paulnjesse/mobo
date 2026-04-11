@@ -121,7 +121,7 @@ export default function Notifications() {
   };
 
   const targetIcon = { all: <PeopleIcon sx={{ fontSize: 14 }} />, riders: <PeopleIcon sx={{ fontSize: 14 }} />, drivers: <DriveEtaIcon sx={{ fontSize: 14 }} /> };
-  const targetColors = { all: '#000000', riders: '#FFD100', drivers: '#FF8C00', specific: '#2196F3' };
+  const targetColors = { all: '#000000', riders: '#E31837', drivers: '#FF6B35', specific: '#2196F3' };
 
   const historyColumns = [
     { field: 'title', headerName: 'Title', renderCell: (row) => <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{row.title}</Typography> },
@@ -143,9 +143,9 @@ export default function Notifications() {
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Box sx={{ width: 40, height: 4, bgcolor: 'rgba(0,0,0,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
-              <Box sx={{ width: `${rate}%`, height: '100%', bgcolor: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF8C00' : '#FFD100', borderRadius: '2px' }} />
+              <Box sx={{ width: `${rate}%`, height: '100%', bgcolor: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF6B35' : '#E31837', borderRadius: '2px' }} />
             </Box>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF8C00' : '#FFD100' }}>{rate}%</Typography>
+            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: rate > 60 ? '#4CAF50' : rate > 30 ? '#FF6B35' : '#E31837' }}>{rate}%</Typography>
           </Box>
         );
       },
@@ -170,8 +170,8 @@ export default function Notifications() {
         {[
           { label: 'Sent Today', value: Number(stats.sentToday || 0).toLocaleString(), icon: <SendIcon />, color: '#000000' },
           { label: 'Read Rate', value: `${stats.readRate || 0}%`, icon: <CheckIcon />, color: '#4CAF50' },
-          { label: 'Total Notifications', value: history.length.toLocaleString(), icon: <NotificationsIcon />, color: '#FFD100' },
-          { label: 'Avg Read Rate', value: `${history.length > 0 ? Math.round(history.reduce((a, n) => a + (n.sentCount > 0 ? (n.readCount / n.sentCount) * 100 : 0), 0) / history.length) : 0}%`, icon: <CheckIcon />, color: '#FF8C00' },
+          { label: 'Total Notifications', value: history.length.toLocaleString(), icon: <NotificationsIcon />, color: '#E31837' },
+          { label: 'Avg Read Rate', value: `${history.length > 0 ? Math.round(history.reduce((a, n) => a + (n.sentCount > 0 ? (n.readCount / n.sentCount) * 100 : 0), 0) / history.length) : 0}%`, icon: <CheckIcon />, color: '#FF6B35' },
         ].map((item) => (
           <Grid item xs={6} sm={3} key={item.label}>
             <Card>
@@ -197,7 +197,7 @@ export default function Notifications() {
           <Card sx={{ position: 'sticky', top: 80 }}>
             <CardContent sx={{ p: 2.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <NotificationsIcon sx={{ color: '#FFD100', fontSize: 20 }} />
+                <NotificationsIcon sx={{ color: '#E31837', fontSize: 20 }} />
                 <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Send Notification</Typography>
               </Box>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -214,7 +214,7 @@ export default function Notifications() {
                     inputProps={{ maxLength: 500 }}
                     sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
                   />
-                  <Typography sx={{ fontSize: '0.7rem', color: charCount > 450 ? '#FFD100' : 'rgba(0,0,0,0.4)', textAlign: 'right', mt: 0.3 }}>
+                  <Typography sx={{ fontSize: '0.7rem', color: charCount > 450 ? '#E31837' : 'rgba(0,0,0,0.4)', textAlign: 'right', mt: 0.3 }}>
                     {charCount}/500
                   </Typography>
                 </Box>
@@ -247,7 +247,7 @@ export default function Notifications() {
                   variant="contained" onClick={handleSend} disabled={sending || !form.title || !form.message}
                   startIcon={sending ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : <SendIcon />}
                   fullWidth
-                  sx={{ bgcolor: '#FFD100', py: 1.2, borderRadius: '8px', fontWeight: 700, '&:hover': { bgcolor: '#c62a47' }, '&:disabled': { bgcolor: 'rgba(255,209,0,0.4)' } }}
+                  sx={{ bgcolor: '#E31837', py: 1.2, borderRadius: '8px', fontWeight: 700, '&:hover': { bgcolor: '#c62a47' }, '&:disabled': { bgcolor: 'rgba(227,24,55,0.4)' } }}
                 >
                   {sending ? 'Sending...' : 'Send Notification'}
                 </Button>

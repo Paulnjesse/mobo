@@ -39,17 +39,17 @@ const theme = createTheme({
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#FFD100',
-      contrastText: '#000000',  // black text on FREE NOW yellow
+      main: '#E31837',
+      contrastText: '#ffffff',  // white text on red
     },
     warning: {
-      main: '#FF8C00',
+      main: '#FF6B35',
     },
     error: {
       main: '#E53935',
     },
     background: {
-      default: '#F5F5F5',
+      default: '#F7F7F7',
       paper: '#ffffff',
     },
   },
@@ -77,9 +77,9 @@ const theme = createTheme({
           '&:hover': { backgroundColor: '#222222' },
         },
         containedSecondary: {
-          backgroundColor: '#FFD100',
-          color: '#000000',
-          '&:hover': { backgroundColor: '#FFBA00' },
+          backgroundColor: '#E31837',
+          color: '#ffffff',
+          '&:hover': { backgroundColor: '#C4132D' },
         },
       },
     },
@@ -94,7 +94,7 @@ const theme = createTheme({
     },
     MuiTabs: {
       styleOverrides: {
-        indicator: { backgroundColor: '#FFD100', height: 3 },
+        indicator: { backgroundColor: '#E31837', height: 3 },
       },
     },
     MuiCard: {
@@ -115,7 +115,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiTableCell-head': {
-            backgroundColor: '#F5F5F5',
+            backgroundColor: '#F7F7F7',
             fontWeight: 700,
             color: '#000000',
             fontSize: '0.78rem',

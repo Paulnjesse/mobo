@@ -36,7 +36,7 @@ const DOC_TYPE_OPTIONS = Object.entries(DOC_TYPE_LABELS);
 
 function FileTypeIcon({ mimeType }) {
   if (mimeType?.startsWith('image/')) return <ImageIcon sx={{ fontSize: 28, color: '#2196F3' }} />;
-  if (mimeType === 'application/pdf') return <PdfIcon sx={{ fontSize: 28, color: '#FFD100' }} />;
+  if (mimeType === 'application/pdf') return <PdfIcon sx={{ fontSize: 28, color: '#E31837' }} />;
   return <FileIcon sx={{ fontSize: 28, color: '#9E9E9E' }} />;
 }
 
@@ -252,7 +252,7 @@ export default function DocumentManager({ userId, readOnly = false }) {
                   {canArchive && (
                     <Tooltip title="Archive document" arrow>
                       <IconButton size="small" onClick={() => handleArchive(doc)}
-                        sx={{ color: '#FF8C00', '&:hover': { bgcolor: 'rgba(255,140,0,0.1)' } }}>
+                        sx={{ color: '#FF6B35', '&:hover': { bgcolor: 'rgba(255,107,53,0.1)' } }}>
                         <ArchiveIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Tooltip>

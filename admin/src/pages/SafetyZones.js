@@ -20,8 +20,8 @@ import api from '../services/api';
 
 const SEVERITY_CONFIG = {
   low:    { label: 'Low',    color: '#1565C0', bg: 'rgba(21,101,192,0.1)'  },
-  medium: { label: 'Medium', color: '#FF8C00', bg: 'rgba(255,140,0,0.1)'  },
-  high:   { label: 'High',   color: '#FFD100', bg: 'rgba(255,209,0,0.1)'   },
+  medium: { label: 'Medium', color: '#FF6B35', bg: 'rgba(255,107,53,0.1)'  },
+  high:   { label: 'High',   color: '#E31837', bg: 'rgba(227,24,55,0.1)'   },
 };
 
 const ZONE_TYPE_LABELS = {
@@ -372,8 +372,8 @@ export default function SafetyZones() {
                           label={ZONE_TYPE_LABELS[zone.zone_type] || zone.zone_type}
                           size="small"
                           sx={{
-                            bgcolor: zone.zone_type === 'surge' ? 'rgba(255,140,0,0.1)' : 'rgba(255,209,0,0.1)',
-                            color: zone.zone_type === 'surge' ? '#FF8C00' : '#FFD100',
+                            bgcolor: zone.zone_type === 'surge' ? 'rgba(255,107,53,0.1)' : 'rgba(227,24,55,0.1)',
+                            color: zone.zone_type === 'surge' ? '#FF6B35' : '#E31837',
                             fontWeight: 700, fontSize: '0.7rem', height: 22,
                           }}
                         />

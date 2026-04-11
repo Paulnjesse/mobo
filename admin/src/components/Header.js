@@ -35,14 +35,14 @@ const PAGE_TITLES = {
 };
 
 const NOTIF_ICONS = {
-  data_access:  <AccessIcon sx={{ fontSize: 15, color: '#FFD100' }} />,
+  data_access:  <AccessIcon sx={{ fontSize: 15, color: '#E31837' }} />,
   file_upload:  <DownloadIcon sx={{ fontSize: 15, color: '#2196F3' }} />,
   staff_created: <AdminIcon  sx={{ fontSize: 15, color: '#4CAF50' }} />,
-  suspicious:   <ShieldIcon  sx={{ fontSize: 15, color: '#FF8C00' }} />,
+  suspicious:   <ShieldIcon  sx={{ fontSize: 15, color: '#FF6B35' }} />,
 };
 
 const NOTIF_COLORS = {
-  data_access: '#FFD100', file_upload: '#2196F3', staff_created: '#4CAF50', suspicious: '#FF8C00',
+  data_access: '#E31837', file_upload: '#2196F3', staff_created: '#4CAF50', suspicious: '#FF6B35',
 };
 
 const POLL_INTERVAL_MS = 30_000; // poll every 30 s
@@ -111,7 +111,7 @@ export default function Header() {
   return (
     <AppBar position="sticky" elevation={0}
       sx={{ backgroundColor: '#ffffff', borderBottom: '1px solid rgba(0,0,0,0.08)', zIndex: 1100 }}>
-      <Box sx={{ height: 3, background: 'linear-gradient(90deg, #000000 0%, #FFD100 50%, #FF8C00 100%)', position: 'absolute', top: 0, left: 0, right: 0 }} />
+      <Box sx={{ height: 3, background: 'linear-gradient(90deg, #000000 0%, #E31837 50%, #FF6B35 100%)', position: 'absolute', top: 0, left: 0, right: 0 }} />
       <Toolbar sx={{ pt: '3px', minHeight: '64px !important', px: 3 }}>
         {/* Page title */}
         <Box sx={{ flexGrow: 1 }}>
@@ -149,7 +149,7 @@ export default function Header() {
             <Typography variant="subtitle2" fontWeight={700} color="#000000">
               Notifications
               {unread > 0 && (
-                <Chip label={unread} size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', bgcolor: '#FFD100', color: '#000000' }} />
+                <Chip label={unread} size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', bgcolor: '#E31837', color: '#ffffff' }} />
               )}
             </Typography>
             {unread > 0 && (
@@ -170,8 +170,8 @@ export default function Header() {
             <MenuItem key={n.id} onClick={() => handleMarkRead(n.id)}
               sx={{
                 py: 1.2, px: 2, alignItems: 'flex-start',
-                bgcolor: n.is_read ? 'transparent' : 'rgba(255,209,0,0.03)',
-                borderLeft: n.is_read ? 'none' : `3px solid ${NOTIF_COLORS[n.type] || '#FFD100'}`,
+                bgcolor: n.is_read ? 'transparent' : 'rgba(227,24,55,0.03)',
+                borderLeft: n.is_read ? 'none' : `3px solid ${NOTIF_COLORS[n.type] || '#E31837'}`,
               }}>
               <Box sx={{ mr: 1.2, mt: 0.3, flexShrink: 0 }}>
                 {NOTIF_ICONS[n.type] || <NotificationsIcon sx={{ fontSize: 15, color: '#999' }} />}
@@ -188,7 +188,7 @@ export default function Header() {
                 </Typography>
               </Box>
               {!n.is_read && (
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: NOTIF_COLORS[n.type] || '#FFD100', flexShrink: 0, mt: 0.8, ml: 1 }} />
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: NOTIF_COLORS[n.type] || '#E31837', flexShrink: 0, mt: 0.8, ml: 1 }} />
               )}
             </MenuItem>
           ))}
@@ -196,7 +196,7 @@ export default function Header() {
           <Divider />
           {hasPermission('admin:audit_logs') && (
             <MenuItem onClick={() => { setNotifAnchor(null); navigate('/audit-log'); }}
-              sx={{ justifyContent: 'center', color: '#FFD100', fontSize: '0.82rem', fontWeight: 600, py: 1 }}>
+              sx={{ justifyContent: 'center', color: '#E31837', fontSize: '0.82rem', fontWeight: 600, py: 1 }}>
               View Full Audit Log
             </MenuItem>
           )}
@@ -205,7 +205,7 @@ export default function Header() {
         {/* Admin Avatar + Menu */}
         <Box onClick={e => setAnchorEl(e.currentTarget)}
           sx={{ display: 'flex', alignItems: 'center', gap: 1.2, cursor: 'pointer', pl: 1.5, pr: 0.5, py: 0.5, borderRadius: '40px', border: '1px solid rgba(0,0,0,0.1)', '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' } }}>
-          <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #000000, #FFD100)', fontSize: '0.85rem', fontWeight: 700 }}>
+          <Avatar sx={{ width: 34, height: 34, background: 'linear-gradient(135deg, #000000, #E31837)', fontSize: '0.85rem', fontWeight: 700 }}>
             {userInitial}
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
@@ -237,8 +237,8 @@ export default function Header() {
             <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
             <Typography fontSize="0.85rem">Settings</Typography>
           </MenuItem>
-          <MenuItem onClick={handleLogout} sx={{ color: '#FFD100' }}>
-            <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: '#FFD100' }} /></ListItemIcon>
+          <MenuItem onClick={handleLogout} sx={{ color: '#E31837' }}>
+            <ListItemIcon><LogoutIcon fontSize="small" sx={{ color: '#E31837' }} /></ListItemIcon>
             <Typography fontSize="0.85rem">Logout</Typography>
           </MenuItem>
         </Menu>

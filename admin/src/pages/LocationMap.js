@@ -46,7 +46,7 @@ const createDriverIcon = (color) =>
   });
 
 const ONLINE_ICON = createDriverIcon('#4CAF50');
-const ON_RIDE_ICON = createDriverIcon('#FFD100');
+const ON_RIDE_ICON = createDriverIcon('#E31837');
 const OFFLINE_ICON = createDriverIcon('#9E9E9E');
 
 // Mock driver data centered on Douala/Yaoundé, Cameroon
@@ -242,7 +242,7 @@ export default function LocationMap() {
         {[
           { label: 'Total Drivers', value: drivers.length, color: '#000000' },
           { label: 'Online', value: onlineCount, color: '#4CAF50' },
-          { label: 'On Ride', value: onRideCount, color: '#FFD100' },
+          { label: 'On Ride', value: onRideCount, color: '#E31837' },
           { label: 'Offline', value: offlineCount, color: '#9E9E9E' },
           { label: 'Active Rides', value: activeRides.length, color: '#2196F3' },
         ].map((item) => (
@@ -272,7 +272,7 @@ export default function LocationMap() {
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           {[
             { color: '#4CAF50', label: 'Online' },
-            { color: '#FFD100', label: 'On Ride' },
+            { color: '#E31837', label: 'On Ride' },
             { color: '#9E9E9E', label: 'Offline' },
             { color: '#2196F3', label: 'Active Route' },
           ].map((item) => (
@@ -293,7 +293,7 @@ export default function LocationMap() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               backgroundColor: 'rgba(255,255,255,0.8)',
             }}>
-              <CircularProgress sx={{ color: '#FFD100' }} />
+              <CircularProgress sx={{ color: '#E31837' }} />
             </Box>
           )}
           <MapContainer
@@ -323,8 +323,8 @@ export default function LocationMap() {
                         label={driver.onRide ? 'On Ride' : driver.online ? 'Online' : 'Offline'}
                         size="small"
                         sx={{
-                          bgcolor: driver.onRide ? 'rgba(255,209,0,0.1)' : driver.online ? 'rgba(76,175,80,0.1)' : 'rgba(158,158,158,0.1)',
-                          color: driver.onRide ? '#FFD100' : driver.online ? '#4CAF50' : '#9E9E9E',
+                          bgcolor: driver.onRide ? 'rgba(227,24,55,0.1)' : driver.online ? 'rgba(76,175,80,0.1)' : 'rgba(158,158,158,0.1)',
+                          color: driver.onRide ? '#E31837' : driver.online ? '#4CAF50' : '#9E9E9E',
                           fontWeight: 600, fontSize: '0.68rem', height: 20,
                         }}
                       />
