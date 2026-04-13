@@ -1,6 +1,7 @@
 'use strict';
 
 const { verifyJwt } = require('../../../shared/jwtUtil');
+const db = require('../config/database');
 
 /**
  * Haversine distance in km between two lat/lng points.
@@ -118,6 +119,28 @@ function initLocationSocket(io) {
 
       const driverId = String(socket.user.id);
 
+      // SEC-003: Enforce GDPR location_tracking consent before recording GPS data.
+      // Drivers must have granted location_tracking consent (Article 6 lawful basis).
+      // If consent was withdrawn, we refuse to record their position.
+      try {
+        const consentRow = await db.query(
+          `SELECT is_granted FROM user_consents
+           WHERE user_id = $1 AND purpose = 'location_tracking' AND is_granted = true
+           LIMIT 1`,
+          [socket.user.id]
+        );
+        if (!consentRow.rows[0]) {
+          return socket.emit('error', {
+            code: 'CONSENT_REQUIRED',
+            message: 'Location tracking consent is required to go online. Please accept the terms in the app.',
+          });
+        }
+      } catch (consentErr) {
+        // If the user_consents table doesn't exist yet (pre-migration), fail open with a warning.
+        // This prevents a schema rollout from blocking all drivers. Remove once migration_030 is confirmed applied.
+        console.warn(`[LocationSocket] Consent check failed for driver ${driverId} — failing open:`, consentErr.message);
+      }
+
       // Compute live ETA from driver's current position to dropoff (if provided)
       const eta_minutes = estimateEtaMinutes(latitude, longitude, dropoff_lat, dropoff_lng);
 
@@ -159,9 +182,41 @@ function initLocationSocket(io) {
      * @event track_driver
      * @param {{ driverId: string }} data
      */
-    socket.on('track_driver', ({ driverId } = {}) => {
+    socket.on('track_driver', async ({ driverId, rideId } = {}) => {
       if (!driverId) {
         return socket.emit('error', { message: 'track_driver requires driverId' });
+      }
+      if (!rideId) {
+        return socket.emit('error', { message: 'track_driver requires rideId — you must have an active ride with this driver' });
+      }
+
+      // SEC-002: Verify the requesting user has an active ride with this specific driver.
+      // Prevents any authenticated user from subscribing to arbitrary driver GPS streams.
+      // Admins bypass this check for dispatch/monitoring purposes.
+      const isAdmin = socket.user?.role === 'admin';
+      if (!isAdmin) {
+        try {
+          const rideRow = await db.query(
+            `SELECT r.id
+             FROM rides r
+             JOIN drivers d ON d.id = r.driver_id
+             WHERE r.id = $1
+               AND d.user_id = $2
+               AND r.rider_id = $3
+               AND r.status IN ('accepted', 'arriving', 'in_progress')
+             LIMIT 1`,
+            [rideId, driverId, socket.user.id]
+          );
+          if (!rideRow.rows[0]) {
+            return socket.emit('error', {
+              code: 'UNAUTHORIZED_TRACKING',
+              message: 'You do not have an active ride with this driver.',
+            });
+          }
+        } catch (err) {
+          console.error(`[LocationSocket] track_driver auth check failed for user ${socket.user?.id}:`, err.message);
+          return socket.emit('error', { message: 'Unable to verify ride authorization. Please try again.' });
+        }
       }
 
       const room = driverLocationRoom(driverId);
@@ -173,7 +228,7 @@ function initLocationSocket(io) {
       }
       trackingSubscriptions.get(driverId).add(socket.id);
 
-      console.log(`[LocationSocket] ${socket.id} is now tracking driver ${driverId}`);
+      console.log(`[LocationSocket] ${socket.id} (user=${socket.user?.id}) is now tracking driver ${driverId} on ride ${rideId}`);
 
       // Send last known location immediately
       const lastKnown = driverLocations.get(String(driverId));
@@ -322,8 +377,6 @@ function initLocationSocket(io) {
  */
 async function persistLocationToDB(driverId, locationPayload) {
   try {
-    // Attempt to re-use the shared DB pool exported from the location service routes
-    const db = require('../db');
     if (!db || typeof db.query !== 'function') return;
 
     await db.query(

@@ -36,6 +36,10 @@ envVarGroups:
         generateValue: true   # shared secret for inter-service auth + mTLS bearer token
       - key: SERVICE_CA_CERT
         sync: false           # Base64-encoded internal CA cert (for mTLS client validation)
+      - key: DB_SSL_CA
+        sync: false           # SEC-001: PEM CA cert for PostgreSQL TLS validation (rejectUnauthorized: true)
+                              # Download from Render Dashboard → PostgreSQL → Connection → CA Certificate
+                              # Store as single-line with \n replacing actual newlines
 
 services:
   # ── User Service ──────────────────────────────────────────────────────────────

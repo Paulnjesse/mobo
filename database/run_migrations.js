@@ -68,6 +68,7 @@ const FILES = [
   'migration_033.sql',  // Soft deletes + admin_roles table + read_only/read_write roles + new permissions
   'migration_034.sql',  // data_access_logs + admin_notifications + user_documents (encrypted)
   'migration_035.sql',  // vehicle_categories + vehicle_inspections + driver_selfie_checks + police_contacts
+  'migration_036.sql',  // SEC-004: least-privilege DB roles (mobo_user_svc, mobo_ride_svc, mobo_pay_svc, mobo_loc_svc, mobo_readonly)
 ];
 
 async function run() {

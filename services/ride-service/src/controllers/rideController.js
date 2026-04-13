@@ -126,8 +126,9 @@ const lockPrice = async (req, res) => {
 
     // Check surge at pickup
     let surgeMultiplier = 1.0;
+    let surgeResult = { rows: [] };
     if (pickup_location) {
-      const surgeResult = await pool.query(
+      surgeResult = await pool.query(
         `SELECT multiplier FROM surge_zones
          WHERE ST_Within(ST_SetSRID(ST_MakePoint($1, $2), 4326), zone) AND is_active = true
          AND (starts_at IS NULL OR starts_at <= NOW()) AND (ends_at IS NULL OR ends_at >= NOW())
