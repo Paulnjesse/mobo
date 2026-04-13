@@ -2,6 +2,12 @@
   "devDependencies": {
     "pg": "^8.20.0"
   },
+  "jest": {
+    "moduleNameMapper": {
+      "^expo-server-sdk$": "<rootDir>/services/user-service/node_modules/expo-server-sdk"
+    },
+    "testEnvironment": "node"
+  },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.72.0",

@@ -46,6 +46,10 @@ async function sendPushNotification(expoPushToken, title, body, data = {}) {
       ticket = ticketChunk[0];
       if (ticket.status === 'error') {
         console.error('[PushNotification] Ticket error:', ticket.message, ticket.details);
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          // Token is no longer valid — remove it so we never send to it again
+          _removeStalePushToken(expoPushToken).catch(() => {});
+        }
       }
     }
 
@@ -110,12 +114,16 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
   for (const chunk of chunks) {
     try {
       const tickets = await expo.sendPushNotificationsAsync(chunk);
-      tickets.forEach((ticket) => {
+      tickets.forEach((ticket, idx) => {
         if (ticket.status === 'ok') {
           sent++;
         } else {
           errors++;
           console.error('[PushNotification] Bulk ticket error:', ticket.message);
+          if (ticket.details?.error === 'DeviceNotRegistered') {
+            const staleToken = chunk[idx]?.to;
+            if (staleToken) _removeStalePushToken(staleToken).catch(() => {});
+          }
         }
       });
     } catch (err) {
@@ -142,7 +150,31 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
   return { success: errors === 0, sent, errors };
 }
 
+/**
+ * Remove a stale push token from the users table.
+ * Called when Expo returns DeviceNotRegistered — the token is permanently invalid.
+ * Nulls both expo_push_token and push_token columns to cover both column variants.
+ *
+ * @param {string} token
+ */
+async function _removeStalePushToken(token) {
+  if (!token) return;
+  try {
+    await db.query(
+      `UPDATE users
+       SET expo_push_token = NULL,
+           push_token      = NULL
+       WHERE expo_push_token = $1 OR push_token = $1`,
+      [token]
+    );
+    console.info(`[PushNotification] Removed stale token: ${token.slice(0, 30)}...`);
+  } catch (err) {
+    console.warn('[PushNotification] Failed to remove stale token:', err.message);
+  }
+}
+
 module.exports = {
   sendPushNotification,
-  sendBulkNotifications
+  sendBulkNotifications,
+  _removeStalePushToken,
 };

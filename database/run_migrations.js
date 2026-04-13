@@ -71,10 +71,22 @@ const FILES = [
   'migration_036.sql',  // SEC-004: least-privilege DB roles (mobo_user_svc, mobo_ride_svc, mobo_pay_svc, mobo_loc_svc, mobo_readonly)
 ];
 
+function buildMigrationSsl() {
+  // Supabase and Render PostgreSQL require SSL. In CI/test we skip if no URL.
+  // rejectUnauthorized: true validates the server certificate (prevents MITM).
+  // If DB_SSL_CA is set, pin to that CA; otherwise trust the system CA bundle.
+  if (process.env.NODE_ENV === 'test') return false;
+  const sslConfig = { rejectUnauthorized: true };
+  if (process.env.DB_SSL_CA) {
+    sslConfig.ca = process.env.DB_SSL_CA.replace(/\\n/g, '\n');
+  }
+  return sslConfig;
+}
+
 async function run() {
   const client = new Client({
     connectionString: CONNECTION_STRING,
-    ssl: { rejectUnauthorized: false },
+    ssl: buildMigrationSsl(),
   });
 
   await client.connect();

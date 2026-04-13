@@ -28,6 +28,9 @@ async function _send(token, title, body, data = {}) {
       ticket = result[0];
       if (ticket.status === 'error') {
         console.error('[RideNotification] Ticket error:', ticket.message, ticket.details);
+        if (ticket.details?.error === 'DeviceNotRegistered') {
+          _removeStalePushToken(token).catch(() => {});
+        }
       }
     }
 
@@ -242,10 +245,32 @@ async function notifyRideCancelled(token, details) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------------
 function vehicleStr(vehicle) {
   return vehicle ? ` in a ${vehicle}` : '';
+}
+
+/**
+ * Remove a stale push token from the users table.
+ * Called automatically when Expo returns DeviceNotRegistered.
+ *
+ * @param {string} token
+ */
+async function _removeStalePushToken(token) {
+  if (!token) return;
+  try {
+    await db.query(
+      `UPDATE users
+       SET expo_push_token = NULL,
+           push_token      = NULL
+       WHERE expo_push_token = $1 OR push_token = $1`,
+      [token]
+    );
+    console.info(`[RideNotification] Removed stale token: ${token.slice(0, 30)}...`);
+  } catch (err) {
+    console.warn('[RideNotification] Failed to remove stale token:', err.message);
+  }
 }
 
 module.exports = {
@@ -257,5 +282,6 @@ module.exports = {
   notifyRideCancelled,
   notifyNewMessage,
   notifyRideRequested,
+  _removeStalePushToken,
   _send,
 };

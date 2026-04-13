@@ -123,6 +123,9 @@ const { errorHandler } = require('./src/utils/response');
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
+  const { startReconciliationJob } = require('./src/jobs/reconcilePayments');
+  startReconciliationJob();
+
   const server = app.listen(PORT, () => {
     logger.info(`[MOBO Payment Service] Running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
   });

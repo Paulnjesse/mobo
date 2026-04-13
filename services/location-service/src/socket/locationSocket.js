@@ -1,7 +1,38 @@
 'use strict';
 
 const { verifyJwt } = require('../../../shared/jwtUtil');
-const db = require('../config/database');
+const db    = require('../config/database');
+const cache = require('../../../shared/redis');
+
+// Driver location cache TTL — 60 seconds.
+// If a driver stops emitting (disconnect, crash), their entry expires naturally.
+const DRIVER_LOC_TTL = 60;
+
+/**
+ * Persist driver location to the shared Redis cache (with in-memory fallback).
+ * Key: driver_loc:<driverId>
+ */
+async function cacheSetDriverLocation(driverId, payload) {
+  driverLocations.set(String(driverId), payload); // always keep in-memory for zero-latency reads
+  await cache.set(`driver_loc:${driverId}`, payload, DRIVER_LOC_TTL);
+}
+
+/**
+ * Read driver location — Redis first, fall back to in-memory map.
+ */
+async function cacheGetDriverLocation(driverId) {
+  const fromRedis = await cache.get(`driver_loc:${driverId}`);
+  if (fromRedis) return fromRedis;
+  return driverLocations.get(String(driverId)) || null;
+}
+
+/**
+ * Remove driver location from both caches on disconnect.
+ */
+async function cacheDelDriverLocation(driverId) {
+  driverLocations.delete(String(driverId));
+  await cache.del(`driver_loc:${driverId}`);
+}
 
 /**
  * Haversine distance in km between two lat/lng points.
@@ -155,8 +186,8 @@ function initLocationSocket(io) {
         eta_minutes,  // null when dropoff not provided
       };
 
-      // Cache the latest position
-      driverLocations.set(driverId, locationPayload);
+      // Cache the latest position (Redis + in-memory fallback)
+      cacheSetDriverLocation(driverId, locationPayload).catch(() => {});
 
       // Broadcast to all subscribers in this driver's location room
       location.to(driverLocationRoom(driverId)).emit('driver_location', locationPayload);
@@ -230,11 +261,10 @@ function initLocationSocket(io) {
 
       console.log(`[LocationSocket] ${socket.id} (user=${socket.user?.id}) is now tracking driver ${driverId} on ride ${rideId}`);
 
-      // Send last known location immediately
-      const lastKnown = driverLocations.get(String(driverId));
-      if (lastKnown) {
-        socket.emit('driver_location', { ...lastKnown, isInitialSnapshot: true });
-      }
+      // Send last known location immediately (Redis → in-memory fallback)
+      cacheGetDriverLocation(driverId).then((lastKnown) => {
+        if (lastKnown) socket.emit('driver_location', { ...lastKnown, isInitialSnapshot: true });
+      }).catch(() => {});
 
       socket.emit('tracking_started', { driverId, room });
     });
@@ -291,7 +321,7 @@ function initLocationSocket(io) {
 
       // Update cached location if coordinates provided
       if (data.latitude != null && data.longitude != null) {
-        driverLocations.set(driverId, { ...payload });
+        cacheSetDriverLocation(driverId, { ...payload }).catch(() => {});
       }
 
       location.emit('driver_online', payload); // broadcast to all connected clients
@@ -342,6 +372,8 @@ function initLocationSocket(io) {
         if (stored === socket.id) {
           driverSockets.delete(String(userId));
           onlineDrivers.delete(String(userId));
+          // Evict from Redis cache — driver is no longer streaming location
+          cacheDelDriverLocation(String(userId)).catch(() => {});
 
           // Notify clients that the driver went offline due to disconnection
           location.emit('driver_offline', {
@@ -404,12 +436,13 @@ async function persistLocationToDB(driverId, locationPayload) {
 
 /**
  * Returns the last known location for a driver, or null if unavailable.
+ * Checks Redis first (cross-instance), then falls back to in-memory map.
  *
  * @param {string} driverId
- * @returns {object|null}
+ * @returns {Promise<object|null>}
  */
-function getLastKnownLocation(driverId) {
-  return driverLocations.get(String(driverId)) || null;
+async function getLastKnownLocation(driverId) {
+  return cacheGetDriverLocation(driverId);
 }
 
 /**
