@@ -2265,7 +2265,7 @@ ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS locations_owner_policy ON locations;
 CREATE POLICY locations_owner_policy ON locations
-  USING (driver_id::text = current_setting('app.current_user_id', true));
+  USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- notifications
@@ -2311,9 +2311,9 @@ ALTER TABLE ride_ratings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS ride_ratings_participant_policy ON ride_ratings;
 CREATE POLICY ride_ratings_participant_policy ON ride_ratings
   USING (
-    rater_id::text  = current_setting('app.current_user_id', true)
+    rater_id::text = current_setting('app.current_user_id', true)
     OR
-    ratee_id::text  = current_setting('app.current_user_id', true)
+    rated_id::text = current_setting('app.current_user_id', true)
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -2332,7 +2332,7 @@ ALTER TABLE preferred_drivers ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS preferred_drivers_owner_policy ON preferred_drivers;
 CREATE POLICY preferred_drivers_owner_policy ON preferred_drivers
-  USING (rider_id::text = current_setting('app.current_user_id', true));
+  USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- GDPR tables
@@ -2418,10 +2418,12 @@ CREATE TABLE IF NOT EXISTS delivery_batches (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE deliveries
-  ADD CONSTRAINT fk_deliveries_batch
-  FOREIGN KEY (batch_id) REFERENCES delivery_batches(id)
-  NOT VALID;
+DO $$ BEGIN
+  ALTER TABLE deliveries
+    ADD CONSTRAINT fk_deliveries_batch
+    FOREIGN KEY (batch_id) REFERENCES delivery_batches(id)
+    NOT VALID;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_deliveries_batch
   ON deliveries(batch_id) WHERE batch_id IS NOT NULL;
@@ -2688,12 +2690,14 @@ ALTER TABLE users
 
 -- 5. FK to country_currency_config ensures only supported country codes are stored
 --    (DEFERRABLE so bulk inserts don't race with the config table seed)
-ALTER TABLE users
-  ADD CONSTRAINT fk_users_country_currency
-    FOREIGN KEY (country_code)
-    REFERENCES country_currency_config (country_code)
-    ON UPDATE CASCADE
-    DEFERRABLE INITIALLY DEFERRED;
+DO $$ BEGIN
+  ALTER TABLE users
+    ADD CONSTRAINT fk_users_country_currency
+      FOREIGN KEY (country_code)
+      REFERENCES country_currency_config (country_code)
+      ON UPDATE CASCADE
+      DEFERRABLE INITIALLY DEFERRED;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 6. Index for fast currency lookups without full table scans
 CREATE INDEX IF NOT EXISTS idx_users_country_code ON users (country_code);
