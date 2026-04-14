@@ -131,17 +131,20 @@ app.use(errorHandler);
 const httpServer = http.createServer(app);
 
 // Attach Socket.IO to the HTTP server
+// In production, force WebSocket-only transport.
+// See location-service/server.js for full reasoning (sticky sessions + Africa latency).
 const io = new Server(httpServer, {
   cors: {
     origin: CORS_ORIGINS,
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  // Allow both WebSocket and long-polling transports for compatibility
-  transports: ['websocket', 'polling'],
-  // Reconnection ping settings
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  transports: process.env.NODE_ENV === 'production' ? ['websocket'] : ['websocket', 'polling'],
+  // Mobile-network tuning (Africa 3G/4G):
+  pingTimeout:     120000,
+  pingInterval:     25000,
+  upgradeTimeout:   15000,
+  maxHttpBufferSize: 1e6,
 });
 
 // Initialise Socket.IO namespaces

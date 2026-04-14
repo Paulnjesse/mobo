@@ -13,8 +13,10 @@
 
 const db     = require('../config/database');
 const logger = require('../utils/logger');
+const { withLock } = require('../utils/distributedLock');
 
 const POLL_INTERVAL_MS = 60_000; // 1 minute
+const LOCK_TTL_MS      = 55_000; // expires before next tick; crash-safe auto-release
 
 /**
  * @param {import('socket.io').Server} io  — top-level Socket.IO server
@@ -66,9 +68,12 @@ function startDeliverySchedulerJob(io) {
     }
   };
 
+  // Wrap with distributed lock — prevents duplicate dispatches across scaled instances
+  const lockedTick = () => withLock('lock:delivery-scheduler-job', LOCK_TTL_MS, tick);
+
   // Run immediately, then on interval
-  tick();
-  const interval = setInterval(tick, POLL_INTERVAL_MS);
+  lockedTick();
+  const interval = setInterval(lockedTick, POLL_INTERVAL_MS);
 
   // Expose stop handle for clean shutdown
   return { stop: () => clearInterval(interval) };

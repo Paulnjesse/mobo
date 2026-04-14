@@ -15,8 +15,12 @@
 
 const db = require('../config/database');
 const { notifyRiderDriverArrived } = require('../services/pushNotifications');
+const { withLock } = require('../utils/distributedLock');
 
-const POLL_MS = 60 * 1000; // every 60 s
+const POLL_MS    = 60 * 1000; // every 60 s
+// Lock TTL: 55 s — expires before the next tick so one slow instance never
+// permanently blocks the job. Two separate lock keys for two separate actions.
+const LOCK_TTL_MS = 55_000;
 
 // ── Push helper ─────────────────────────────────────────────────────────────
 const { Expo } = require('expo-server-sdk');
@@ -141,8 +145,9 @@ async function runScheduledRideJob(io) {
 // ── Start the job ─────────────────────────────────────────────────────────────
 function startScheduledRideJob(io) {
   console.log('[ScheduledRideJob] Started — polling every 60s');
-  runScheduledRideJob(io); // run immediately on startup
-  setInterval(() => runScheduledRideJob(io), POLL_MS);
+  const tick = () => withLock('lock:scheduled-ride-job', LOCK_TTL_MS, () => runScheduledRideJob(io));
+  tick(); // run immediately on startup
+  setInterval(tick, POLL_MS);
 }
 
 module.exports = { startScheduledRideJob };

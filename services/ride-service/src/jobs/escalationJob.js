@@ -15,9 +15,15 @@
  */
 
 const db = require('../config/database');
+const logger = require('../utils/logger');
+const { withLock } = require('../utils/distributedLock');
 
 const POLL_INTERVAL_MS   = 30 * 1000;  // poll every 30 s
 const ESCALATION_TIMEOUT = 60;         // seconds before auto-escalation
+// Lock TTL: slightly longer than the poll interval so a slow tick doesn't
+// block the next one; shorter than 2× the interval so a crashed instance
+// doesn't lock out the job for two full cycles.
+const LOCK_TTL_MS = 25_000;
 
 // Lazy-load Twilio so missing credentials never crash the service
 function getTwilioClient() {
@@ -32,6 +38,10 @@ function getTwilioClient() {
 }
 
 async function runEscalation() {
+  await withLock('lock:escalation-job', LOCK_TTL_MS, _doEscalation);
+}
+
+async function _doEscalation() {
   try {
     // ── Atomic: mark rows as escalated and return them in one statement ──────
     // UPDATE...FROM...RETURNING prevents two concurrent runs from touching
@@ -59,7 +69,7 @@ async function runEscalation() {
 
     if (result.rows.length === 0) return;
 
-    console.log(`[EscalationJob] Auto-escalating ${result.rows.length} unanswered check-in(s)`);
+    logger.info(`[EscalationJob] Auto-escalating ${result.rows.length} unanswered check-in(s)`);
 
     for (const checkin of result.rows) {
       try {
@@ -103,28 +113,30 @@ async function runEscalation() {
               client.messages
                 .create({ body, from, to: contact.phone })
                 .catch((err) =>
-                  console.warn(`[EscalationJob] SMS failed for ${contact.phone}:`, err.message)
+                  logger.warn('[EscalationJob] SMS failed', { phone: contact.phone, err: err.message })
                 );
             }
           } else {
-            console.log(
-              `[EscalationJob] Twilio not configured — would SMS ${contactsResult.rows.length} contact(s) for checkin ${checkin.id}`
-            );
+            logger.info('[EscalationJob] Twilio not configured — skipping SMS', {
+              contacts: contactsResult.rows.length, checkinId: checkin.id,
+            });
           }
         }
 
-        console.log(`[EscalationJob] Escalated checkin ${checkin.id} (ride ${checkin.ride_id})`);
+        logger.info('[EscalationJob] Escalated checkin', { checkinId: checkin.id, rideId: checkin.ride_id });
       } catch (innerErr) {
-        console.error(`[EscalationJob] Post-escalation actions failed for checkin ${checkin.id}:`, innerErr.message);
+        logger.error('[EscalationJob] Post-escalation actions failed', {
+          checkinId: checkin.id, err: innerErr.message,
+        });
       }
     }
   } catch (err) {
-    console.error('[EscalationJob] Poll error:', err.message);
+    logger.error('[EscalationJob] Poll error', { err: err.message });
   }
 }
 
 function startEscalationJob() {
-  console.log(`[EscalationJob] Started — polling every ${POLL_INTERVAL_MS / 1000}s, escalating after ${ESCALATION_TIMEOUT}s of no response`);
+  logger.info('[EscalationJob] Started', { pollIntervalSec: POLL_INTERVAL_MS / 1000, escalationTimeoutSec: ESCALATION_TIMEOUT });
   // Run immediately on startup to catch anything missed during downtime
   runEscalation();
   setInterval(runEscalation, POLL_INTERVAL_MS);

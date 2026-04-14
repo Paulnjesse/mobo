@@ -14,8 +14,9 @@ import threading
 import numpy as np
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -55,6 +56,29 @@ async def lifespan(app: FastAPI):
     logger.info("[ML Service] Shutdown.")
 
 app = FastAPI(title="MOBO ML Fraud Detection", version="1.0.0", lifespan=lifespan)
+
+# ── Internal service authentication ──────────────────────────────────────────
+# All scoring endpoints require the same X-Internal-Service-Key shared secret
+# used by every other MOBO service for inter-service auth.  The key is injected
+# at deploy time via the INTERNAL_SERVICE_KEY environment variable.
+#
+# /health and /metrics are intentionally left open for load balancers and
+# Prometheus scrapers which cannot inject service keys.
+
+_INTERNAL_KEY_HEADER = APIKeyHeader(name="X-Internal-Service-Key", auto_error=False)
+
+def require_internal_key(key: str = Depends(_INTERNAL_KEY_HEADER)) -> None:
+    expected = os.getenv("INTERNAL_SERVICE_KEY", "")
+    if not expected:
+        # INTERNAL_SERVICE_KEY not configured — log a warning but allow through.
+        # This keeps local dev (no secrets set) working without extra setup.
+        logger.warning(
+            "[ML Service] INTERNAL_SERVICE_KEY is not set — "
+            "scoring endpoints are unprotected. Set this in production."
+        )
+        return
+    if not key or key != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 # ── Request / Response schemas ────────────────────────────────────────────────
 
@@ -134,7 +158,7 @@ def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.post("/score/gps", response_model=FraudScoreResponse)
-def score_gps(req: GPSScoringRequest):
+def score_gps(req: GPSScoringRequest, _auth: None = Depends(require_internal_key)):
     t0 = time.time()
     try:
         score, signals = gps_model.score(req.model_dump())
@@ -155,7 +179,7 @@ def score_gps(req: GPSScoringRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/score/payment", response_model=FraudScoreResponse)
-def score_payment(req: PaymentScoringRequest):
+def score_payment(req: PaymentScoringRequest, _auth: None = Depends(require_internal_key)):
     t0 = time.time()
     try:
         score, signals = payment_model.score(req.model_dump())
@@ -176,7 +200,7 @@ def score_payment(req: PaymentScoringRequest):
         raise HTTPException(status_code=500, detail=500)
 
 @app.post("/score/collusion", response_model=FraudScoreResponse)
-def score_collusion(req: RideCollusionRequest):
+def score_collusion(req: RideCollusionRequest, _auth: None = Depends(require_internal_key)):
     t0 = time.time()
     try:
         score, signals = fraud_model.score_collusion(req.model_dump())

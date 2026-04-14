@@ -120,15 +120,29 @@ app.use(errorHandler);
 const httpServer = http.createServer(app);
 
 // Attach Socket.IO to the HTTP server
+// In production, force WebSocket-only transport.
+// Reason: Render does not support sticky sessions, so long-polling clients
+// hitting a different instance than the one that holds their socket session
+// will get dropped and reconnect in a loop. WebSocket is a persistent
+// connection so session-affinity is irrelevant after the initial upgrade.
+// On degraded African mobile networks clients should reconnect (re-upgrade)
+// rather than fall back to polling against a random instance.
 const io = new Server(httpServer, {
   cors: {
     origin: CORS_ORIGINS,
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  transports: process.env.NODE_ENV === 'production' ? ['websocket'] : ['websocket', 'polling'],
+  // Tuned for mobile networks in Africa:
+  //   pingTimeout  120 s — allows for 3G latency spikes without false disconnects
+  //   pingInterval  25 s — keeps NAT state alive on carrier-grade NAT
+  //   upgradeTimeout 15 s — give slow connections time to complete the WS upgrade
+  pingTimeout:     120000,
+  pingInterval:     25000,
+  upgradeTimeout:   15000,
+  // Limit per-message size to guard against memory exhaustion
+  maxHttpBufferSize: 1e6, // 1 MB
 });
 
 // ── Socket.IO Redis adapter ──────────────────────────────────────────────────

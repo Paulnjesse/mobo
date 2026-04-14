@@ -17,10 +17,17 @@
  *   If REDIS_URL is not set (local dev without Redis), falls back to
  *   setImmediate — same fire-and-forget behaviour as before.
  *
+ * PII policy:
+ *   Job payloads are stored in Redis (visible to anyone with Redis access and
+ *   in BullMQ dashboards). To minimise PII exposure, only the ride_id is
+ *   stored in the queue. The worker resolves driver_id / rider_id from the
+ *   database at processing time, where access is controlled by RLS policies.
+ *   Raw IP addresses and device identifiers are never stored in the queue.
+ *
  * Job types:
- *   'collusion'        — checkRideCollusion    (on ride accept)
- *   'fare_manipulation'— checkFareManipulation (on ride complete)
- *   'gps'              — checkGpsSpoofing      (on location update)
+ *   'collusion'        — checkRideCollusion    (on ride accept)  payload: { rideId }
+ *   'fare_manipulation'— checkFareManipulation (on ride complete) payload: { rideId, estimatedFare, finalFare }
+ *   'gps'              — checkGpsSpoofing      (on location update) payload: { rideId, userId, lat, lng, timestampMs, speedKmh, accuracyM }
  */
 
 const {
@@ -78,29 +85,35 @@ async function enqueueFraudCheck(checkType, payload) {
 }
 
 /**
- * Execute a fraud check directly (called by fraudWorker and the setImmediate fallback).
+ * Execute a fraud check directly.
+ * Called by fraudWorker (which has already resolved PII from DB) and the
+ * setImmediate fallback path.
+ *
+ * For 'collusion' and 'fare_manipulation' the caller must supply the resolved
+ * driverId (and riderId for collusion) — these are looked up from the DB by
+ * the worker so they never travel through the Redis queue.
  *
  * @param {'collusion'|'fare_manipulation'|'gps'} checkType
- * @param {object} payload
+ * @param {object} resolvedPayload  — PII-resolved data (not raw queue payload)
  */
-async function runFraudCheck(checkType, payload) {
+async function runFraudCheck(checkType, resolvedPayload) {
   switch (checkType) {
     case 'collusion':
       return checkRideCollusion(
-        payload.rideId,
-        payload.driverId,
-        payload.riderId,
-        payload.meta || {}
+        resolvedPayload.rideId,
+        resolvedPayload.driverId,
+        resolvedPayload.riderId,
+        resolvedPayload.meta || {}
       );
     case 'fare_manipulation':
       return checkFareManipulation(
-        payload.rideId,
-        payload.driverId,
-        payload.estimatedFare,
-        payload.finalFare
+        resolvedPayload.rideId,
+        resolvedPayload.driverId,
+        resolvedPayload.estimatedFare,
+        resolvedPayload.finalFare
       );
     case 'gps':
-      return checkGpsSpoofing(payload);
+      return checkGpsSpoofing(resolvedPayload);
     default:
       console.warn('[FraudQueue] Unknown check type:', checkType);
   }

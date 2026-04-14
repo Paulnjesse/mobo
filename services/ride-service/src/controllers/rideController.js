@@ -972,16 +972,10 @@ const acceptRide = async (req, res) => {
     // the job in Redis and retries on ML-service failure (2 attempts, exp back-off).
     const acceptedRide = result.rows[0];
     if (isEnabled('fraud_detection_v1')) {
-      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-        || req.socket?.remoteAddress;
+      // Only enqueue ride_id — the worker resolves driver_id/rider_id from DB
+      // so PII (UUIDs, IP addresses) is never stored in Redis queue payloads.
       enqueueFraudCheck('collusion', {
-        rideId:   acceptedRide.id,
-        driverId: driverUserId,
-        riderId:  acceptedRide.rider_id,
-        meta: {
-          driverIp:       clientIp,
-          driverDeviceId: req.headers['x-device-id'] || null,
-        },
+        rideId: acceptedRide.id,
       }).catch((err) => console.error('[AcceptRide FraudCheck] Enqueue failed:', err.message));
     }
 
@@ -1249,10 +1243,11 @@ const updateRideStatus = async (req, res) => {
 
       // ── Fraud: fare manipulation check (durable BullMQ job, non-blocking) ──
       // Enqueued to Redis; retried automatically if ML service is temporarily down.
+      // driverId is intentionally omitted — the worker resolves it from DB to
+      // avoid storing PII in Redis queue payloads.
       if (isEnabled('fraud_detection_v1')) {
         enqueueFraudCheck('fare_manipulation', {
           rideId:        id,
-          driverId:      ride.driver_id,
           estimatedFare: ride.estimated_fare,
           finalFare,
         }).catch((err) => console.error('[UpdateRideStatus FareCheck] Enqueue failed:', err.message));
