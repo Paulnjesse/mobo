@@ -1,0 +1,16 @@
+{
+  "name": "mobo-load-tests",
+  "version": "1.0.0",
+  "description": "Socket.IO and HTTP stress tests for MOBO",
+  "private": true,
+  "scripts": {
+    "stress:capacity":   "MOBO_TEST=capacity   node socket-stress.js",
+    "stress:rate":       "MOBO_TEST=rate        node socket-stress.js",
+    "stress:disconnect": "MOBO_TEST=disconnect  node socket-stress.js",
+    "stress:churn":      "MOBO_TEST=churn       node socket-stress.js",
+    "stress:all":        "MOBO_TEST=all         node socket-stress.js"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}

@@ -23,8 +23,22 @@ envVarGroups:
       - key: SENTRY_DSN
         sync: false
       - key: REDIS_URL
+        # Set to your Redis provider URL (Render Redis, Upstash, Redis Cloud).
+        # Required for: Socket.IO Redis adapter, BullMQ queues, rate-limit store,
+        # driver location cache.  All features degrade gracefully without it but
+        # MUST be set in production.
         sync: false
+      # ── Database connections go through PgBouncer (private service below) ──
+      # In production set PGBOUNCER_URL to the internal URL of the pgbouncer
+      # private service:  postgres://mobo_user:<pass>@mobo-pgbouncer:5432/mobo
+      # Set DATABASE_URL_DIRECT to the raw Render PostgreSQL connection string
+      # for migrations only (pgbouncer transaction mode blocks DDL statements).
       - key: DATABASE_URL
+        # PgBouncer private-service internal URL — set manually in Render dashboard.
+        # Format: postgres://mobo_user:<PASSWORD>@mobo-pgbouncer:5432/mobo
+        sync: false
+      - key: DATABASE_URL_DIRECT
+        # Raw PostgreSQL connection string — used by migration scripts only.
         fromDatabase:
           name: mobo-db-primary
           property: connectionString
@@ -42,6 +56,62 @@ envVarGroups:
                               # Store as single-line with \n replacing actual newlines
 
 services:
+  # ── PgBouncer — PostgreSQL connection pooler (private service) ────────────────
+  # WHY: Each Node.js service uses pg.Pool(max:20). At 6 ride-service instances
+  #      that is 120 direct DB connections. PostgreSQL's default max_connections
+  #      is 100, so without a pooler services would be refused connections at scale.
+  #      PgBouncer in transaction mode multiplexes up to MAX_CLIENT_CONN=500 client
+  #      connections onto DEFAULT_POOL_SIZE=25 real server connections.
+  #
+  # DEPLOY STEPS:
+  #   1. Deploy this service first — it must be running before the app services start.
+  #   2. Copy the private service's internal hostname from the Render dashboard.
+  #   3. Set DATABASE_URL in mobo-shared-secrets to:
+  #        postgres://mobo_user:<DB_PASSWORD>@<pgbouncer-internal-host>:5432/mobo
+  #   4. Keep DATABASE_URL_DIRECT pointing at the raw Render PostgreSQL URL for
+  #      running migrations (npm run migrate) which require a session connection.
+  #
+  # TRANSACTION MODE COMPATIBILITY:
+  #   - Named prepared statements are NOT supported — MOBO uses $1/$2 params only ✓
+  #   - Session-level SET is reset between transactions — not used in MOBO ✓
+  #   - Advisory locks must not span transactions — MOBO does not use them ✓
+  - type: pserv
+    name: mobo-pgbouncer
+    region: oregon
+    runtime: docker
+    rootDir: pgbouncer
+    envVars:
+      - key: DB_USER
+        value: mobo_user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: mobo-db-primary
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: mobo-db-primary
+          property: host
+      - key: DB_PORT
+        value: 5432
+      - key: DB_NAME
+        value: mobo
+      - key: POOL_MODE
+        value: transaction
+      - key: SERVER_RESET_QUERY
+        value: DISCARD ALL
+      - key: MAX_CLIENT_CONN
+        value: 500
+      - key: DEFAULT_POOL_SIZE
+        value: 25
+      - key: MIN_POOL_SIZE
+        value: 5
+      - key: RESERVE_POOL_SIZE
+        value: 5
+      - key: SERVER_IDLE_TIMEOUT
+        value: 600
+      - key: AUTH_TYPE
+        value: md5
+
   # ── User Service ──────────────────────────────────────────────────────────────
   - type: web
     name: mobo-user-service

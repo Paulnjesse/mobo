@@ -131,6 +131,41 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
 });
 
+// ── Socket.IO Redis adapter ──────────────────────────────────────────────────
+// CRITICAL for multi-instance deployments (Render scales location-service 2–5×).
+// Without this adapter every instance holds its own in-memory socket state.
+// A rider on instance-A would never receive broadcasts emitted by a driver on
+// instance-B.  The adapter routes all io.to(room).emit() calls through Redis
+// pub/sub so every instance fans out the event to its locally connected sockets.
+//
+// Gracefully degrades to single-instance in-memory mode when Redis is absent.
+if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
+  try {
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    const { Redis }         = require('ioredis');
+    const redisTls = process.env.REDIS_URL.startsWith('rediss://')
+      ? { tls: { rejectUnauthorized: true } }
+      : {};
+    const pubClient = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: null,
+      ...redisTls,
+    });
+    const subClient = pubClient.duplicate();
+    pubClient.on('error', (err) =>
+      logger.warn('[LocationService] Redis pubClient error — adapter degraded', { err: err.message }));
+    subClient.on('error', (err) =>
+      logger.warn('[LocationService] Redis subClient error — adapter degraded', { err: err.message }));
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('[LocationService] Socket.IO Redis adapter active — multi-instance broadcasts enabled');
+  } catch (err) {
+    logger.warn('[LocationService] Socket.IO Redis adapter unavailable — single-instance mode only', {
+      err: err.message,
+    });
+  }
+} else {
+  logger.warn('[LocationService] REDIS_URL not set — Socket.IO running in single-instance mode (ok for dev, NOT for production scale)');
+}
+
 // Initialise the /location namespace with all location event handlers
 const locationNamespace = initLocationSocket(io);
 

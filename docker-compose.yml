@@ -5,12 +5,24 @@ version: '3.9'
 # SECURITY NOTES (do NOT use these defaults in production):
 #   1. All secrets below are DEVELOPMENT PLACEHOLDERS. Replace every value
 #      marked "CHANGE_ME" with a strong random secret before any deployment.
-#   2. The database is intentionally NOT exposed on the host (no ports: mapping).
+#   2. The database is intentionally NOT exposed to the host (no ports: mapping).
 #      Use `docker exec -it mobo_db psql -U mobo_user mobo` for direct access.
 #   3. For production, use environment-specific .env files or a secrets manager
 #      (Render secret groups, AWS Secrets Manager, Supabase Vault).
+#
+# Infrastructure added in this revision:
+#   redis     — required for: BullMQ queues, Socket.IO Redis adapter, rate-limit
+#               Redis store, and driver location caching. All services fall back
+#               gracefully when Redis is absent, but production MUST have it.
+#   pgbouncer — connection pooler in front of PostgreSQL.
+#               Mode: transaction (fastest — suited for short-lived queries).
+#               Raises effective connection ceiling from 20 to 500+ client conns
+#               while keeping only DEFAULT_POOL_SIZE=25 real server connections.
+#               All services connect to pgbouncer:5432 instead of db:5432.
 # ─────────────────────────────────────────────────────────────────────────────
 services:
+
+  # ── PostgreSQL + PostGIS ─────────────────────────────────────────────────
   db:
     image: postgis/postgis:16-3.4-alpine
     container_name: mobo_db
@@ -19,10 +31,10 @@ services:
       POSTGRES_USER:     mobo_user
       # SECURITY: change this in any non-local environment
       POSTGRES_PASSWORD: mobo_dev_pass_CHANGE_ME
-    # ── DB port is NOT exposed to the host — services communicate over the
-    #    internal Docker network only. This prevents host-level DB attacks.
+    # DB port is NOT exposed to the host — services go through PgBouncer.
+    # Uncomment the line below ONLY for direct debugging (never in production).
     # ports:
-    #   - "5432:5432"   # Uncomment ONLY for local debugging, never in production
+    #   - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql
@@ -33,6 +45,77 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── PgBouncer — PostgreSQL connection pooler ─────────────────────────────
+  # WHY: Each Node.js service has pg.Pool(max:20). With 6 ride-service instances
+  #      that's 120 direct DB connections — PostgreSQL's default max is 100.
+  #      PgBouncer in transaction mode multiplexes up to 500 client connections
+  #      onto DEFAULT_POOL_SIZE=25 real server connections, while idle clients
+  #      cost almost nothing.
+  #
+  # TRANSACTION MODE NOTES:
+  #   - Session-level SET statements are reset between transactions (DISCARD ALL).
+  #   - Named prepared statements are NOT supported — use $1/$2 parameterized
+  #     queries only (MOBO already does this throughout).
+  #   - Advisory locks must not span transactions.
+  pgbouncer:
+    image: edoburu/pgbouncer:1.22.0
+    container_name: mobo_pgbouncer
+    environment:
+      DB_USER:              mobo_user
+      DB_PASSWORD:          mobo_dev_pass_CHANGE_ME
+      DB_HOST:              db
+      DB_PORT:              5432
+      DB_NAME:              mobo
+      POOL_MODE:            transaction
+      SERVER_RESET_QUERY:   DISCARD ALL
+      MAX_CLIENT_CONN:      500
+      DEFAULT_POOL_SIZE:    25
+      MIN_POOL_SIZE:        5
+      RESERVE_POOL_SIZE:    5
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT:  600
+      CLIENT_IDLE_TIMEOUT:  0
+      LOG_CONNECTIONS:      0
+      LOG_DISCONNECTIONS:   0
+      AUTH_TYPE:            md5
+      # Expose metrics on port 6432 (PgBouncer admin console — internal only)
+      ADMIN_USERS:          mobo_user
+    ports:
+      - "5433:5432"   # host:5433 → pgbouncer:5432 (for local debugging only)
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U mobo_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  # WHY: Without Redis the following features degrade silently:
+  #   1. Socket.IO adapter           → single-instance only (broadcast bug at 2+ instances)
+  #   2. BullMQ fraud-check queue    → setImmediate fallback (jobs lost on crash)
+  #   3. BullMQ payment webhook queue → direct processing (no retry)
+  #   4. Rate-limit Redis store       → per-instance counters (limits multiply by N)
+  #   5. Driver location cache        → in-memory only (not shared across instances)
+  redis:
+    image: redis:7.2-alpine
+    container_name: mobo_redis
+    command: >
+      redis-server
+      --requirepass redis_dev_pass_CHANGE_ME
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    ports:
+      - "6379:6379"   # exposed for local debugging / redis-cli
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_pass_CHANGE_ME", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API Gateway ───────────────────────────────────────────────────────────
   api-gateway:
     build: ./api-gateway
     container_name: mobo_gateway
@@ -44,94 +127,117 @@ services:
       RIDE_SERVICE_URL:     http://ride-service:3002
       PAYMENT_SERVICE_URL:  http://payment-service:3003
       LOCATION_SERVICE_URL: http://location-service:3004
-      # SECURITY: use a 64+ character random string in production
-      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      JWT_SECRET:           mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      REDIS_URL:            redis://:redis_dev_pass_CHANGE_ME@redis:6379
     depends_on:
-      - user-service
-      - ride-service
-      - payment-service
-      - location-service
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      ride-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      location-service:
+        condition: service_started
 
+  # ── User Service ──────────────────────────────────────────────────────────
   user-service:
     build: ./services/user-service
     container_name: mobo_user
     ports:
       - "3001:3001"
     environment:
-      NODE_ENV: development
-      PORT: 3001
-      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
-      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
-      JWT_EXPIRES_IN: 7d
-      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
-      # Per-service key (optional — takes priority over shared key above)
+      NODE_ENV:   development
+      PORT:       3001
+      # Route through PgBouncer — not directly to db
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@pgbouncer:5432/mobo
+      JWT_SECRET:            mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      JWT_EXPIRES_IN:        7d
+      INTERNAL_SERVICE_KEY:  mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_USER: mobo_user_svc_dev_key_CHANGE_ME
+      REDIS_URL:             redis://:redis_dev_pass_CHANGE_ME@redis:6379
     depends_on:
-      db:
+      pgbouncer:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
+  # ── Ride Service ──────────────────────────────────────────────────────────
   ride-service:
     build: ./services/ride-service
     container_name: mobo_ride
     ports:
       - "3002:3002"
     environment:
-      NODE_ENV: development
-      PORT: 3002
-      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
-      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
-      LOCATION_SERVICE_URL: http://location-service:3004
-      PAYMENT_SERVICE_URL:  http://payment-service:3003
-      SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
-      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      NODE_ENV:   development
+      PORT:       3002
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@pgbouncer:5432/mobo
+      JWT_SECRET:            mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      LOCATION_SERVICE_URL:  http://location-service:3004
+      PAYMENT_SERVICE_URL:   http://payment-service:3003
+      ML_SERVICE_URL:        http://ml-service:8000
+      SOCKET_CORS_ORIGIN:    http://localhost:3000,http://localhost:8081,exp://localhost:8081
+      INTERNAL_SERVICE_KEY:  mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_RIDE: mobo_ride_svc_dev_key_CHANGE_ME
+      REDIS_URL:             redis://:redis_dev_pass_CHANGE_ME@redis:6379
     depends_on:
-      db:
+      pgbouncer:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
+  # ── Payment Service ───────────────────────────────────────────────────────
   payment-service:
     build: ./services/payment-service
     container_name: mobo_payment
     ports:
       - "3003:3003"
     environment:
-      NODE_ENV: development
-      PORT: 3003
-      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
-      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
-      # Payment providers — use real test keys from each provider's dashboard
+      NODE_ENV:   development
+      PORT:       3003
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@pgbouncer:5432/mobo
+      JWT_SECRET:              mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       FLUTTERWAVE_SECRET_KEY:  FLWSECK_TEST-xxxx
       FLUTTERWAVE_WEBHOOK_HASH: flw_dev_webhook_hash_CHANGE_ME
       STRIPE_SECRET_KEY:       sk_test_xxxx
       STRIPE_WEBHOOK_SECRET:   whsec_dev_CHANGE_ME
       MTN_WEBHOOK_SECRET:      mtn_dev_webhook_secret_CHANGE_ME
       ORANGE_WEBHOOK_SECRET:   orange_dev_webhook_secret_CHANGE_ME
-      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      INTERNAL_SERVICE_KEY:    mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_PAYMENT: mobo_payment_svc_dev_key_CHANGE_ME
+      REDIS_URL:               redis://:redis_dev_pass_CHANGE_ME@redis:6379
     depends_on:
-      db:
+      pgbouncer:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
+  # ── Location Service ──────────────────────────────────────────────────────
   location-service:
     build: ./services/location-service
     container_name: mobo_location
     ports:
       - "3004:3004"
     environment:
-      NODE_ENV: development
-      PORT: 3004
-      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@db:5432/mobo
-      JWT_SECRET: mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
-      GOOGLE_MAPS_API_KEY: AIza_your_key_here
-      SOCKET_CORS_ORIGIN: http://localhost:3000,http://localhost:8081,exp://localhost:8081
-      INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
+      NODE_ENV:   development
+      PORT:       3004
+      DATABASE_URL: postgresql://mobo_user:mobo_dev_pass_CHANGE_ME@pgbouncer:5432/mobo
+      JWT_SECRET:             mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
+      GOOGLE_MAPS_API_KEY:    AIza_your_key_here
+      SOCKET_CORS_ORIGIN:     http://localhost:3000,http://localhost:8081,exp://localhost:8081
+      INTERNAL_SERVICE_KEY:   mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_LOCATION: mobo_location_svc_dev_key_CHANGE_ME
+      # REDIS_URL enables the Socket.IO Redis adapter — critical for multi-instance
+      REDIS_URL:              redis://:redis_dev_pass_CHANGE_ME@redis:6379
     depends_on:
-      db:
+      pgbouncer:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
-  # ── ML Fraud Detection Service ─────────────────────────────────────────────
+  # ── ML Fraud Detection Service ────────────────────────────────────────────
   ml-service:
     build: ./services/ml-service
     container_name: mobo_ml
