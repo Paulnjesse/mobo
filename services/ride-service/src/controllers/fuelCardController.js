@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 exports.getFuelCard = async (req, res) => {
@@ -23,7 +24,7 @@ exports.getFuelCard = async (req, res) => {
     }
     res.json(rows[0]);
   } catch (err) {
-    console.error('fuelCardController.getFuelCard:', err);
+    logger.error('fuelCardController.getFuelCard:', err);
     res.status(500).json({ error: 'Failed to load fuel card' });
   }
 };
@@ -41,7 +42,7 @@ exports.getTransactions = async (req, res) => {
     );
     res.json({ transactions: rows });
   } catch (err) {
-    console.error('fuelCardController.getTransactions:', err);
+    logger.error('fuelCardController.getTransactions:', err);
     res.status(500).json({ error: 'Failed to load transactions' });
   }
 };

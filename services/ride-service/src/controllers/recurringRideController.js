@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 exports.getMySeries = async (req, res) => {
@@ -8,7 +9,7 @@ exports.getMySeries = async (req, res) => {
     );
     res.json({ series: rows });
   } catch (err) {
-    console.error('recurringRideController.getMySeries:', err);
+    logger.error('recurringRideController.getMySeries:', err);
     res.status(500).json({ error: 'Failed to load recurring rides' });
   }
 };
@@ -25,7 +26,7 @@ exports.createSeries = async (req, res) => {
     );
     res.status(201).json({ series: rows[0] });
   } catch (err) {
-    console.error('recurringRideController.createSeries:', err);
+    logger.error('recurringRideController.createSeries:', err);
     res.status(500).json({ error: 'Failed to create recurring ride' });
   }
 };
@@ -47,7 +48,7 @@ exports.updateSeries = async (req, res) => {
     );
     res.json({ series: rows[0] });
   } catch (err) {
-    console.error('recurringRideController.updateSeries:', err);
+    logger.error('recurringRideController.updateSeries:', err);
     res.status(500).json({ error: 'Failed to update recurring ride' });
   }
 };
@@ -57,7 +58,7 @@ exports.deleteSeries = async (req, res) => {
     await db.query('DELETE FROM recurring_rides WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     res.json({ ok: true });
   } catch (err) {
-    console.error('recurringRideController.deleteSeries:', err);
+    logger.error('recurringRideController.deleteSeries:', err);
     res.status(500).json({ error: 'Failed to delete recurring ride' });
   }
 };

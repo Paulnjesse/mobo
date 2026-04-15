@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./utils/logger');
 
 /**
  * rbac.js — Granular Role-Based Access Control middleware
@@ -49,7 +50,7 @@ async function getUserPermissions(userId, role) {
     _cache.set(userId, { permissions, expiresAt: now + CACHE_TTL_MS });
     return permissions;
   } catch (err) {
-    console.error('[RBAC] Permission lookup failed:', err.message);
+    logger.error('[RBAC] Permission lookup failed:', err.message);
     // Fallback: return empty set (deny by default)
     return new Set();
   }
@@ -72,7 +73,7 @@ function requirePermission(permission) {
       const permissions = await getUserPermissions(req.user.id, adminRole);
 
       if (!permissions.has(permission)) {
-        console.warn(`[RBAC] Permission denied: user=${req.user.id} role=${adminRole} required=${permission}`);
+        logger.warn(`[RBAC] Permission denied: user=${req.user.id} role=${adminRole} required=${permission}`);
         return res.status(403).json({
           success: false,
           message: `Permission required: ${permission}`,
@@ -82,7 +83,7 @@ function requirePermission(permission) {
 
       next();
     } catch (err) {
-      console.error('[RBAC] Middleware error:', err.message);
+      logger.error('[RBAC] Middleware error:', err.message);
       return res.status(500).json({ success: false, message: 'Authorization check failed' });
     }
   };

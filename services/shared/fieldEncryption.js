@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 
 /**
  * fieldEncryption.js — AES-256-GCM field-level encryption
@@ -54,13 +55,13 @@ const KEYS = {
 // For higher security, rotate to a secrets manager (Supabase Vault, AWS Secrets
 // Manager, HashiCorp Vault) and inject the key at runtime, not via environment.
 if (process.env.NODE_ENV === 'production' && !KEYS[1]) {
-  console.error(
+  logger.error(
     '[FATAL] FIELD_ENCRYPTION_KEY is not set or is incorrectly formatted in production. ' +
     'All encrypted PII (phone, DOB, license) will be unreadable. Exiting.'
   );
   process.exit(1);
 } else if (!KEYS[1]) {
-  console.warn(
+  logger.warn(
     '[fieldEncryption] FIELD_ENCRYPTION_KEY not set — encrypt() will throw, ' +
     'decrypt() will return null. Set the key before storing any PII.'
   );
@@ -115,7 +116,7 @@ function decrypt(blob) {
     decipher.setAuthTag(authTag);
     return decipher.update(ciphertext) + decipher.final('utf8');
   } catch (err) {
-    console.error('[FieldEncryption] Decryption failed:', err.message);
+    logger.error('[FieldEncryption] Decryption failed:', err.message);
     return null;
   }
 }

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Biometric Driver Verification Controller
  *
@@ -136,14 +137,14 @@ exports.verifyDriver = async (req, res) => {
           result = 'manual_review';
         }
       } catch (smileErr) {
-        console.error('[BiometricController] Smile Identity API error:', smileErr.message);
+        logger.error('[BiometricController] Smile Identity API error:', smileErr.message);
         // Don't fail the whole request — fall back to manual review
         result = 'manual_review';
         rawResponse = { error: smileErr.message };
       }
     } else {
       // ── Dev/sandbox fallback (no credentials configured) ───────────────────
-      console.warn('[BiometricController] Smile Identity not configured — using dev fallback (approved)');
+      logger.warn('[BiometricController] Smile Identity not configured — using dev fallback (approved)');
       result     = 'verified';
       resultCode = 'DEV_BYPASS';
     }
@@ -178,7 +179,7 @@ exports.verifyDriver = async (req, res) => {
         rawResponse ? JSON.stringify(rawResponse) : null,
       ]
     ).catch((dbErr) => {
-      console.warn('[BiometricController] DB write failed:', dbErr.message);
+      logger.warn('[BiometricController] DB write failed:', dbErr.message);
     });
 
     if (result === 'verified') {
@@ -197,7 +198,7 @@ exports.verifyDriver = async (req, res) => {
       message: 'Identity verification failed. Please ensure the photo is clear and matches your ID.',
     });
   } catch (err) {
-    console.error('[BiometricController] verifyDriver:', err);
+    logger.error('[BiometricController] verifyDriver:', err);
     res.status(500).json({ error: 'Verification failed', verified: false });
   }
 };
@@ -284,7 +285,7 @@ exports.verifyRider = async (req, res) => {
       result_code: resultCode,
     });
   } catch (err) {
-    console.error('[BiometricController] verifyRider:', err);
+    logger.error('[BiometricController] verifyRider:', err);
     res.status(500).json({ error: 'Verification failed', verified: false });
   }
 };
@@ -309,7 +310,7 @@ exports.getRiderVerificationStatus = async (req, res) => {
         : [],
     });
   } catch (err) {
-    console.error('[BiometricController] getRiderVerificationStatus:', err);
+    logger.error('[BiometricController] getRiderVerificationStatus:', err);
     res.status(500).json({ error: 'Failed to get verification status' });
   }
 };
@@ -348,7 +349,7 @@ exports.getVerificationStatus = async (req, res) => {
       id_type:    rec.id_type,
     });
   } catch (err) {
-    console.error('[BiometricController] getVerificationStatus:', err);
+    logger.error('[BiometricController] getVerificationStatus:', err);
     res.status(500).json({ error: 'Failed to get verification status' });
   }
 };

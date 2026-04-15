@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 /**
  * Zero-touch mTLS certificate rotation.
  *
@@ -56,15 +57,15 @@ function checkCertExpiry(pemString, label) {
   const days = daysUntilExpiry(pemString);
   if (days === null) return 'unknown';
   if (days <= 0) {
-    console.error(`[CertRotation] EXPIRED: ${label} expired ${Math.abs(days)} day(s) ago!`);
+    logger.error(`[CertRotation] EXPIRED: ${label} expired ${Math.abs(days)} day(s) ago!`);
     return 'expired';
   }
   if (days <= CERT_CRITICAL_DAYS) {
-    console.error(`[CertRotation] CRITICAL: ${label} expires in ${days} day(s). Rotate immediately!`);
+    logger.error(`[CertRotation] CRITICAL: ${label} expires in ${days} day(s). Rotate immediately!`);
     return 'critical';
   }
   if (days <= CERT_WARN_DAYS) {
-    console.warn(`[CertRotation] WARNING: ${label} expires in ${days} day(s).`);
+    logger.warn(`[CertRotation] WARNING: ${label} expires in ${days} day(s).`);
     return 'warn';
   }
   console.info(`[CertRotation] OK: ${label} valid for ${days} more day(s).`);
@@ -148,7 +149,7 @@ class CertRotationManager {
         fingerprint: x509.fingerprint256,
       });
     } catch (e) {
-      console.warn(`[CertRotation] Could not parse cert for ${label}: ${e.message}`);
+      logger.warn(`[CertRotation] Could not parse cert for ${label}: ${e.message}`);
     }
   }
 
@@ -173,7 +174,7 @@ class CertRotationManager {
       this.checkExpiry();
       if (this._onRotate) {
         try { this._onRotate(this.getCerts()); }
-        catch (e) { console.error('[CertRotation] onRotate callback failed:', e.message); }
+        catch (e) { logger.error('[CertRotation] onRotate callback failed:', e.message); }
       }
     }
   }
@@ -207,7 +208,7 @@ class CertRotationManager {
         this._watchers.push(watcher);
         console.info(`[CertRotation] Watching: ${filePath}`);
       } catch (e) {
-        console.warn(`[CertRotation] Cannot watch ${filePath}: ${e.message}`);
+        logger.warn(`[CertRotation] Cannot watch ${filePath}: ${e.message}`);
       }
     }
 

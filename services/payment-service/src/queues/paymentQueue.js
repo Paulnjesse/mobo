@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 /**
  * Payment Event Queue (BullMQ over Redis)
  * Decouples webhook processing from business logic.
@@ -22,9 +23,9 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
         removeOnFail: 500,
       },
     });
-    console.log('[PaymentQueue] BullMQ queue initialized');
+    logger.info('[PaymentQueue] BullMQ queue initialized');
   } catch (e) {
-    console.warn('[PaymentQueue] BullMQ unavailable, falling back to direct processing:', e.message);
+    logger.warn('[PaymentQueue] BullMQ unavailable, falling back to direct processing:', e.message);
   }
 }
 

@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 /**
  * Fraud Check Queue (BullMQ over Redis)
  *
@@ -56,9 +57,9 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
       },
     });
 
-    console.log('[FraudQueue] BullMQ fraud-checks queue ready');
+    logger.info('[FraudQueue] BullMQ fraud-checks queue ready');
   } catch (err) {
-    console.warn('[FraudQueue] BullMQ unavailable — setImmediate fallback active:', err.message);
+    logger.warn('[FraudQueue] BullMQ unavailable — setImmediate fallback active:', err.message);
   }
 }
 
@@ -76,7 +77,7 @@ async function enqueueFraudCheck(checkType, payload) {
       return true;
     } catch (err) {
       // Queue enqueue failed (e.g. Redis blip) — fall through to setImmediate
-      console.warn('[FraudQueue] Enqueue error, using setImmediate fallback:', err.message);
+      logger.warn('[FraudQueue] Enqueue error, using setImmediate fallback:', err.message);
     }
   }
   // Graceful fallback — non-blocking but not durable
@@ -115,7 +116,7 @@ async function runFraudCheck(checkType, resolvedPayload) {
     case 'gps':
       return checkGpsSpoofing(resolvedPayload);
     default:
-      console.warn('[FraudQueue] Unknown check type:', checkType);
+      logger.warn('[FraudQueue] Unknown check type:', checkType);
   }
 }
 

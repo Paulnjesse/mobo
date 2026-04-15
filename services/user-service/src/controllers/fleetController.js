@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 
@@ -57,7 +58,7 @@ const createFleet = async (req, res) => {
       data: { fleet, vehicle_count: 0 }
     });
   } catch (err) {
-    console.error('[CreateFleet Error]', err);
+    logger.error('[CreateFleet Error]', err);
     res.status(500).json({ success: false, message: 'Failed to create fleet' });
   }
 };
@@ -86,7 +87,7 @@ const getMyFleets = async (req, res) => {
       data: { fleets: result.rows }
     });
   } catch (err) {
-    console.error('[GetMyFleets Error]', err);
+    logger.error('[GetMyFleets Error]', err);
     res.status(500).json({ success: false, message: 'Failed to fetch fleets' });
   }
 };
@@ -135,7 +136,7 @@ const getFleet = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetFleet Error]', err);
+    logger.error('[GetFleet Error]', err);
     res.status(500).json({ success: false, message: 'Failed to fetch fleet' });
   }
 };
@@ -236,7 +237,7 @@ const addVehicleToFleet = async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'A vehicle with this plate number already exists' });
     }
-    console.error('[AddVehicleToFleet Error]', err);
+    logger.error('[AddVehicleToFleet Error]', err);
     res.status(500).json({ success: false, message: 'Failed to add vehicle to fleet' });
   }
 };
@@ -301,7 +302,7 @@ const updateVehicle = async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'A vehicle with this plate number already exists' });
     }
-    console.error('[UpdateVehicle Error]', err);
+    logger.error('[UpdateVehicle Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update vehicle' });
   }
 };
@@ -365,7 +366,7 @@ const removeVehicle = async (req, res) => {
       data: { vehicle_count: newCount }
     });
   } catch (err) {
-    console.error('[RemoveVehicle Error]', err);
+    logger.error('[RemoveVehicle Error]', err);
     res.status(500).json({ success: false, message: 'Failed to remove vehicle' });
   }
 };
@@ -429,7 +430,7 @@ const assignDriver = async (req, res) => {
       data: { driver }
     });
   } catch (err) {
-    console.error('[AssignDriver Error]', err);
+    logger.error('[AssignDriver Error]', err);
     res.status(500).json({ success: false, message: 'Failed to assign driver' });
   }
 };
@@ -476,7 +477,7 @@ const unassignDriver = async (req, res) => {
       message: 'Driver unassigned from vehicle'
     });
   } catch (err) {
-    console.error('[UnassignDriver Error]', err);
+    logger.error('[UnassignDriver Error]', err);
     res.status(500).json({ success: false, message: 'Failed to unassign driver' });
   }
 };
@@ -544,7 +545,7 @@ const getFleetEarnings = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetFleetEarnings Error]', err);
+    logger.error('[GetFleetEarnings Error]', err);
     res.status(500).json({ success: false, message: 'Failed to fetch fleet earnings' });
   }
 };
@@ -595,7 +596,7 @@ const getFleetVehicles = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetFleetVehicles Error]', err);
+    logger.error('[GetFleetVehicles Error]', err);
     res.status(500).json({ success: false, message: 'Failed to fetch fleet vehicles' });
   }
 };
@@ -646,7 +647,7 @@ const getAllFleets = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetAllFleets Error]', err);
+    logger.error('[GetAllFleets Error]', err);
     res.status(500).json({ success: false, message: 'Failed to fetch fleets' });
   }
 };
@@ -676,7 +677,7 @@ const approveFleet = async (req, res) => {
       data: { fleet: result.rows[0] }
     });
   } catch (err) {
-    console.error('[ApproveFleet Error]', err);
+    logger.error('[ApproveFleet Error]', err);
     res.status(500).json({ success: false, message: 'Failed to approve fleet' });
   }
 };
@@ -707,7 +708,7 @@ const suspendFleet = async (req, res) => {
       data: { fleet: result.rows[0], reason: reason || null }
     });
   } catch (err) {
-    console.error('[SuspendFleet Error]', err);
+    logger.error('[SuspendFleet Error]', err);
     res.status(500).json({ success: false, message: 'Failed to suspend fleet' });
   }
 };
@@ -739,7 +740,7 @@ const approveVehicle = async (req, res) => {
       data: { vehicle }
     });
   } catch (err) {
-    console.error('[ApproveVehicle Error]', err);
+    logger.error('[ApproveVehicle Error]', err);
     res.status(500).json({ success: false, message: 'Failed to approve vehicle' });
   }
 };
@@ -772,7 +773,7 @@ const rejectVehicle = async (req, res) => {
       data: { vehicle, reason: reason || null }
     });
   } catch (err) {
-    console.error('[RejectVehicle Error]', err);
+    logger.error('[RejectVehicle Error]', err);
     res.status(500).json({ success: false, message: 'Failed to reject vehicle' });
   }
 };

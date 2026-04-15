@@ -1,3 +1,4 @@
+const logger = require('./logger');
 /**
  * MOBO Circuit Breaker — Inter-Service Resilience
  *
@@ -19,7 +20,7 @@ try {
   CircuitBreaker = require('opossum');
 } catch {
   // opossum not installed — return pass-through breaker (logs warning once)
-  console.warn('[CircuitBreaker] opossum not installed — circuit breaking disabled. Run: npm install opossum');
+  logger.warn('[CircuitBreaker] opossum not installed — circuit breaking disabled. Run: npm install opossum');
   CircuitBreaker = null;
 }
 
@@ -57,11 +58,11 @@ function getBreaker(name, action, opts = {}) {
 
   // ── Observability ────────────────────────────────────────────────────────────
   breaker.on('open', () => {
-    console.error(`[CircuitBreaker] OPEN — ${name}: downstream unhealthy, failing fast`);
+    logger.error(`[CircuitBreaker] OPEN — ${name}: downstream unhealthy, failing fast`);
   });
 
   breaker.on('halfOpen', () => {
-    console.warn(`[CircuitBreaker] HALF-OPEN — ${name}: probing recovery`);
+    logger.warn(`[CircuitBreaker] HALF-OPEN — ${name}: probing recovery`);
   });
 
   breaker.on('close', () => {
@@ -69,11 +70,11 @@ function getBreaker(name, action, opts = {}) {
   });
 
   breaker.on('fallback', (result) => {
-    console.warn(`[CircuitBreaker] FALLBACK — ${name}:`, result);
+    logger.warn(`[CircuitBreaker] FALLBACK — ${name}:`, result);
   });
 
   breaker.on('timeout', () => {
-    console.warn(`[CircuitBreaker] TIMEOUT — ${name}: request exceeded ${DEFAULTS.timeout}ms`);
+    logger.warn(`[CircuitBreaker] TIMEOUT — ${name}: request exceeded ${DEFAULTS.timeout}ms`);
   });
 
   _breakers.set(name, breaker);

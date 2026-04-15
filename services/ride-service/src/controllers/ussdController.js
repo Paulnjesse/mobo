@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * USSD Controller — handles incoming USSD requests from telecom gateway.
  * Implements a simple stateful session menu for booking rides.
@@ -98,7 +99,7 @@ exports.handleUSSD = async (req, res) => {
 
     return res.send(MENU_ROOT);
   } catch (err) {
-    console.error('ussdController.handleUSSD:', err);
+    logger.error('ussdController.handleUSSD:', err);
     return res.send('END An error occurred. Please try again or call 6200-0000 for help.');
   }
 };

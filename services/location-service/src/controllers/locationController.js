@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../config/database');
 const googleMaps = require('../services/googleMaps');
 const cache = require('../utils/cache');
@@ -97,7 +98,7 @@ const updateLocation = async (req, res) => {
       data: { lat: latitude, lng: longitude, timestamp: new Date().toISOString() }
     });
   } catch (err) {
-    console.error('[UpdateLocation Error]', err);
+    logger.error('[UpdateLocation Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update location' });
   }
 };
@@ -164,7 +165,7 @@ const getLocation = async (req, res) => {
       data: { location: historyResult.rows[0] }
     });
   } catch (err) {
-    console.error('[GetLocation Error]', err);
+    logger.error('[GetLocation Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get location' });
   }
 };
@@ -312,7 +313,7 @@ const getNearbyDrivers = async (req, res) => {
           });
         }
       } catch (mapsErr) {
-        console.error('[GetNearbyDrivers] Google Maps enrichment failed:', mapsErr.message);
+        logger.error('[GetNearbyDrivers] Google Maps enrichment failed:', mapsErr.message);
         // Keep fallback ETAs — no crash
       }
     }
@@ -331,7 +332,7 @@ const getNearbyDrivers = async (req, res) => {
     await cache.set(cacheKey, nearbyResponse, 15); // 15 second TTL (drivers move!)
     res.json(nearbyResponse);
   } catch (err) {
-    console.error('[GetNearbyDrivers Error]', err);
+    logger.error('[GetNearbyDrivers Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get nearby drivers' });
   }
 };
@@ -424,7 +425,7 @@ const checkSurgeZone = async (req, res) => {
     await cache.set(surgeCacheKey, noSurgeResponse, 120); // 2 min TTL
     res.json(noSurgeResponse);
   } catch (err) {
-    console.error('[CheckSurgeZone Error]', err);
+    logger.error('[CheckSurgeZone Error]', err);
     res.status(500).json({ success: false, message: 'Failed to check surge zone' });
   }
 };
@@ -478,7 +479,7 @@ const getRouteEstimate = async (req, res) => {
         steps = directions.steps;
         routeSource = directions.source || 'google_maps';
       } catch (mapsErr) {
-        console.error('[GetRouteEstimate] Google Maps error, using PostGIS fallback:', mapsErr.message);
+        logger.error('[GetRouteEstimate] Google Maps error, using PostGIS fallback:', mapsErr.message);
       }
     }
 
@@ -562,7 +563,7 @@ const getRouteEstimate = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetRouteEstimate Error]', err);
+    logger.error('[GetRouteEstimate Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get route estimate' });
   }
 };
@@ -642,7 +643,7 @@ const getRideRoute = async (req, res) => {
           );
         }
       } catch (mapsErr) {
-        console.error('[GetRideRoute] Google Maps fetch failed:', mapsErr.message);
+        logger.error('[GetRideRoute] Google Maps fetch failed:', mapsErr.message);
       }
     }
 
@@ -672,7 +673,7 @@ const getRideRoute = async (req, res) => {
 
     res.json({ success: true, data: { route: routeData } });
   } catch (err) {
-    console.error('[GetRideRoute Error]', err);
+    logger.error('[GetRideRoute Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get ride route' });
   }
 };
@@ -714,7 +715,7 @@ const getLocationHistory = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetLocationHistory Error]', err);
+    logger.error('[GetLocationHistory Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get location history' });
   }
 };
@@ -802,7 +803,7 @@ const updateDriverStatus = async (req, res) => {
       data: { is_online: result.rows[0].is_online }
     });
   } catch (err) {
-    console.error('[UpdateDriverStatus Error]', err);
+    logger.error('[UpdateDriverStatus Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update driver status' });
   }
 };

@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./utils/logger');
 
 /**
  * dataAccessLogger.js
@@ -122,7 +123,7 @@ function logDataAccess(resourceType, getResourceId, fields = [], action = 'view'
         }
       } catch (err) {
         // Never block the request on audit failure
-        console.error('[DataAccessLogger] Failed to write access log:', err.message);
+        logger.error('[DataAccessLogger] Failed to write access log:', err.message);
       }
     });
 

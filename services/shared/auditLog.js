@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 /**
  * Tamper-evident audit log writer.
  *
@@ -87,7 +88,7 @@ async function log(pool, {
     );
   } catch (err) {
     // Audit log failure must never crash the request — log and continue
-    console.error('[AuditLog] Write failed:', err.message);
+    logger.error('[AuditLog] Write failed:', err.message);
   }
 }
 

@@ -70,7 +70,7 @@ const RIDE_SUMMARY_TEMPLATES = {
  */
 async function _send(to, body) {
   if (!client) {
-    console.log(`[MOBO SMS] DEV mode — to: ${to} | message: ${body}`);
+    logger.info(`[MOBO SMS] DEV mode — to: ${to} | message: ${body}`);
     return { success: true, mock: true };
   }
 

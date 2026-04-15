@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * twoFactorController.js
  * Admin Two-Factor Authentication (TOTP) via Google Authenticator
@@ -19,7 +20,7 @@ let speakeasy;
 try {
   speakeasy = require('speakeasy');
 } catch (e) {
-  console.warn('[2FA] speakeasy module not installed — 2FA endpoints will return 503 until installed');
+  logger.warn('[2FA] speakeasy module not installed — 2FA endpoints will return 503 until installed');
   speakeasy = null;
 }
 
@@ -104,7 +105,7 @@ const setup2FA = async (req, res) => {
       qr_instructions: 'Scan with Google Authenticator'
     });
   } catch (err) {
-    console.error('[2FA setup]', err);
+    logger.error('[2FA setup]', err);
     return res.status(500).json({ success: false, message: 'Failed to set up 2FA' });
   }
 };
@@ -175,7 +176,7 @@ const verify2FA = async (req, res) => {
       backup_codes: plainCodes
     });
   } catch (err) {
-    console.error('[2FA verify]', err);
+    logger.error('[2FA verify]', err);
     return res.status(500).json({ success: false, message: 'Failed to verify 2FA' });
   }
 };
@@ -291,7 +292,7 @@ const validate2FA = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[2FA validate]', err);
+    logger.error('[2FA validate]', err);
     return res.status(500).json({ success: false, message: 'Failed to validate 2FA code' });
   }
 };
@@ -351,7 +352,7 @@ const disable2FA = async (req, res) => {
 
     return res.json({ success: true, message: '2FA has been disabled' });
   } catch (err) {
-    console.error('[2FA disable]', err);
+    logger.error('[2FA disable]', err);
     return res.status(500).json({ success: false, message: 'Failed to disable 2FA' });
   }
 };
@@ -387,7 +388,7 @@ const get2FAStatus = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[2FA status]', err);
+    logger.error('[2FA status]', err);
     return res.status(500).json({ success: false, message: 'Failed to get 2FA status' });
   }
 };

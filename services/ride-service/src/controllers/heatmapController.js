@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 /**
@@ -18,7 +19,7 @@ exports.getHeatmapZones = async (req, res) => {
     const { rows } = await db.query(query, params);
     res.json({ zones: rows });
   } catch (err) {
-    console.error('heatmapController.getHeatmapZones:', err);
+    logger.error('heatmapController.getHeatmapZones:', err);
     res.status(500).json({ error: 'Failed to load heat map zones' });
   }
 };

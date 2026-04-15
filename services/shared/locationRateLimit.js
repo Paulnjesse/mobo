@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 
 /**
  * MOBO Location Update Rate Limiter
@@ -118,7 +119,7 @@ function validateCoordinates(req, res, next) {
       const distKm = haversineKm(last.lat, last.lng, lat, lng);
 
       if (elapsedSecs < MAX_JUMP_SECS && distKm > MAX_JUMP_KM) {
-        console.warn(`[LocationValidation] Suspicious jump for driver ${driverId}: ${distKm.toFixed(1)} km in ${elapsedSecs.toFixed(0)}s`);
+        logger.warn(`[LocationValidation] Suspicious jump for driver ${driverId}: ${distKm.toFixed(1)} km in ${elapsedSecs.toFixed(0)}s`);
         // Flag but allow (GPS can glitch). A persistent pattern should trigger fraud review.
         req.locationSuspicious = true;
       }
@@ -128,7 +129,7 @@ function validateCoordinates(req, res, next) {
 
   // Service area check — warn on out-of-bounds (allow, but log)
   if (lat < BOUNDS.latMin || lat > BOUNDS.latMax || lng < BOUNDS.lngMin || lng > BOUNDS.lngMax) {
-    console.warn(`[LocationValidation] Driver ${driverId} outside service area: (${lat}, ${lng})`);
+    logger.warn(`[LocationValidation] Driver ${driverId} outside service area: (${lat}, ${lng})`);
   }
 
   next();

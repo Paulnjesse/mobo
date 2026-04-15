@@ -10,6 +10,8 @@
  *           POST  /ads/:id/impression   (mobile tracking)
  *           POST  /ads/:id/click        (mobile tracking)
  */
+
+const logger = require('../utils/logger');
 const db = require('../db');
 
 // ── Public: fetch active ads for a given context ─────────────────────────────
@@ -30,7 +32,7 @@ exports.getAds = async (req, res) => {
     );
     res.json({ ads: rows });
   } catch (err) {
-    console.error('adsController.getAds:', err);
+    logger.error('adsController.getAds:', err);
     res.status(500).json({ error: 'Failed to load ads' });
   }
 };
@@ -45,7 +47,7 @@ exports.listAllAds = async (req, res) => {
     );
     res.json({ ads: rows });
   } catch (err) {
-    console.error('adsController.listAllAds:', err);
+    logger.error('adsController.listAllAds:', err);
     res.status(500).json({ error: 'Failed to list ads' });
   }
 };
@@ -73,7 +75,7 @@ exports.createAd = async (req, res) => {
     );
     res.status(201).json({ ad: rows[0] });
   } catch (err) {
-    console.error('adsController.createAd:', err);
+    logger.error('adsController.createAd:', err);
     res.status(500).json({ error: 'Failed to create ad' });
   }
 };
@@ -111,7 +113,7 @@ exports.updateAd = async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Ad not found' });
     res.json({ ad: rows[0] });
   } catch (err) {
-    console.error('adsController.updateAd:', err);
+    logger.error('adsController.updateAd:', err);
     res.status(500).json({ error: 'Failed to update ad' });
   }
 };
@@ -127,7 +129,7 @@ exports.toggleAd = async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Ad not found' });
     res.json({ id: rows[0].id, active: rows[0].active });
   } catch (err) {
-    console.error('adsController.toggleAd:', err);
+    logger.error('adsController.toggleAd:', err);
     res.status(500).json({ error: 'Failed to toggle ad' });
   }
 };
@@ -140,7 +142,7 @@ exports.deleteAd = async (req, res) => {
     if (!rowCount) return res.status(404).json({ error: 'Ad not found' });
     res.json({ ok: true });
   } catch (err) {
-    console.error('adsController.deleteAd:', err);
+    logger.error('adsController.deleteAd:', err);
     res.status(500).json({ error: 'Failed to delete ad' });
   }
 };

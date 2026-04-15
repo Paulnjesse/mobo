@@ -1,3 +1,4 @@
+const logger = require('./logger');
 /**
  * MOBO Mutual TLS (mTLS) HTTP Client
  *
@@ -80,7 +81,7 @@ certManager.start((newCerts) => {
 });
 
 if (process.env.NODE_ENV === 'production' && !certManager.isAvailable()) {
-  console.warn(
+  logger.warn(
     '[mTLS] WARNING: No client certificates configured. ' +
     'Set SERVICE_CERT_FILE / SERVICE_KEY_FILE / SERVICE_CA_CERT_FILE ' +
     '(or SERVICE_CERT / SERVICE_KEY / SERVICE_CA_CERT) for mutual TLS. ' +

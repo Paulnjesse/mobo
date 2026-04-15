@@ -1,3 +1,4 @@
+const logger = require('./utils/logger');
 /**
  * Admin IP Allowlist Guard
  *
@@ -55,7 +56,7 @@ function isAllowed(ip, allowList) {
 const ALLOWED_IPS = parseAllowedIps();
 
 if (process.env.NODE_ENV === 'production' && !ALLOWED_IPS) {
-  console.warn(
+  logger.warn(
     '[adminIpGuard] WARNING: ADMIN_ALLOWED_IPS is not set. ' +
     'Admin endpoints are accessible from any IP. ' +
     'Set ADMIN_ALLOWED_IPS to your VPN/office IP ranges in production.'
@@ -69,7 +70,7 @@ function adminIpGuard(req, res, next) {
   const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
 
   if (!isAllowed(clientIp, ALLOWED_IPS)) {
-    console.error('[adminIpGuard] BLOCKED admin request from IP:', clientIp, {
+    logger.error('[adminIpGuard] BLOCKED admin request from IP:', clientIp, {
       path:   req.path,
       method: req.method,
       ua:     req.get('user-agent'),

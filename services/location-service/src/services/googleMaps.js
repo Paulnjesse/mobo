@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * MOBO Google Maps Services — location-service
  * Wraps @googlemaps/google-maps-services-js with graceful fallbacks
@@ -47,7 +48,7 @@ async function getDirections(origin, destination) {
       destination.lat, destination.lng
     );
     const durationMinutes = Math.round((distanceKm / 25) * 60); // 25 km/h avg
-    console.log(
+    logger.info(
       `[GoogleMaps] No API key — using Haversine fallback: ${distanceKm.toFixed(2)} km`
     );
     return {
@@ -111,7 +112,7 @@ async function getDirections(origin, destination) {
       source: 'google_maps'
     };
   } catch (err) {
-    console.error('[GoogleMaps] getDirections error:', err.message);
+    logger.error('[GoogleMaps] getDirections error:', err.message);
     // Fallback
     const distanceKm = haversineDistance(
       origin.lat, origin.lng,
@@ -142,7 +143,7 @@ async function getDistanceMatrix(origins, destinations) {
   }
 
   if (!hasApiKey() || !mapsClient) {
-    console.log('[GoogleMaps] No API key — using Haversine fallback for Distance Matrix');
+    logger.info('[GoogleMaps] No API key — using Haversine fallback for Distance Matrix');
     const results = [];
     origins.forEach((origin, oi) => {
       destinations.forEach((dest, di) => {
@@ -210,7 +211,7 @@ async function getDistanceMatrix(origins, destinations) {
 
     return results;
   } catch (err) {
-    console.error('[GoogleMaps] getDistanceMatrix error:', err.message);
+    logger.error('[GoogleMaps] getDistanceMatrix error:', err.message);
     // Full fallback
     const results = [];
     origins.forEach((origin, oi) => {
@@ -238,7 +239,7 @@ async function geocodeAddress(address) {
   if (!address) return null;
 
   if (!hasApiKey() || !mapsClient) {
-    console.log(`[GoogleMaps] No API key — cannot geocode "${address}"`);
+    logger.info(`[GoogleMaps] No API key — cannot geocode "${address}"`);
     return null;
   }
 
@@ -270,7 +271,7 @@ async function geocodeAddress(address) {
       place_id: result.place_id
     };
   } catch (err) {
-    console.error('[GoogleMaps] geocodeAddress error:', err.message);
+    logger.error('[GoogleMaps] geocodeAddress error:', err.message);
     return null;
   }
 }
@@ -283,7 +284,7 @@ async function reverseGeocode(lat, lng) {
   if (lat === undefined || lng === undefined) return null;
 
   if (!hasApiKey() || !mapsClient) {
-    console.log(`[GoogleMaps] No API key — cannot reverse geocode ${lat},${lng}`);
+    logger.info(`[GoogleMaps] No API key — cannot reverse geocode ${lat},${lng}`);
     return null;
   }
 
@@ -309,7 +310,7 @@ async function reverseGeocode(lat, lng) {
 
     return data.results[0].formatted_address;
   } catch (err) {
-    console.error('[GoogleMaps] reverseGeocode error:', err.message);
+    logger.error('[GoogleMaps] reverseGeocode error:', err.message);
     return null;
   }
 }

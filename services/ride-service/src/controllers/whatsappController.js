@@ -10,6 +10,8 @@
  *
  * For Meta Cloud API (production), replace reply() with the Graph API send-message call.
  */
+
+const logger = require('../utils/logger');
 const db = require('../config/database');
 
 // ── Session helpers ────────────────────────────────────────────────────────────
@@ -29,7 +31,7 @@ async function upsertSession(phone, step, data = {}) {
     [phone, step, JSON.stringify(data)]
   ).catch(() => {
     // Table may not exist in older environments — log and continue
-    console.warn('[whatsappController] whatsapp_sessions table not found — run migration_016.sql');
+    logger.warn('[whatsappController] whatsapp_sessions table not found — run migration_016.sql');
   });
 }
 
@@ -195,7 +197,7 @@ exports.handleWhatsApp = async (req, res) => {
           [data.pickup, data.dropoff, data.ride_type || 'standard', phone]
         );
       } catch (dbErr) {
-        console.error('[whatsappController] ride insert error:', dbErr.message);
+        logger.error('[whatsappController] ride insert error:', dbErr.message);
         // Don't fail — still confirm to user
       }
 
@@ -226,7 +228,7 @@ exports.handleWhatsApp = async (req, res) => {
     ].join('\n'));
 
   } catch (err) {
-    console.error('[whatsappController]', err);
+    logger.error('[whatsappController]', err);
     res.status(500).send('Internal error');
   }
 };

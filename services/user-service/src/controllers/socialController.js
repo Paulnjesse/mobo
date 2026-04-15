@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const pool = require('../config/database');
 
 // ============================================================
@@ -128,7 +129,7 @@ const qualifyReferral = async (referredId) => {
       [referral.rows[0].referrer_id]
     );
   } catch (err) {
-    console.error('qualifyReferral error:', err.message);
+    logger.error('qualifyReferral error:', err.message);
   }
 };
 

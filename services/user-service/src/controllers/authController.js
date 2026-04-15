@@ -58,7 +58,7 @@ async function getOtpSendCount(phone) {
     );
     return parseInt(result.rows[0].count || '0', 10);
   } catch (err) {
-    console.warn('[AuthController] OTP rate limit check failed:', err.message);
+    logger.warn('[AuthController] OTP rate limit check failed:', err.message);
     return 0;
   }
 }
@@ -74,7 +74,7 @@ async function logOtpSend(userId, phone) {
       [userId || null, JSON.stringify({ phone })]
     );
   } catch (err) {
-    console.warn('[AuthController] OTP log failed:', err.message);
+    logger.warn('[AuthController] OTP log failed:', err.message);
   }
 }
 
@@ -97,12 +97,12 @@ async function incrementOtpAttempts(userId) {
         `UPDATE users SET is_suspended = true WHERE id = $1`,
         [userId]
       );
-      console.warn(`[AuthController] Account ${userId} suspended after ${attempts} failed OTP attempts`);
+      logger.warn(`[AuthController] Account ${userId} suspended after ${attempts} failed OTP attempts`);
     }
 
     return attempts;
   } catch (err) {
-    console.warn('[AuthController] OTP attempt increment failed:', err.message);
+    logger.warn('[AuthController] OTP attempt increment failed:', err.message);
     return 0;
   }
 }
@@ -117,7 +117,7 @@ async function resetOtpAttempts(userId) {
       [userId]
     );
   } catch (err) {
-    console.warn('[AuthController] OTP attempt reset failed:', err.message);
+    logger.warn('[AuthController] OTP attempt reset failed:', err.message);
   }
 }
 
@@ -257,7 +257,7 @@ const signup = async (req, res) => {
       }
       await Promise.all(encUpdates);
     } catch (encErr) {
-      console.error('[signup] Field encryption failed (non-fatal):', encErr.message);
+      logger.error('[signup] Field encryption failed (non-fatal):', encErr.message);
     }
 
     // 8. Award signup loyalty points transaction
@@ -301,14 +301,14 @@ const signup = async (req, res) => {
 
             roleData = { driver: { ...driverRecord, vehicle } };
           } catch (vErr) {
-            console.warn('[Signup] Vehicle creation failed (plate may be duplicate):', vErr.message);
+            logger.warn('[Signup] Vehicle creation failed (plate may be duplicate):', vErr.message);
             roleData = { driver: driverRecord };
           }
         } else {
           roleData = { driver: driverRecord };
         }
       } catch (dErr) {
-        console.warn('[Signup] Driver record creation failed:', dErr.message);
+        logger.warn('[Signup] Driver record creation failed:', dErr.message);
       }
     }
 
@@ -323,7 +323,7 @@ const signup = async (req, res) => {
         );
         roleData = { fleet: fleetResult.rows[0] };
       } catch (fErr) {
-        console.warn('[Signup] Fleet creation failed:', fErr.message);
+        logger.warn('[Signup] Fleet creation failed:', fErr.message);
       }
     }
 
@@ -353,7 +353,7 @@ const signup = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Signup Error]', err);
+    logger.error('[Signup Error]', err);
     res.status(500).json({ success: false, message: 'Failed to create account' });
   }
 };
@@ -468,7 +468,7 @@ const registerDriver = async (req, res) => {
           [vehicle.id, driverRecord.id]
         );
       } catch (vErr) {
-        console.warn('[RegisterDriver] Vehicle creation failed:', vErr.message);
+        logger.warn('[RegisterDriver] Vehicle creation failed:', vErr.message);
       }
     }
 
@@ -486,7 +486,7 @@ const registerDriver = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[RegisterDriver Error]', err);
+    logger.error('[RegisterDriver Error]', err);
     res.status(500).json({ success: false, message: 'Failed to complete driver registration' });
   }
 };
@@ -569,7 +569,7 @@ const registerFleetOwner = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[RegisterFleetOwner Error]', err);
+    logger.error('[RegisterFleetOwner Error]', err);
     res.status(500).json({ success: false, message: 'Failed to complete fleet owner registration' });
   }
 };
@@ -731,7 +731,7 @@ const login = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[Login Error]', err);
+    logger.error('[Login Error]', err);
     res.status(500).json({ success: false, message: 'Login failed' });
   }
 };
@@ -799,7 +799,7 @@ const verify = async (req, res) => {
     if (user.email) {
       emailService
         .sendWelcomeEmail(user.email, user.full_name, user.language || 'en')
-        .catch((err) => console.warn('[AuthController] Welcome email failed:', err.message));
+        .catch((err) => logger.warn('[AuthController] Welcome email failed:', err.message));
     }
 
     // Issue JWT so the user is immediately logged in after verification
@@ -814,7 +814,7 @@ const verify = async (req, res) => {
       registration_step: user.registration_step
     });
   } catch (err) {
-    console.error('[Verify Error]', err);
+    logger.error('[Verify Error]', err);
     res.status(500).json({ success: false, message: 'Verification failed' });
   }
 };
@@ -883,7 +883,7 @@ const resendOtp = async (req, res) => {
       note: process.env.NODE_ENV === 'test' ? `TEST OTP: ${otp_code}` : undefined
     });
   } catch (err) {
-    console.error('[ResendOtp Error]', err);
+    logger.error('[ResendOtp Error]', err);
     res.status(500).json({ success: false, message: 'Failed to resend OTP' });
   }
 };
@@ -950,7 +950,7 @@ const refreshToken = async (req, res) => {
     // Return token at both levels for compatibility: response.data.token AND response.data.data.token
     res.json({ success: true, token: newToken, data: { token: newToken } });
   } catch (err) {
-    console.error('[RefreshToken Error]', err);
+    logger.error('[RefreshToken Error]', err);
     res.status(500).json({ success: false, message: 'Token refresh failed' });
   }
 };
@@ -999,7 +999,7 @@ const setHomeLocation = async (req, res) => {
       data: result.rows[0]
     });
   } catch (err) {
-    console.error('[SetHomeLocation Error]', err);
+    logger.error('[SetHomeLocation Error]', err);
     res.status(500).json({ success: false, message: 'Failed to save home location' });
   }
 };
@@ -1091,7 +1091,7 @@ const forgotPassword = async (req, res) => {
       note: process.env.NODE_ENV === 'test' ? `TEST OTP: ${reset_otp}` : undefined,
     });
   } catch (err) {
-    console.error('[ForgotPassword Error]', err);
+    logger.error('[ForgotPassword Error]', err);
     res.status(500).json({ success: false, message: 'Failed to send reset code' });
   }
 };
@@ -1187,7 +1187,7 @@ const resetPassword = async (req, res) => {
     if (user.email) {
       emailService
         .sendPasswordChangedEmail(user.email, user.full_name, user.language || 'en')
-        .catch((err) => console.warn('[ResetPassword] Confirmation email failed:', err.message));
+        .catch((err) => logger.warn('[ResetPassword] Confirmation email failed:', err.message));
     }
 
     return res.json({
@@ -1195,7 +1195,7 @@ const resetPassword = async (req, res) => {
       message: 'Password reset successfully. You can now log in with your new password.',
     });
   } catch (err) {
-    console.error('[ResetPassword Error]', err);
+    logger.error('[ResetPassword Error]', err);
     res.status(500).json({ success: false, message: 'Failed to reset password' });
   }
 };
@@ -1269,7 +1269,7 @@ const socialLogin = async (req, res) => {
         verifiedEmail  = data.email || verifiedEmail;
         verifiedName   = data.name  || verifiedName;
       } catch (gErr) {
-        console.error('[SocialLogin] Google token verify failed:', gErr.message);
+        logger.error('[SocialLogin] Google token verify failed:', gErr.message);
         return res.status(401).json({ success: false, message: 'Google token verification failed' });
       }
     } else if (provider === 'facebook') {
@@ -1297,7 +1297,7 @@ const socialLogin = async (req, res) => {
         verifiedEmail = data.email || verifiedEmail;
         verifiedName  = data.name  || verifiedName;
       } catch (fbErr) {
-        console.error('[SocialLogin] Facebook token verify failed:', fbErr.message);
+        logger.error('[SocialLogin] Facebook token verify failed:', fbErr.message);
         return res.status(401).json({ success: false, message: 'Facebook token verification failed' });
       }
     } else if (provider === 'apple') {
@@ -1340,7 +1340,7 @@ const socialLogin = async (req, res) => {
         verifiedEmail = payload.email || verifiedEmail;
         // Apple doesn't always include name in token; caller passes it from the first-time consent
       } catch (aErr) {
-        console.error('[SocialLogin] Apple token verification failed:', aErr.message);
+        logger.error('[SocialLogin] Apple token verification failed:', aErr.message);
         return res.status(401).json({ success: false, message: 'Apple token verification failed' });
       }
     }
@@ -1449,7 +1449,7 @@ const socialLogin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[SocialLogin Error]', err);
+    logger.error('[SocialLogin Error]', err);
     res.status(500).json({ success: false, message: 'Social login failed' });
   }
 };

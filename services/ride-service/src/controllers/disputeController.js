@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../config/database');
 
 /**
@@ -48,7 +49,7 @@ const fileDispute = async (req, res) => {
 
     return res.status(201).json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[Disputes] fileDispute error:', err.message);
+    logger.error('[Disputes] fileDispute error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -73,7 +74,7 @@ const getMyDisputes = async (req, res) => {
 
     return res.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[Disputes] getMyDisputes error:', err.message);
+    logger.error('[Disputes] getMyDisputes error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -113,7 +114,7 @@ const getDisputeById = async (req, res) => {
 
     return res.json({ success: true, data: dispute });
   } catch (err) {
-    console.error('[Disputes] getDisputeById error:', err.message);
+    logger.error('[Disputes] getDisputeById error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -160,7 +161,7 @@ const resolveDispute = async (req, res) => {
 
     return res.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('[Disputes] resolveDispute error:', err.message);
+    logger.error('[Disputes] resolveDispute error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -221,7 +222,7 @@ const getAllDisputes = async (req, res) => {
 
     return res.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[Disputes] getAllDisputes error:', err.message);
+    logger.error('[Disputes] getAllDisputes error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

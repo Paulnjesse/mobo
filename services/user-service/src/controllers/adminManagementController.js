@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 
 /**
  * adminManagementController.js
@@ -56,7 +57,7 @@ exports.listAdminStaff = async (req, res) => {
     `);
     res.json({ success: true, staff: rows });
   } catch (err) {
-    console.error('[AdminMgmt] listAdminStaff:', err);
+    logger.error('[AdminMgmt] listAdminStaff:', err);
     res.status(500).json({ success: false, message: 'Failed to list admin staff' });
   }
 };
@@ -101,7 +102,7 @@ exports.createAdminStaff = async (req, res) => {
 
     res.status(201).json({ success: true, staff: rows[0] });
   } catch (err) {
-    console.error('[AdminMgmt] createAdminStaff:', err);
+    logger.error('[AdminMgmt] createAdminStaff:', err);
     res.status(500).json({ success: false, message: 'Failed to create admin staff member' });
   }
 };
@@ -151,7 +152,7 @@ exports.updateAdminStaff = async (req, res) => {
     invalidatePermissionCache(id);
     res.json({ success: true, staff: rows[0] });
   } catch (err) {
-    console.error('[AdminMgmt] updateAdminStaff:', err);
+    logger.error('[AdminMgmt] updateAdminStaff:', err);
     res.status(500).json({ success: false, message: 'Failed to update admin staff member' });
   }
 };
@@ -187,7 +188,7 @@ exports.archiveAdminStaff = async (req, res) => {
     invalidatePermissionCache(id);
     res.json({ success: true, message: 'Admin staff member archived successfully' });
   } catch (err) {
-    console.error('[AdminMgmt] archiveAdminStaff:', err);
+    logger.error('[AdminMgmt] archiveAdminStaff:', err);
     res.status(500).json({ success: false, message: 'Failed to archive admin staff member' });
   }
 };
@@ -229,7 +230,7 @@ exports.listRoles = async (req, res) => {
       roles: roles.map(r => ({ ...r, permissions: permMap[r.name] || [] })),
     });
   } catch (err) {
-    console.error('[AdminMgmt] listRoles:', err);
+    logger.error('[AdminMgmt] listRoles:', err);
     res.status(500).json({ success: false, message: 'Failed to list roles' });
   }
 };
@@ -245,7 +246,7 @@ exports.listPermissions = async (req, res) => {
     );
     res.json({ success: true, permissions: rows });
   } catch (err) {
-    console.error('[AdminMgmt] listPermissions:', err);
+    logger.error('[AdminMgmt] listPermissions:', err);
     res.status(500).json({ success: false, message: 'Failed to list permissions' });
   }
 };
@@ -304,7 +305,7 @@ exports.createRole = async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ success: false, message: 'A role with this name already exists' });
     }
-    console.error('[AdminMgmt] createRole:', err);
+    logger.error('[AdminMgmt] createRole:', err);
     res.status(500).json({ success: false, message: 'Failed to create role' });
   }
 };
@@ -357,7 +358,7 @@ exports.updateRole = async (req, res) => {
 
     res.json({ success: true, message: 'Role updated' });
   } catch (err) {
-    console.error('[AdminMgmt] updateRole:', err);
+    logger.error('[AdminMgmt] updateRole:', err);
     res.status(500).json({ success: false, message: 'Failed to update role' });
   }
 };
@@ -392,7 +393,7 @@ exports.archiveRole = async (req, res) => {
     await db.query('UPDATE admin_roles SET deleted_at = NOW() WHERE id = $1', [id]);
     res.json({ success: true, message: 'Role archived' });
   } catch (err) {
-    console.error('[AdminMgmt] archiveRole:', err);
+    logger.error('[AdminMgmt] archiveRole:', err);
     res.status(500).json({ success: false, message: 'Failed to archive role' });
   }
 };
@@ -428,7 +429,7 @@ exports.getMyPermissions = async (req, res) => {
       permissions: Array.from(permissions),
     });
   } catch (err) {
-    console.error('[AdminMgmt] getMyPermissions:', err);
+    logger.error('[AdminMgmt] getMyPermissions:', err);
     res.status(500).json({ success: false, message: 'Failed to load permissions' });
   }
 };
@@ -452,7 +453,7 @@ exports.archiveUser = async (req, res) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, message: 'User archived' });
   } catch (err) {
-    console.error('[AdminMgmt] archiveUser:', err);
+    logger.error('[AdminMgmt] archiveUser:', err);
     res.status(500).json({ success: false, message: 'Failed to archive user' });
   }
 };
@@ -474,7 +475,7 @@ exports.archiveDriver = async (req, res) => {
     if (!rows.length) return res.status(404).json({ success: false, message: 'Driver not found' });
     res.json({ success: true, message: 'Driver archived' });
   } catch (err) {
-    console.error('[AdminMgmt] archiveDriver:', err);
+    logger.error('[AdminMgmt] archiveDriver:', err);
     res.status(500).json({ success: false, message: 'Failed to archive driver' });
   }
 };

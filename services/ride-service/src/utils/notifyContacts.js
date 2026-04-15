@@ -4,6 +4,8 @@
  * Requires env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER
  * Falls back to console.log if Twilio is not configured (development mode).
  */
+
+const logger = require('../utils/logger');
 const twilio = (() => {
   try { return require('twilio'); } catch { return null; }
 })();
@@ -17,8 +19,8 @@ const sendTripStartSMS = async ({ contacts, driverName, plate, vehicleColor, veh
 
   if (!sid || !token || !from || !twilio) {
     // Dev mode: just log
-    console.log('[NotifyContacts] Twilio not configured — would send SMS to:', contacts.map(c => c.phone));
-    console.log('[NotifyContacts] Message:', message);
+    logger.info('[NotifyContacts] Twilio not configured — would send SMS to:', contacts.map(c => c.phone));
+    logger.info('[NotifyContacts] Message:', message);
     return { sent: 0, simulated: contacts.length };
   }
 
@@ -29,7 +31,7 @@ const sendTripStartSMS = async ({ contacts, driverName, plate, vehicleColor, veh
       await client.messages.create({ body: message, from, to: contact.phone });
       sent++;
     } catch (err) {
-      console.warn(`[NotifyContacts] SMS failed for ${contact.phone}:`, err.message);
+      logger.warn(`[NotifyContacts] SMS failed for ${contact.phone}:`, err.message);
     }
   }
   return { sent, total: contacts.length };
@@ -43,8 +45,8 @@ const sendSOSSMS = async ({ contacts, triggeredBy, rideId, pickupAddress }) => {
   const message = `🆘 MOBO SOS ALERT: ${triggeredBy} has triggered an emergency SOS on ride #${rideId}. Last known location: ${pickupAddress}. Please check on them immediately or call emergency services (117).`;
 
   if (!sid || !token || !from || !twilio) {
-    console.log('[NotifyContacts] Twilio not configured — SOS SMS would be sent to:', contacts.map(c => c.phone));
-    console.log('[NotifyContacts] SOS Message:', message);
+    logger.info('[NotifyContacts] Twilio not configured — SOS SMS would be sent to:', contacts.map(c => c.phone));
+    logger.info('[NotifyContacts] SOS Message:', message);
     return { sent: 0, simulated: contacts.length };
   }
 
@@ -55,7 +57,7 @@ const sendSOSSMS = async ({ contacts, triggeredBy, rideId, pickupAddress }) => {
       await client.messages.create({ body: message, from, to: contact.phone });
       sent++;
     } catch (err) {
-      console.warn(`[NotifyContacts] SOS SMS failed for ${contact.phone}:`, err.message);
+      logger.warn(`[NotifyContacts] SOS SMS failed for ${contact.phone}:`, err.message);
     }
   }
   return { sent, total: contacts.length };

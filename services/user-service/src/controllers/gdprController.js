@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 
 /**
  * GDPR Right to Erasure (Article 17)
@@ -70,7 +71,7 @@ const requestErasure = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[GDPRController] requestErasure error:', err.message);
+    logger.error('[GDPRController] requestErasure error:', err.message);
     res.status(500).json({ success: false, message: 'Failed to submit erasure request' });
   }
 };
@@ -172,7 +173,7 @@ const executeErasure = async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('[GDPRController] executeErasure error:', err.message);
+    logger.error('[GDPRController] executeErasure error:', err.message);
     res.status(500).json({ success: false, message: 'Erasure failed — rolled back' });
   } finally {
     client.release();

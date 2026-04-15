@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const pool = require('../config/database');
 const crypto = require('crypto');
 
@@ -79,7 +80,7 @@ const initiateCall = async (req, res) => {
         const calleePhone = isRider ? r.driver_phone : r.rider_phone;
         maskedNumber = await createTwilioProxySession(callerPhone, calleePhone);
       } catch (e) {
-        console.warn('[CallProxy] Twilio failed, using mock:', e.message);
+        logger.warn('[CallProxy] Twilio failed, using mock:', e.message);
       }
     }
 

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 const TIER_RATES = { Bronze: 2000, Gold: 2500, Platinum: 3000, Diamond: 4000 };
@@ -72,7 +73,7 @@ exports.getGuarantee = async (req, res) => {
       history: histRes.rows,
     });
   } catch (err) {
-    console.error('earningsGuaranteeController.getGuarantee:', err);
+    logger.error('earningsGuaranteeController.getGuarantee:', err);
     res.status(500).json({ error: 'Failed to load guarantee data' });
   }
 };
@@ -89,7 +90,7 @@ exports.getGuaranteeHistory = async (req, res) => {
     );
     res.json({ history: rows });
   } catch (err) {
-    console.error('earningsGuaranteeController.getGuaranteeHistory:', err);
+    logger.error('earningsGuaranteeController.getGuaranteeHistory:', err);
     res.status(500).json({ error: 'Failed to load history' });
   }
 };

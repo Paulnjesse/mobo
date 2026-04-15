@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * locationPurgeJob.js
  *
@@ -38,7 +39,7 @@ async function purgeBatch() {
 async function runPurge() {
   const label = '[LocationPurge]';
   const cutoff = new Date(Date.now() - PURGE_INTERVAL_DAYS * 86_400_000).toISOString();
-  console.log(`${label} Starting purge — removing location rows older than ${PURGE_INTERVAL_DAYS} days (before ${cutoff})`);
+  logger.info(`${label} Starting purge — removing location rows older than ${PURGE_INTERVAL_DAYS} days (before ${cutoff})`);
 
   let totalDeleted = 0;
   let batch = 0;
@@ -50,15 +51,15 @@ async function runPurge() {
       deleted = await purgeBatch();
       totalDeleted += deleted;
       if (deleted > 0) {
-        console.log(`${label} Batch ${batch}: deleted ${deleted} rows (total so far: ${totalDeleted})`);
+        logger.info(`${label} Batch ${batch}: deleted ${deleted} rows (total so far: ${totalDeleted})`);
         // Yield briefly between large batches to reduce I/O pressure
         if (deleted === BATCH_SIZE) await new Promise((r) => setTimeout(r, 200));
       }
     } while (deleted === BATCH_SIZE);
 
-    console.log(`${label} Purge complete — ${totalDeleted} rows deleted across ${batch} batches`);
+    logger.info(`${label} Purge complete — ${totalDeleted} rows deleted across ${batch} batches`);
   } catch (err) {
-    console.error(`${label} Purge failed:`, err.message);
+    logger.error(`${label} Purge failed:`, err.message);
     // Non-fatal — will retry at next scheduled run
   }
 }
@@ -82,7 +83,7 @@ function startLocationPurgeJob() {
     if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
 
     const msUntilNext = next - now;
-    console.log(`[LocationPurge] Next run scheduled at ${next.toISOString()} (in ${Math.round(msUntilNext / 60000)} min)`);
+    logger.info(`[LocationPurge] Next run scheduled at ${next.toISOString()} (in ${Math.round(msUntilNext / 60000)} min)`);
 
     _timer = setTimeout(async () => {
       await runPurge();
@@ -105,7 +106,7 @@ function stopLocationPurgeJob() {
 
 // Allow manual trigger via env var for testing/admin use
 if (process.env.RUN_LOCATION_PURGE_NOW === 'true') {
-  runPurge().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+  runPurge().then(() => process.exit(0)).catch((e) => { logger.error(e); process.exit(1); });
 }
 
 module.exports = { startLocationPurgeJob, stopLocationPurgeJob, runPurge };

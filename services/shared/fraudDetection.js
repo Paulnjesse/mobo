@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 
 /**
  * fraudDetection.js — MOBO Fraud Detection Engine (ML-backed)
@@ -26,10 +27,19 @@ let _pool = null;
 function getPool() {
   if (!_pool) {
     const { Pool } = require('pg');
-    _pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
-    });
+    // Use the same SSL config as the per-service database.js:
+    // DB_SSL_CA → validate against the provided CA cert (production)
+    // DATABASE_SSL=false → disable SSL (local dev without certs)
+    // Default → require TLS but validate the server cert using Node's built-in trust store
+    let ssl;
+    if (process.env.DATABASE_SSL === 'false') {
+      ssl = false;
+    } else if (process.env.DB_SSL_CA) {
+      ssl = { rejectUnauthorized: true, ca: Buffer.from(process.env.DB_SSL_CA, 'base64').toString() };
+    } else {
+      ssl = { rejectUnauthorized: true };
+    }
+    _pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl });
   }
   return _pool;
 }
@@ -68,7 +78,7 @@ async function callML(endpoint, payload) {
   } catch (err) {
     // ML service unavailable — fall back to rule-based
     if (process.env.NODE_ENV === 'production') {
-      console.warn(`[FraudDetection] ML service unavailable (${endpoint}):`, err.message);
+      logger.warn(`[FraudDetection] ML service unavailable (${endpoint}):`, err.message);
     }
     return null;
   }
@@ -85,7 +95,7 @@ async function writeFraudFlag({ userId, rideId, flagType, severity, details }) {
       [userId, rideId || null, flagType, severity, JSON.stringify(details)]
     );
     const flagId = result.rows[0]?.id;
-    console.warn(`[FraudDetection] Flag: ${flagType} severity=${severity} user=${userId} flag_id=${flagId}`);
+    logger.warn(`[FraudDetection] Flag: ${flagType} severity=${severity} user=${userId} flag_id=${flagId}`);
 
     if (severity === 'critical') {
       await db.query(
@@ -95,7 +105,7 @@ async function writeFraudFlag({ userId, rideId, flagType, severity, details }) {
     }
     return flagId;
   } catch (err) {
-    console.error('[FraudDetection] Failed to write flag:', err.message);
+    logger.error('[FraudDetection] Failed to write flag:', err.message);
     return null;
   }
 }
@@ -189,7 +199,7 @@ async function checkRideCollusion(rideId, driverId, riderId, meta = {}) {
     pair7d  = parseInt(r7.rows[0]?.count || 0, 10);
     pair30d = parseInt(r30.rows[0]?.count || 0, 10);
   } catch (err) {
-    console.error('[FraudDetection] Pair query failed:', err.message);
+    logger.error('[FraudDetection] Pair query failed:', err.message);
   }
 
   const mlResult = await callML('/score/collusion', {

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 const SERVICE_INTERVALS = {
@@ -57,7 +58,7 @@ exports.getMaintenance = async (req, res) => {
       ],
     });
   } catch (err) {
-    console.error('maintenanceController.getMaintenance:', err);
+    logger.error('maintenanceController.getMaintenance:', err);
     res.status(500).json({ error: 'Failed to load maintenance data' });
   }
 };
@@ -79,7 +80,7 @@ exports.logService = async (req, res) => {
     );
     res.json({ ok: true, next_service_km: nextKm });
   } catch (err) {
-    console.error('maintenanceController.logService:', err);
+    logger.error('maintenanceController.logService:', err);
     res.status(500).json({ error: 'Failed to log service' });
   }
 };

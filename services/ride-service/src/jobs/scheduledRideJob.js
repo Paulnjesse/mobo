@@ -16,6 +16,7 @@
 const db = require('../config/database');
 const { notifyRiderDriverArrived } = require('../services/pushNotifications');
 const { withLock } = require('../utils/distributedLock');
+const logger = require('../utils/logger');
 
 const POLL_MS    = 60 * 1000; // every 60 s
 // Lock TTL: 55 s — expires before the next tick so one slow instance never
@@ -32,7 +33,7 @@ async function sendPush(token, title, body, data = {}) {
     const chunks = expo.chunkPushNotifications([{ to: token, sound: 'default', title, body, data }]);
     for (const chunk of chunks) await expo.sendPushNotificationsAsync(chunk);
   } catch (err) {
-    console.warn('[ScheduledRideJob] Push failed:', err.message);
+    logger.warn('[ScheduledRideJob] Push failed', { err: err.message });
   }
 }
 
@@ -76,7 +77,7 @@ async function runScheduledRideJob(io) {
           'UPDATE rides SET reminder_24h_sent = true WHERE id = $1',
           [ride.id]
         );
-        console.log(`[ScheduledRideJob] 24h reminder sent for ride ${ride.id}`);
+        logger.info('[ScheduledRideJob] 24h reminder sent', { rideId: ride.id });
       }
 
       // ── 2. 1-hour reminder (window: 55m – 65m) ───────────────────────────
@@ -91,7 +92,7 @@ async function runScheduledRideJob(io) {
           'UPDATE rides SET reminder_1h_sent = true WHERE id = $1',
           [ride.id]
         );
-        console.log(`[ScheduledRideJob] 1h reminder sent for ride ${ride.id}`);
+        logger.info('[ScheduledRideJob] 1h reminder sent', { rideId: ride.id });
       }
 
       // ── 3. Auto-dispatch (window: ≤ 2 minutes until departure) ──────────
@@ -134,17 +135,17 @@ async function runScheduledRideJob(io) {
           { type: 'scheduled_dispatch', ride_id: ride.id }
         );
 
-        console.log(`[ScheduledRideJob] Auto-dispatched ride ${ride.id}`);
+        logger.info('[ScheduledRideJob] Auto-dispatched ride', { rideId: ride.id });
       }
     }
   } catch (err) {
-    console.error('[ScheduledRideJob] Error:', err.message);
+    logger.error('[ScheduledRideJob] Error', { err: err.message });
   }
 }
 
 // ── Start the job ─────────────────────────────────────────────────────────────
 function startScheduledRideJob(io) {
-  console.log('[ScheduledRideJob] Started — polling every 60s');
+  logger.info('[ScheduledRideJob] Started — polling every 60s');
   const tick = () => withLock('lock:scheduled-ride-job', LOCK_TTL_MS, () => runScheduledRideJob(io));
   tick(); // run immediately on startup
   setInterval(tick, POLL_MS);

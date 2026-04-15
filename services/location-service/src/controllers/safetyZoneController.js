@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * safetyZoneController.js
  * Safety incident zone management for the MOBO platform.
@@ -86,7 +87,7 @@ const createSafetyZone = async (req, res) => {
       data: result.rows[0]
     });
   } catch (err) {
-    console.error('[SafetyZone createSafetyZone]', err);
+    logger.error('[SafetyZone createSafetyZone]', err);
     return res.status(500).json({ success: false, message: 'Failed to create safety zone' });
   }
 };
@@ -117,7 +118,7 @@ const getSafetyZones = async (req, res) => {
       data: result.rows
     });
   } catch (err) {
-    console.error('[SafetyZone getSafetyZones]', err);
+    logger.error('[SafetyZone getSafetyZones]', err);
     return res.status(500).json({ success: false, message: 'Failed to retrieve safety zones' });
   }
 };
@@ -221,7 +222,7 @@ const checkDriverInSafetyZone = async (req, res) => {
       zones: updatedZones
     });
   } catch (err) {
-    console.error('[SafetyZone checkDriverInSafetyZone]', err);
+    logger.error('[SafetyZone checkDriverInSafetyZone]', err);
     return res.status(500).json({ success: false, message: 'Failed to check safety zone' });
   }
 };
@@ -295,7 +296,7 @@ const updateSafetyZone = async (req, res) => {
       data: result.rows[0]
     });
   } catch (err) {
-    console.error('[SafetyZone updateSafetyZone]', err);
+    logger.error('[SafetyZone updateSafetyZone]', err);
     return res.status(500).json({ success: false, message: 'Failed to update safety zone' });
   }
 };
@@ -330,7 +331,7 @@ const deleteSafetyZone = async (req, res) => {
       data: result.rows[0]
     });
   } catch (err) {
-    console.error('[SafetyZone deleteSafetyZone]', err);
+    logger.error('[SafetyZone deleteSafetyZone]', err);
     return res.status(500).json({ success: false, message: 'Failed to delete safety zone' });
   }
 };

@@ -34,7 +34,7 @@ async function writePaymentAudit(fields) {
     );
   } catch (err) {
     // Audit failures are non-fatal but must be visible in logs
-    console.error('[PaymentAudit] Failed to write audit record:', err.message, {
+    logger.error('[PaymentAudit] Failed to write audit record:', err.message, {
       event_type: fields.event_type, payment_id: fields.payment_id,
     });
   }
@@ -132,7 +132,7 @@ async function processMtnMobileMoney(phone, amount, currency) {
   const baseUrl         = process.env.MTN_BASE_URL    || 'https://sandbox.momodeveloper.mtn.com';
 
   if (!subscriptionKey || !process.env.MTN_API_USER_ID) {
-    console.warn('[MTN MoMo] Credentials not configured — using dev mock');
+    logger.warn('[MTN MoMo] Credentials not configured — using dev mock');
     return {
       status:       'pending',
       reference_id: `mock-mtn-${uuidv4()}`,
@@ -239,7 +239,7 @@ async function processOrangeMoney(phone, amount, currency) {
   const merchantKey = process.env.ORANGE_MERCHANT_KEY;
 
   if (!merchantKey || !process.env.ORANGE_CLIENT_ID) {
-    console.warn('[Orange Money] Credentials not configured — using dev mock');
+    logger.warn('[Orange Money] Credentials not configured — using dev mock');
     return {
       status:       'pending',
       reference_id: `mock-orange-${uuidv4()}`,
@@ -312,7 +312,7 @@ async function processWave(phone, amount, currency) {
   const waveBaseUrl = process.env.WAVE_BASE_URL || 'https://api.wave.com/v1';
 
   if (!waveApiKey) {
-    console.warn('[Wave] WAVE_API_KEY not configured — payment rejected');
+    logger.warn('[Wave] WAVE_API_KEY not configured — payment rejected');
     return {
       success: false,
       message: 'Wave payment is not yet configured on this server. Please use MTN Mobile Money, Orange Money, or cash.',
@@ -345,7 +345,7 @@ async function processWave(phone, amount, currency) {
       message: 'Wave checkout session created',
     };
   } catch (err) {
-    console.error('[Wave] API error:', err.message);
+    logger.error('[Wave] API error:', err.message);
     return { success: false, message: `Wave payment failed: ${err.message}` };
   }
 }
@@ -379,7 +379,7 @@ async function processStripe(amount, currency, paymentMethodToken) {
       message: paymentIntent.status === 'succeeded' ? 'Payment successful' : 'Payment pending',
     };
   } catch (err) {
-    console.error('[Stripe Error]', err.message);
+    logger.error('[Stripe Error]', err.message);
     return { success: false, message: err.message };
   }
 }
@@ -478,7 +478,7 @@ const addPaymentMethod = async (req, res) => {
       data: { payment_method: result.rows[0] },
     });
   } catch (err) {
-    console.error('[AddPaymentMethod Error]', err);
+    logger.error('[AddPaymentMethod Error]', err);
     res.status(500).json({ success: false, message: 'Failed to add payment method' });
   }
 };
@@ -498,7 +498,7 @@ const listPaymentMethods = async (req, res) => {
     );
     res.json({ success: true, data: { payment_methods: result.rows, count: result.rows.length } });
   } catch (err) {
-    console.error('[ListPaymentMethods Error]', err);
+    logger.error('[ListPaymentMethods Error]', err);
     res.status(500).json({ success: false, message: 'Failed to list payment methods' });
   }
 };
@@ -530,7 +530,7 @@ const setDefaultMethod = async (req, res) => {
       data: { payment_method: result.rows[0] },
     });
   } catch (err) {
-    console.error('[SetDefaultMethod Error]', err);
+    logger.error('[SetDefaultMethod Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update default method' });
   }
 };
@@ -556,7 +556,7 @@ const deletePaymentMethod = async (req, res) => {
 
     res.json({ success: true, message: 'Payment method removed' });
   } catch (err) {
-    console.error('[DeletePaymentMethod Error]', err);
+    logger.error('[DeletePaymentMethod Error]', err);
     res.status(500).json({ success: false, message: 'Failed to remove payment method' });
   }
 };
@@ -643,7 +643,7 @@ const chargeRide = async (req, res) => {
       }
     } catch (fraudErr) {
       // Non-blocking — log and continue
-      console.warn('[chargeRide] Fraud check error:', fraudErr.message);
+      logger.warn('[chargeRide] Fraud check error:', fraudErr.message);
     }
 
     // ── MOBILE MONEY (async) ──────────────────────────────────────────────────
@@ -658,7 +658,7 @@ const chargeRide = async (req, res) => {
           ? await processMtnMobileMoney(paymentPhone, amount, chargeCurrency)
           : await processOrangeMoney(paymentPhone, amount, chargeCurrency);
       } catch (providerErr) {
-        console.error(`[${method}] Init error:`, providerErr.message);
+        logger.error(`[${method}] Init error:`, providerErr.message);
         return res.status(502).json({
           success: false,
           message: `Mobile money service unavailable: ${providerErr.message}`,
@@ -850,7 +850,7 @@ const chargeRide = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[ChargeRide Error]', err);
+    logger.error('[ChargeRide Error]', err);
     res.status(500).json({ success: false, message: 'Payment processing failed' });
   }
 };
@@ -911,7 +911,7 @@ const checkPaymentStatus = async (req, res) => {
         return res.json({ success: true, data: { status: payment.status, payment_id: payment.id } });
       }
     } catch (pollErr) {
-      console.error(`[checkPaymentStatus] Provider poll failed:`, pollErr.message);
+      logger.error(`[checkPaymentStatus] Provider poll failed:`, pollErr.message);
       return res.json({ success: true, data: { status: 'pending', payment_id: payment.id } });
     }
 
@@ -940,7 +940,7 @@ const checkPaymentStatus = async (req, res) => {
     // Still pending
     return res.json({ success: true, data: { status: 'pending', payment_id: payment.id } });
   } catch (err) {
-    console.error('[checkPaymentStatus Error]', err);
+    logger.error('[checkPaymentStatus Error]', err);
     res.status(500).json({ success: false, message: 'Status check failed' });
   }
 };
@@ -1102,7 +1102,7 @@ const getPaymentHistory = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[GetPaymentHistory Error]', err);
+    logger.error('[GetPaymentHistory Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get payment history' });
   }
 };
@@ -1181,7 +1181,7 @@ const refundPayment = async (req, res) => {
       data: { payment_id: paymentId, amount: payment.amount, method: payment.method },
     });
   } catch (err) {
-    console.error('[RefundPayment Error]', err);
+    logger.error('[RefundPayment Error]', err);
     res.status(500).json({ success: false, message: 'Failed to process refund' });
   }
 };
@@ -1226,7 +1226,7 @@ const getWalletBalance = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[GetWalletBalance Error]', err);
+    logger.error('[GetWalletBalance Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get wallet balance' });
   }
 };
@@ -1334,7 +1334,7 @@ const processSubscription = async (req, res) => {
       data: { subscription: sub.rows[0], plan_details: planData, expires_at: expiresAt },
     });
   } catch (err) {
-    console.error('[ProcessSubscription Error]', err);
+    logger.error('[ProcessSubscription Error]', err);
     res.status(500).json({ success: false, message: 'Failed to process subscription' });
   }
 };
@@ -1367,7 +1367,7 @@ const getSubscriptionStatus = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[GetSubscriptionStatus Error]', err);
+    logger.error('[GetSubscriptionStatus Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get subscription' });
   }
 };
@@ -1439,7 +1439,7 @@ const createStripePaymentIntent = async (req, res) => {
       currency,
     });
   } catch (err) {
-    console.error('[CreateStripePaymentIntent Error]', err.message);
+    logger.error('[CreateStripePaymentIntent Error]', err.message);
     res.status(500).json({ success: false, message: `Failed to create payment intent: ${err.message}` });
   }
 };
@@ -1659,7 +1659,7 @@ const driverCashout = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[DriverCashout Error]', err);
+    logger.error('[DriverCashout Error]', err);
     res.status(500).json({ success: false, message: 'Cashout request failed' });
   }
 };
@@ -1709,7 +1709,7 @@ const getDriverCashoutHistory = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[GetDriverCashoutHistory Error]', err);
+    logger.error('[GetDriverCashoutHistory Error]', err);
     res.status(500).json({ success: false, message: 'Failed to load cashout history' });
   }
 };

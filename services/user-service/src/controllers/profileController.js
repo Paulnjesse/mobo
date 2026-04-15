@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
@@ -246,7 +247,7 @@ const createTeenAccount = async (req, res) => {
       data: { teen_account: result.rows[0] }
     });
   } catch (err) {
-    console.error('[CreateTeenAccount Error]', err);
+    logger.error('[CreateTeenAccount Error]', err);
     res.status(500).json({ success: false, message: 'Failed to create teen account' });
   }
 };
@@ -272,7 +273,7 @@ const getTeenAccounts = async (req, res) => {
       data: { teen_accounts: result.rows, count: result.rows.length }
     });
   } catch (err) {
-    console.error('[GetTeenAccounts Error]', err);
+    logger.error('[GetTeenAccounts Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get teen accounts' });
   }
 };
@@ -303,7 +304,7 @@ const updateLanguage = async (req, res) => {
       data: { language }
     });
   } catch (err) {
-    console.error('[UpdateLanguage Error]', err);
+    logger.error('[UpdateLanguage Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update language' });
   }
 };
@@ -364,11 +365,11 @@ const deleteAccount = async (req, res) => {
       [`DELETED_${Date.now()}_${userId.substring(0, 8)}`, userId]
     );
 
-    console.log(`[DeleteAccount] User ${userId} deleted. Reason: ${reason || 'not provided'}`);
+    logger.info(`[DeleteAccount] User ${userId} deleted. Reason: ${reason || 'not provided'}`);
 
     res.json({ success: true, message: 'Account deleted. We are sad to see you go.' });
   } catch (err) {
-    console.error('[DeleteAccount Error]', err);
+    logger.error('[DeleteAccount Error]', err);
     res.status(500).json({ success: false, message: 'Failed to delete account' });
   }
 };
@@ -403,7 +404,7 @@ const getNotifications = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetNotifications Error]', err);
+    logger.error('[GetNotifications Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get notifications' });
   }
 };
@@ -423,7 +424,7 @@ const markNotificationRead = async (req, res) => {
 
     res.json({ success: true, message: 'Notification marked as read' });
   } catch (err) {
-    console.error('[MarkNotificationRead Error]', err);
+    logger.error('[MarkNotificationRead Error]', err);
     res.status(500).json({ success: false, message: 'Failed to mark notification' });
   }
 };
@@ -466,7 +467,7 @@ const getLoyaltyInfo = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetLoyaltyInfo Error]', err);
+    logger.error('[GetLoyaltyInfo Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get loyalty info' });
   }
 };
@@ -534,7 +535,7 @@ const createCorporateAccount = async (req, res) => {
       data: { corporate_account: corp }
     });
   } catch (err) {
-    console.error('[CreateCorporateAccount Error]', err);
+    logger.error('[CreateCorporateAccount Error]', err);
     res.status(500).json({ success: false, message: 'Failed to create corporate account' });
   }
 };
@@ -609,7 +610,7 @@ const getCorporateAccount = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetCorporateAccount Error]', err);
+    logger.error('[GetCorporateAccount Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get corporate account' });
   }
 };
@@ -690,7 +691,7 @@ const addCorporateMember = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[AddCorporateMember Error]', err);
+    logger.error('[AddCorporateMember Error]', err);
     res.status(500).json({ success: false, message: 'Failed to add corporate member' });
   }
 };
@@ -738,7 +739,7 @@ const removeCorporateMember = async (req, res) => {
 
     res.json({ success: true, message: 'Member removed from corporate account' });
   } catch (err) {
-    console.error('[RemoveCorporateMember Error]', err);
+    logger.error('[RemoveCorporateMember Error]', err);
     res.status(500).json({ success: false, message: 'Failed to remove corporate member' });
   }
 };
@@ -807,7 +808,7 @@ const getCorporateRides = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetCorporateRides Error]', err);
+    logger.error('[GetCorporateRides Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get corporate rides' });
   }
 };
@@ -896,7 +897,7 @@ const getSubscription = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[GetSubscription Error]', err);
+    logger.error('[GetSubscription Error]', err);
     res.status(500).json({ success: false, message: 'Failed to get subscription info' });
   }
 };
@@ -963,7 +964,7 @@ const uploadProfilePhoto = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[UploadProfilePhoto Error]', err);
+    logger.error('[UploadProfilePhoto Error]', err);
     res.status(500).json({ success: false, message: 'Failed to upload profile photo' });
   }
 };
@@ -1007,7 +1008,7 @@ const updateExpoPushToken = async (req, res) => {
       data: { expo_push_token }
     });
   } catch (err) {
-    console.error('[UpdateExpoPushToken Error]', err);
+    logger.error('[UpdateExpoPushToken Error]', err);
     res.status(500).json({ success: false, message: 'Failed to update push token' });
   }
 };
@@ -1036,7 +1037,7 @@ const blockRider = async (req, res) => {
 
     res.json({ success: true, message: 'Rider blocked successfully' });
   } catch (err) {
-    console.error('[BlockRider Error]', err);
+    logger.error('[BlockRider Error]', err);
     res.status(500).json({ success: false, message: 'Failed to block rider' });
   }
 };
@@ -1053,7 +1054,7 @@ const unblockRider = async (req, res) => {
 
     res.json({ success: true, message: 'Rider unblocked successfully' });
   } catch (err) {
-    console.error('[UnblockRider Error]', err);
+    logger.error('[UnblockRider Error]', err);
     res.status(500).json({ success: false, message: 'Failed to unblock rider' });
   }
 };
@@ -1079,7 +1080,7 @@ const submitAppeal = async (req, res) => {
 
     res.json({ success: true, message: 'Appeal submitted for review' });
   } catch (err) {
-    console.error('[SubmitAppeal Error]', err);
+    logger.error('[SubmitAppeal Error]', err);
     res.status(500).json({ success: false, message: 'Failed to submit appeal' });
   }
 };

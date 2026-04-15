@@ -13,6 +13,8 @@
  *   7. Enables anonymous call mode (Twilio Proxy masked call to emergency)
  */
 
+const logger = require('../utils/logger');
+
 const pool   = require('../config/database');
 const axios  = require('axios');
 const { sendSOSSMS } = require('../utils/notifyContacts');
@@ -67,12 +69,12 @@ async function dispatchToPolice({ rideId, countryCode, pickupAddress, callerName
       }).catch(() => {});
     } else {
       // Log the dispatch for manual follow-up
-      console.warn(`[SOS Police Dispatch] Would call/SMS ${policeContact.agency_name} at ${policeContact.phone} for ride ${rideId}`);
+      logger.warn(`[SOS Police Dispatch] Would call/SMS ${policeContact.agency_name} at ${policeContact.phone} for ride ${rideId}`);
     }
 
     return policeContact;
   } catch (err) {
-    console.error('[SOS] Police dispatch error:', err.message);
+    logger.error('[SOS] Police dispatch error:', err.message);
     return null;
   }
 }
@@ -141,7 +143,7 @@ const triggerSOS = async (req, res) => {
         triggeredBy: req.user.full_name || req.user.phone || 'A MOBO user',
         rideId,
         pickupAddress: ride.pickup_address || 'Unknown location',
-      }).catch((err) => console.warn('[SOS] SMS error:', err.message));
+      }).catch((err) => logger.warn('[SOS] SMS error:', err.message));
     }
 
     // ── 5. Emit socket event to ride room ────────────────────────────────
@@ -193,7 +195,7 @@ const triggerSOS = async (req, res) => {
       anonymous_call_enabled: true,
     });
   } catch (err) {
-    console.error('[SOS] triggerSOS error:', err);
+    logger.error('[SOS] triggerSOS error:', err);
     return res.status(500).json({ success: false, message: 'Failed to trigger SOS' });
   }
 };

@@ -1,3 +1,4 @@
+const logger = require('./logger');
 /**
  * MOBO Internal Service Authentication Middleware
  *
@@ -39,7 +40,7 @@ if (process.env.NODE_ENV === 'production') {
   ].some(k => !!process.env[k]);
 
   if (!hasSharedKey && !hasAnyPerServiceKey) {
-    console.error('[FATAL] No INTERNAL_SERVICE_KEY or INTERNAL_SERVICE_KEY_<SERVICE> set in production. Exiting.');
+    logger.error('[FATAL] No INTERNAL_SERVICE_KEY or INTERNAL_SERVICE_KEY_<SERVICE> set in production. Exiting.');
     process.exit(1);
   }
 }

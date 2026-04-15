@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const crypto = require('crypto');
 const db = require('../config/database');
 
@@ -48,7 +49,7 @@ const generateShareToken = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('[ShareTrip] generateShareToken error:', err.message);
+    logger.error('[ShareTrip] generateShareToken error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -157,7 +158,7 @@ const getSharedTrip = async (req, res) => {
 
     return res.json({ success: true, data: safeData });
   } catch (err) {
-    console.error('[ShareTrip] getSharedTrip error:', err.message);
+    logger.error('[ShareTrip] getSharedTrip error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

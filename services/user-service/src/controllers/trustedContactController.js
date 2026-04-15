@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../config/database');
 
 /**
@@ -18,7 +19,7 @@ const getTrustedContacts = async (req, res) => {
 
     return res.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error('[TrustedContacts] getTrustedContacts error:', err.message);
+    logger.error('[TrustedContacts] getTrustedContacts error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -68,7 +69,7 @@ const addTrustedContact = async (req, res) => {
       // unique violation — (user_id, phone) pair already exists
       return res.status(400).json({ success: false, message: 'This phone number is already a trusted contact' });
     }
-    console.error('[TrustedContacts] addTrustedContact error:', err.message);
+    logger.error('[TrustedContacts] addTrustedContact error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -123,7 +124,7 @@ const updateTrustedContact = async (req, res) => {
     if (err.code === '23505') {
       return res.status(400).json({ success: false, message: 'This phone number is already a trusted contact' });
     }
-    console.error('[TrustedContacts] updateTrustedContact error:', err.message);
+    logger.error('[TrustedContacts] updateTrustedContact error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -148,7 +149,7 @@ const removeTrustedContact = async (req, res) => {
 
     return res.json({ success: true, data: { id: result.rows[0].id } });
   } catch (err) {
-    console.error('[TrustedContacts] removeTrustedContact error:', err.message);
+    logger.error('[TrustedContacts] removeTrustedContact error:', err.message);
     return res.status(500).json({ success: false, message: err.message });
   }
 };

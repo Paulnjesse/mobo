@@ -1,3 +1,4 @@
+const logger = require('./utils/logger');
 /**
  * MOBO Email Utility — ride-service
  * Lightweight nodemailer wrapper for sending ride receipts.
@@ -46,7 +47,7 @@ function wrapHtml(title, body) {
 
 async function _send({ to, subject, html, text }) {
   if (!transporter) {
-    console.log(`[MOBO Email → ${to}] ${subject}\n${text}`);
+    logger.info(`[MOBO Email → ${to}] ${subject}\n${text}`);
     return;
   }
   await transporter.sendMail({ from: `"MOBO" <${FROM_EMAIL}>`, to, subject, html, text });

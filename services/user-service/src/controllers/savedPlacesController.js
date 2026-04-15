@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 exports.getSavedPlaces = async (req, res) => {
@@ -8,7 +9,7 @@ exports.getSavedPlaces = async (req, res) => {
     );
     res.json({ places: rows });
   } catch (err) {
-    console.error('savedPlacesController.getSavedPlaces:', err);
+    logger.error('savedPlacesController.getSavedPlaces:', err);
     res.status(500).json({ error: 'Failed to load saved places' });
   }
 };
@@ -22,7 +23,7 @@ exports.createSavedPlace = async (req, res) => {
     );
     res.status(201).json({ place: rows[0] });
   } catch (err) {
-    console.error('savedPlacesController.createSavedPlace:', err);
+    logger.error('savedPlacesController.createSavedPlace:', err);
     res.status(500).json({ error: 'Failed to save place' });
   }
 };
@@ -32,7 +33,7 @@ exports.deleteSavedPlace = async (req, res) => {
     await db.query('DELETE FROM saved_places WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
     res.json({ ok: true });
   } catch (err) {
-    console.error('savedPlacesController.deleteSavedPlace:', err);
+    logger.error('savedPlacesController.deleteSavedPlace:', err);
     res.status(500).json({ error: 'Failed to delete saved place' });
   }
 };

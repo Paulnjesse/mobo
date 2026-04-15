@@ -15,6 +15,8 @@
  * Pool fare discount: 30% off the individual standard fare
  */
 
+const logger = require('../utils/logger');
+
 'use strict';
 
 const { v4: uuidv4 }  = require('uuid');
@@ -233,7 +235,7 @@ const requestPoolRide = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[CarpoolController] requestPoolRide:', err);
+    logger.error('[CarpoolController] requestPoolRide:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -283,7 +285,7 @@ const getPoolGroup = async (req, res) => {
       rides: ridesResult.rows,
     });
   } catch (err) {
-    console.error('[CarpoolController] getPoolGroup:', err);
+    logger.error('[CarpoolController] getPoolGroup:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -358,7 +360,7 @@ const dispatchPoolGroup = async (req, res) => {
       message:     'Pool group dispatched to driver',
     });
   } catch (err) {
-    console.error('[CarpoolController] dispatchPoolGroup:', err);
+    logger.error('[CarpoolController] dispatchPoolGroup:', err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -399,7 +401,7 @@ const estimatePoolFare = async (req, res) => {
       discount_pct:   Math.round(POOL_DISCOUNT * 100),
     });
   } catch (err) {
-    console.error('[CarpoolController] estimatePoolFare:', err);
+    logger.error('[CarpoolController] estimatePoolFare:', err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const { Pool } = require('pg');
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -26,7 +27,7 @@ function buildSslConfig() {
   } else {
     // If no CA cert provided, still enforce validation using system trust store.
     // This protects against MITM while trusting well-known CAs (e.g. Let's Encrypt).
-    console.warn('[DB] DB_SSL_CA not set — using system CA bundle. Set DB_SSL_CA for full pinning.');
+    logger.warn('[DB] DB_SSL_CA not set — using system CA bundle. Set DB_SSL_CA for full pinning.');
   }
 
   return sslConfig;
@@ -58,15 +59,15 @@ const readPool = process.env.DATABASE_READ_URL
   : pool;
 
 pool.on('connect', () => {
-  console.log('[UserService DB] Connected to PostgreSQL');
+  logger.info('[UserService DB] Connected to PostgreSQL');
 });
 
 pool.on('error', (err) => {
-  console.error('[DB] Pool error:', err.message);
+  logger.error('[DB] Pool error:', err.message);
 });
 
 readPool.on('error', (err) => {
-  console.error('[DB Read] Pool error:', err.message);
+  logger.error('[DB Read] Pool error:', err.message);
 });
 
 module.exports = {

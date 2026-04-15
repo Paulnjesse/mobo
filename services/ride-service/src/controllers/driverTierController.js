@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const db = require('../db');
 
 const TIER_THRESHOLDS = [
@@ -60,7 +61,7 @@ exports.getDriverTier = async (req, res) => {
       earnings_this_month: parseFloat(row.earnings_this_month) || 0,
     });
   } catch (err) {
-    console.error('driverTierController.getDriverTier:', err);
+    logger.error('driverTierController.getDriverTier:', err);
     res.status(500).json({ error: 'Failed to load driver tier' });
   }
 };
@@ -127,7 +128,7 @@ exports.getDriverRadar = async (req, res) => {
     const { rows } = await db.query(query, params);
     res.json({ rides: rows });
   } catch (err) {
-    console.error('driverTierController.getDriverRadar:', err);
+    logger.error('driverTierController.getDriverRadar:', err);
     res.status(500).json({ error: 'Failed to load radar' });
   }
 };

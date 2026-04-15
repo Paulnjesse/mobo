@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 
 /**
  * adminDataController.js
@@ -167,7 +168,7 @@ exports.uploadDocument = async (req, res) => {
 
     res.status(201).json({ success: true, document: rows[0] });
   } catch (err) {
-    console.error('[AdminData] uploadDocument:', err);
+    logger.error('[AdminData] uploadDocument:', err);
     res.status(500).json({ success: false, message: 'Failed to upload document' });
   }
 };
@@ -193,7 +194,7 @@ exports.listDocuments = async (req, res) => {
     );
     res.json({ success: true, documents: rows });
   } catch (err) {
-    console.error('[AdminData] listDocuments:', err);
+    logger.error('[AdminData] listDocuments:', err);
     res.status(500).json({ success: false, message: 'Failed to list documents' });
   }
 };
@@ -219,7 +220,7 @@ exports.downloadDocument = async (req, res) => {
     try {
       decrypted = decryptBase64(doc.encrypted_data);
     } catch (e) {
-      console.error('[AdminData] Decryption failed:', e.message);
+      logger.error('[AdminData] Decryption failed:', e.message);
       return res.status(500).json({ success: false, message: 'Failed to decrypt document' });
     }
 
@@ -260,7 +261,7 @@ exports.downloadDocument = async (req, res) => {
     });
     res.send(decrypted);
   } catch (err) {
-    console.error('[AdminData] downloadDocument:', err);
+    logger.error('[AdminData] downloadDocument:', err);
     res.status(500).json({ success: false, message: 'Failed to download document' });
   }
 };
@@ -279,7 +280,7 @@ exports.verifyDocument = async (req, res) => {
     );
     res.json({ success: true, message: 'Document verified' });
   } catch (err) {
-    console.error('[AdminData] verifyDocument:', err);
+    logger.error('[AdminData] verifyDocument:', err);
     res.status(500).json({ success: false, message: 'Failed to verify document' });
   }
 };
@@ -297,7 +298,7 @@ exports.archiveDocument = async (req, res) => {
     );
     res.json({ success: true, message: 'Document archived' });
   } catch (err) {
-    console.error('[AdminData] archiveDocument:', err);
+    logger.error('[AdminData] archiveDocument:', err);
     res.status(500).json({ success: false, message: 'Failed to archive document' });
   }
 };
@@ -348,7 +349,7 @@ exports.getAccessLogs = async (req, res) => {
       limit,
     });
   } catch (err) {
-    console.error('[AdminData] getAccessLogs:', err);
+    logger.error('[AdminData] getAccessLogs:', err);
     res.status(500).json({ success: false, message: 'Failed to retrieve access logs' });
   }
 };
@@ -374,7 +375,7 @@ exports.getNotifications = async (req, res) => {
     const unreadCount = rows.filter(n => !n.is_read).length;
     res.json({ success: true, notifications: rows, unread_count: unreadCount });
   } catch (err) {
-    console.error('[AdminData] getNotifications:', err);
+    logger.error('[AdminData] getNotifications:', err);
     res.status(500).json({ success: false, message: 'Failed to load notifications' });
   }
 };
@@ -393,7 +394,7 @@ exports.markNotificationRead = async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error('[AdminData] markNotificationRead:', err);
+    logger.error('[AdminData] markNotificationRead:', err);
     res.status(500).json({ success: false, message: 'Failed to mark notification as read' });
   }
 };
@@ -411,7 +412,7 @@ exports.markAllRead = async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error('[AdminData] markAllRead:', err);
+    logger.error('[AdminData] markAllRead:', err);
     res.status(500).json({ success: false, message: 'Failed to mark all as read' });
   }
 };
@@ -479,7 +480,7 @@ exports.revealUserFields = async (req, res) => {
 
     res.json({ success: true, data: revealed, accessed_at: new Date().toISOString() });
   } catch (err) {
-    console.error('[AdminData] revealUserFields:', err);
+    logger.error('[AdminData] revealUserFields:', err);
     res.status(500).json({ success: false, message: 'Failed to reveal fields' });
   }
 };

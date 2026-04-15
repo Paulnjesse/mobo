@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./logger');
 
 /**
  * featureFlags.js — MOBO Feature Flag Client
@@ -77,7 +78,7 @@ async function initFeatureFlags() {
 
     await new Promise((resolve, reject) => {
       const t = setTimeout(() => {
-        console.warn('[FeatureFlags] Unleash connect timeout — using defaults until connected');
+        logger.warn('[FeatureFlags] Unleash connect timeout — using defaults until connected');
         resolve(); // non-fatal: fallback defaults apply until sync completes
       }, 5000);
 
@@ -89,13 +90,13 @@ async function initFeatureFlags() {
 
       _client.on('error', (err) => {
         clearTimeout(t);
-        console.warn('[FeatureFlags] Unleash error (falling back to defaults):', err.message);
+        logger.warn('[FeatureFlags] Unleash error (falling back to defaults):', err.message);
         resolve(); // non-fatal
       });
     });
   } catch (err) {
-    console.warn('[FeatureFlags] unleash-client not installed — using in-process defaults');
-    console.warn('[FeatureFlags] Install with: npm install unleash-client');
+    logger.warn('[FeatureFlags] unleash-client not installed — using in-process defaults');
+    logger.warn('[FeatureFlags] Install with: npm install unleash-client');
     _client = null;
   }
 }
@@ -117,7 +118,7 @@ function isEnabled(flagName, context = {}) {
     try {
       return _client.isEnabled(flagName, context);
     } catch (err) {
-      console.warn(`[FeatureFlags] isEnabled(${flagName}) error:`, err.message);
+      logger.warn(`[FeatureFlags] isEnabled(${flagName}) error:`, err.message);
     }
   }
 

@@ -3,6 +3,8 @@
  * Ride-specific notification helpers built on top of Expo Push API.
  */
 
+const logger = require('../utils/logger');
+
 const { Expo } = require('expo-server-sdk');
 const db = require('../config/database');
 
@@ -14,7 +16,7 @@ const expo = new Expo();
 
 async function _send(token, title, body, data = {}) {
   if (!token || !Expo.isExpoPushToken(token)) {
-    console.warn(`[RideNotification] Skipping invalid/missing token: ${token}`);
+    logger.warn(`[RideNotification] Skipping invalid/missing token: ${token}`);
     return { success: false, error: 'Invalid or missing push token' };
   }
 
@@ -27,7 +29,7 @@ async function _send(token, title, body, data = {}) {
       const result = await expo.sendPushNotificationsAsync(chunk);
       ticket = result[0];
       if (ticket.status === 'error') {
-        console.error('[RideNotification] Ticket error:', ticket.message, ticket.details);
+        logger.error('[RideNotification] Ticket error:', ticket.message, ticket.details);
         if (ticket.details?.error === 'DeviceNotRegistered') {
           _removeStalePushToken(token).catch(() => {});
         }
@@ -43,13 +45,13 @@ async function _send(token, title, body, data = {}) {
           [data.user_id, title, body, JSON.stringify({ token, ticket, ...data })]
         );
       } catch (dbErr) {
-        console.warn('[RideNotification] DB persist error:', dbErr.message);
+        logger.warn('[RideNotification] DB persist error:', dbErr.message);
       }
     }
 
     return { success: ticket?.status === 'ok', ticket };
   } catch (err) {
-    console.error('[RideNotification] Send error:', err.message);
+    logger.error('[RideNotification] Send error:', err.message);
     return { success: false, error: err.message };
   }
 }
@@ -267,9 +269,9 @@ async function _removeStalePushToken(token) {
        WHERE expo_push_token = $1 OR push_token = $1`,
       [token]
     );
-    console.info(`[RideNotification] Removed stale token: ${token.slice(0, 30)}...`);
+    logger.info(`[RideNotification] Removed stale token: ${token.slice(0, 30)}...`);
   } catch (err) {
-    console.warn('[RideNotification] Failed to remove stale token:', err.message);
+    logger.warn('[RideNotification] Failed to remove stale token:', err.message);
   }
 }
 

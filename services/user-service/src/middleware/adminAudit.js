@@ -1,3 +1,4 @@
+const logger = require('./utils/logger');
 /**
  * Admin Action Audit Middleware
  *
@@ -69,7 +70,7 @@ function auditAdmin(action, resourceType, getResourceId, opts = {}) {
         );
       } catch (err) {
         // Audit failures must never break the API — log and continue
-        console.error('[adminAudit] Failed to write audit log:', err.message, { action, resourceType });
+        logger.error('[adminAudit] Failed to write audit log:', err.message, { action, resourceType });
       }
     });
 
@@ -106,7 +107,7 @@ async function autoAuditAdmin(req, res, next) {
         ]
       );
     } catch (err) {
-      console.error('[adminAudit] auto-audit failed:', err.message);
+      logger.error('[adminAudit] auto-audit failed:', err.message);
     }
   });
 

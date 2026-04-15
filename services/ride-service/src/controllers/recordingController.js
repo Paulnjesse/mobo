@@ -11,6 +11,8 @@
  *   deleteExpiredRecordings()   — scheduled cleanup (called on startup + daily)
  */
 
+const logger = require('../utils/logger');
+
 const pool = require('../config/database');
 
 // ── Controllers ──────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ const saveRecording = async (req, res) => {
       message:      'Recording saved successfully'
     });
   } catch (err) {
-    console.error('[Recording saveRecording]', err);
+    logger.error('[Recording saveRecording]', err);
     return res.status(500).json({ success: false, message: 'Failed to save recording' });
   }
 };
@@ -183,7 +185,7 @@ const getRecordings = async (req, res) => {
       data: sanitizedRecordings
     });
   } catch (err) {
-    console.error('[Recording getRecordings]', err);
+    logger.error('[Recording getRecordings]', err);
     return res.status(500).json({ success: false, message: 'Failed to retrieve recordings' });
   }
 };
@@ -204,10 +206,10 @@ const deleteExpiredRecordings = async () => {
     );
 
     if (result.rows.length > 0) {
-      console.log(`[Recording] Deleted ${result.rows.length} expired recording(s)`);
+      logger.info(`[Recording] Deleted ${result.rows.length} expired recording(s)`);
     }
   } catch (err) {
-    console.warn('[Recording deleteExpiredRecordings]', err.message);
+    logger.warn('[Recording deleteExpiredRecordings]', err.message);
   }
 };
 

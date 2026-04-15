@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('./utils/logger');
 /**
  * Redis cache utility with in-memory fallback
  * Used for: fare estimates, nearby-driver lists, surge multipliers
@@ -14,11 +15,11 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
       lazyConnect: true,
     });
     redis.on('error', (err) => {
-      console.warn('[Cache] Redis error — falling back to no-cache:', err.message);
+      logger.warn('[Cache] Redis error — falling back to no-cache:', err.message);
       redis = null;
     });
   } catch (e) {
-    console.warn('[Cache] ioredis not available, caching disabled');
+    logger.warn('[Cache] ioredis not available, caching disabled');
   }
 }
 

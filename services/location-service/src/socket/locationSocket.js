@@ -1,4 +1,6 @@
 'use strict';
+const logger = require('../utils/logger');
+
 
 const { verifyJwt } = require('../../../shared/jwtUtil');
 const db    = require('../config/database');
@@ -121,7 +123,7 @@ function initLocationSocket(io) {
   /* ------------------------------------------------------------------ */
   location.on('connection', (socket) => {
     const { id: userId, role } = socket.user || {};
-    console.log(`[LocationSocket] Connected: socketId=${socket.id} userId=${userId} role=${role}`);
+    logger.info(`[LocationSocket] Connected: socketId=${socket.id} userId=${userId} role=${role}`);
 
     // Register driver socket
     if (role === 'driver') {
@@ -169,7 +171,7 @@ function initLocationSocket(io) {
       } catch (consentErr) {
         // If the user_consents table doesn't exist yet (pre-migration), fail open with a warning.
         // This prevents a schema rollout from blocking all drivers. Remove once migration_030 is confirmed applied.
-        console.warn(`[LocationSocket] Consent check failed for driver ${driverId} — failing open:`, consentErr.message);
+        logger.warn(`[LocationSocket] Consent check failed for driver ${driverId} — failing open:`, consentErr.message);
       }
 
       // Compute live ETA from driver's current position to dropoff (if provided)
@@ -199,7 +201,7 @@ function initLocationSocket(io) {
 
       // Persist to DB asynchronously — non-blocking, failures are logged only
       persistLocationToDB(driverId, locationPayload).catch((err) => {
-        console.warn(`[LocationSocket] DB persist failed for driver ${driverId}:`, err.message);
+        logger.warn(`[LocationSocket] DB persist failed for driver ${driverId}:`, err.message);
       });
     });
 
@@ -245,7 +247,7 @@ function initLocationSocket(io) {
             });
           }
         } catch (err) {
-          console.error(`[LocationSocket] track_driver auth check failed for user ${socket.user?.id}:`, err.message);
+          logger.error(`[LocationSocket] track_driver auth check failed for user ${socket.user?.id}:`, err.message);
           return socket.emit('error', { message: 'Unable to verify ride authorization. Please try again.' });
         }
       }
@@ -259,7 +261,7 @@ function initLocationSocket(io) {
       }
       trackingSubscriptions.get(driverId).add(socket.id);
 
-      console.log(`[LocationSocket] ${socket.id} (user=${socket.user?.id}) is now tracking driver ${driverId} on ride ${rideId}`);
+      logger.info(`[LocationSocket] ${socket.id} (user=${socket.user?.id}) is now tracking driver ${driverId} on ride ${rideId}`);
 
       // Send last known location immediately (Redis → in-memory fallback)
       cacheGetDriverLocation(driverId).then((lastKnown) => {
@@ -290,7 +292,7 @@ function initLocationSocket(io) {
         if (subs.size === 0) trackingSubscriptions.delete(driverId);
       }
 
-      console.log(`[LocationSocket] ${socket.id} stopped tracking driver ${driverId}`);
+      logger.info(`[LocationSocket] ${socket.id} stopped tracking driver ${driverId}`);
       socket.emit('tracking_stopped', { driverId });
     });
 
@@ -326,7 +328,7 @@ function initLocationSocket(io) {
 
       location.emit('driver_online', payload); // broadcast to all connected clients
       socket.emit('online_confirmed', { driverId, timestamp: payload.timestamp });
-      console.log(`[LocationSocket] Driver ${driverId} is now online`);
+      logger.info(`[LocationSocket] Driver ${driverId} is now online`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -353,7 +355,7 @@ function initLocationSocket(io) {
 
       location.emit('driver_offline', payload);
       socket.emit('offline_confirmed', { driverId, timestamp: payload.timestamp });
-      console.log(`[LocationSocket] Driver ${driverId} went offline`);
+      logger.info(`[LocationSocket] Driver ${driverId} went offline`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -365,7 +367,7 @@ function initLocationSocket(io) {
      * @param {string} reason
      */
     socket.on('disconnect', (reason) => {
-      console.log(`[LocationSocket] Disconnected: socketId=${socket.id} userId=${userId} reason=${reason}`);
+      logger.info(`[LocationSocket] Disconnected: socketId=${socket.id} userId=${userId} reason=${reason}`);
 
       if (role === 'driver') {
         const stored = driverSockets.get(String(userId));

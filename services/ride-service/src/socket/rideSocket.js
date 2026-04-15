@@ -1,4 +1,5 @@
 'use strict';
+const logger = require('../utils/logger');
 
 const { verifyJwt } = require('../../../shared/jwtUtil');
 const db = require('../config/database');
@@ -89,7 +90,7 @@ function initRideSocket(io) {
   /* ------------------------------------------------------------------ */
   rides.on('connection', (socket) => {
     const { id: userId, role } = socket.user || {};
-    console.log(`[RideSocket] Connected: socketId=${socket.id} userId=${userId} role=${role}`);
+    logger.info(`[RideSocket] Connected: socketId=${socket.id} userId=${userId} role=${role}`);
 
     // Register driver / rider socket index
     if (role === 'driver') driverSockets.set(String(userId), socket.id);
@@ -108,7 +109,7 @@ function initRideSocket(io) {
       const room = rideRoom(rideId);
       socket.join(room);
       trackRideRoom(rideId, socket.id);
-      console.log(`[RideSocket] ${socket.id} joined room ${room}`);
+      logger.info(`[RideSocket] ${socket.id} joined room ${room}`);
       socket.emit('joined_ride', { rideId, room });
     });
 
@@ -180,7 +181,7 @@ function initRideSocket(io) {
           return socket.emit('error', { message: 'Unauthorized: you are not a participant in this ride' });
         }
       } catch (dbErr) {
-        console.error('[RideSocket] ride_status_change DB check failed:', dbErr.message);
+        logger.error('[RideSocket] ride_status_change DB check failed:', dbErr.message);
         return socket.emit('error', { message: 'Authorization check failed' });
       }
 
@@ -194,7 +195,7 @@ function initRideSocket(io) {
       };
 
       rides.to(rideRoom(rideId)).emit('ride_status_change', payload);
-      console.log(`[RideSocket] ride_status_change rideId=${rideId} status=${status}`);
+      logger.info(`[RideSocket] ride_status_change rideId=${rideId} status=${status}`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -244,7 +245,7 @@ function initRideSocket(io) {
       };
 
       rides.to(rideRoom(rideId)).emit('ride_cancelled', payload);
-      console.log(`[RideSocket] ride_cancelled rideId=${rideId}`);
+      logger.info(`[RideSocket] ride_cancelled rideId=${rideId}`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -287,11 +288,11 @@ function initRideSocket(io) {
       const timeoutHandle = setTimeout(() => {
         requestTimeouts.delete(rideId);
         rides.to(targetSocketId).emit('ride_request_expired', { rideId, timestamp: Date.now() });
-        console.log(`[RideSocket] Ride request ${rideId} expired for driver ${driverId}`);
+        logger.info(`[RideSocket] Ride request ${rideId} expired for driver ${driverId}`);
       }, 15000);
 
       requestTimeouts.set(rideId, timeoutHandle);
-      console.log(`[RideSocket] incoming_ride_request sent to driver ${driverId} for ride ${rideId}`);
+      logger.info(`[RideSocket] incoming_ride_request sent to driver ${driverId} for ride ${rideId}`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -332,7 +333,7 @@ function initRideSocket(io) {
 
       // Also emit back to the requesting socket for confirmation
       socket.emit('driver_response_sent', payload);
-      console.log(`[RideSocket] driver_response rideId=${rideId} accepted=${accepted} by driver=${driverId}`);
+      logger.info(`[RideSocket] driver_response rideId=${rideId} accepted=${accepted} by driver=${driverId}`);
     });
 
     /* ---------------------------------------------------------------- */
@@ -376,7 +377,7 @@ function initRideSocket(io) {
      * @param {string} reason
      */
     socket.on('disconnect', (reason) => {
-      console.log(`[RideSocket] Disconnected: socketId=${socket.id} userId=${userId} reason=${reason}`);
+      logger.info(`[RideSocket] Disconnected: socketId=${socket.id} userId=${userId} reason=${reason}`);
       untrackSocket(socket.id);
 
       if (role === 'driver') {
@@ -405,7 +406,7 @@ function notifyDriver(io, driverId, rideRequestPayload) {
   const ridesNs = io.of('/rides');
   const targetSocketId = driverSockets.get(String(driverId));
   if (!targetSocketId) {
-    console.warn(`[RideSocket] notifyDriver: driver ${driverId} is not connected`);
+    logger.warn(`[RideSocket] notifyDriver: driver ${driverId} is not connected`);
     return false;
   }
 

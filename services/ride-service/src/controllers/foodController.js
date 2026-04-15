@@ -3,6 +3,7 @@
  * Routes prefix: /food
  */
 const pool = require('../db');
+const logger = require('../utils/logger');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -61,7 +62,8 @@ const getRestaurants = async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ restaurants: result.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -87,7 +89,8 @@ const getRestaurant = async (req, res) => {
 
     res.json({ restaurant: rest.rows[0], menu: menu.rows, menu_grouped: grouped });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -150,7 +153,8 @@ const placeOrder = async (req, res) => {
       message: `Order placed! Estimated delivery: ${estimatedMinutes} minutes`,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -168,7 +172,8 @@ const getMyOrders = async (req, res) => {
     );
     res.json({ orders: result.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -190,7 +195,8 @@ const getOrder = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Order not found' });
     res.json({ order: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -207,7 +213,8 @@ const cancelOrder = async (req, res) => {
     if (!result.rows[0]) return res.status(400).json({ error: 'Order cannot be cancelled (already confirmed or not found)' });
     res.json({ success: true, order: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -233,7 +240,8 @@ const updateOrderStatus = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Order not found' });
     res.json({ order: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -248,7 +256,8 @@ const adminListRestaurants = async (req, res) => {
     );
     res.json({ restaurants: result.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -263,7 +272,8 @@ const adminCreateRestaurant = async (req, res) => {
     );
     res.status(201).json({ restaurant: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -286,7 +296,8 @@ const adminUpdateRestaurant = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Restaurant not found' });
     res.json({ restaurant: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -302,7 +313,8 @@ const adminAddMenuItem = async (req, res) => {
     );
     res.status(201).json({ item: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -323,7 +335,8 @@ const adminUpdateMenuItem = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Menu item not found' });
     res.json({ item: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -344,10 +357,17 @@ const adminListOrders = async (req, res) => {
     params.push(parseInt(limit), parseInt(offset));
 
     const result = await pool.query(query, params);
-    const countResult = await pool.query('SELECT COUNT(*) FROM food_orders' + (status ? ` WHERE status = '${status}'` : ''));
+    // Count query uses the same parameterized approach to prevent SQL injection
+    const countParams = [];
+    const countQuery = status
+      ? 'SELECT COUNT(*) FROM food_orders WHERE status = $1'
+      : 'SELECT COUNT(*) FROM food_orders';
+    if (status) countParams.push(status);
+    const countResult = await pool.query(countQuery, countParams);
     res.json({ orders: result.rows, total: parseInt(countResult.rows[0].count) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error("[FoodController] Error", { err: err.message, path: req.path });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 

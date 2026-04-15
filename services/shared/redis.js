@@ -1,3 +1,4 @@
+const logger = require('./logger');
 /**
  * MOBO Shared Redis Cache Helper
  * Used by ride-service (nearby drivers, surge zones) and location-service.
@@ -23,7 +24,7 @@ if (process.env.REDIS_URL) {
       if (process.env.REDIS_URL.startsWith('rediss://')) {
         clientOptions.socket = { tls: true, rejectUnauthorized: true };
       } else {
-        console.warn('[Redis] WARNING: REDIS_URL does not use TLS (rediss://). ' +
+        logger.warn('[Redis] WARNING: REDIS_URL does not use TLS (rediss://). ' +
           'In production, all Redis traffic should be encrypted.');
       }
     }
@@ -31,7 +32,7 @@ if (process.env.REDIS_URL) {
     redis = createClient(clientOptions);
 
     redis.on('error', (err) => {
-      console.warn('[Redis] Connection error (non-fatal):', err.message);
+      logger.warn('[Redis] Connection error (non-fatal):', err.message);
       redisAvailable = false;
     });
     redis.on('ready', () => {
@@ -39,10 +40,10 @@ if (process.env.REDIS_URL) {
       redisAvailable = true;
     });
     redis.connect().catch((err) => {
-      console.warn('[Redis] Could not connect (non-fatal):', err.message);
+      logger.warn('[Redis] Could not connect (non-fatal):', err.message);
     });
   } catch (err) {
-    console.warn('[Redis] Module not available:', err.message);
+    logger.warn('[Redis] Module not available:', err.message);
   }
 }
 
@@ -57,7 +58,7 @@ async function get(key) {
     const val = await redis.get(key);
     return val ? JSON.parse(val) : null;
   } catch (err) {
-    console.warn('[Redis] get error:', err.message);
+    logger.warn('[Redis] get error:', err.message);
     return null;
   }
 }
@@ -73,7 +74,7 @@ async function set(key, value, ttlSeconds = 60) {
   try {
     await redis.setEx(key, ttlSeconds, JSON.stringify(value));
   } catch (err) {
-    console.warn('[Redis] set error:', err.message);
+    logger.warn('[Redis] set error:', err.message);
   }
 }
 
@@ -86,7 +87,7 @@ async function del(key) {
   try {
     await redis.del(key);
   } catch (err) {
-    console.warn('[Redis] del error:', err.message);
+    logger.warn('[Redis] del error:', err.message);
   }
 }
 
@@ -100,7 +101,7 @@ async function delPattern(pattern) {
     const keys = await redis.keys(pattern);
     if (keys.length > 0) await redis.del(keys);
   } catch (err) {
-    console.warn('[Redis] delPattern error:', err.message);
+    logger.warn('[Redis] delPattern error:', err.message);
   }
 }
 

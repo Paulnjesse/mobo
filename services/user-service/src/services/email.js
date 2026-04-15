@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * MOBO Email Service — user-service
  * Sends transactional emails via nodemailer (SMTP).
@@ -33,7 +34,7 @@ if (isConfigured()) {
     }
   });
 } else {
-  console.log('[MOBO Email] SMTP credentials not configured — emails will be logged to console.');
+  logger.info('[MOBO Email] SMTP credentials not configured — emails will be logged to console.');
 }
 
 // ---------------------------------------------------------------------------
@@ -99,8 +100,8 @@ function wrapHtml(title, bodyHtml) {
 // ---------------------------------------------------------------------------
 async function _sendEmail({ to, subject, html, text }) {
   if (!transporter) {
-    console.log(`[MOBO Email] DEV mode — to: ${to} | subject: ${subject}`);
-    if (text) console.log(`[MOBO Email] Body: ${text}`);
+    logger.info(`[MOBO Email] DEV mode — to: ${to} | subject: ${subject}`);
+    if (text) logger.info(`[MOBO Email] Body: ${text}`);
     return { success: true, mock: true };
   }
 
@@ -114,7 +115,7 @@ async function _sendEmail({ to, subject, html, text }) {
     });
     return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error('[MOBO Email] Send error:', err.message);
+    logger.error('[MOBO Email] Send error:', err.message);
     return { success: false, error: err.message };
   }
 }

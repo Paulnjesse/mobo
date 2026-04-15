@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * backgroundCheckController.js
  * Driver background check management — admin-only endpoints + scheduled cleanup.
@@ -78,7 +79,7 @@ const updateBackgroundCheck = async (req, res) => {
       data: result.rows[0]
     });
   } catch (err) {
-    console.error('[BackgroundCheck updateBackgroundCheck]', err);
+    logger.error('[BackgroundCheck updateBackgroundCheck]', err);
     return res.status(500).json({ success: false, message: 'Failed to update background check' });
   }
 };
@@ -128,7 +129,7 @@ const getExpiredBackgroundChecks = async (req, res) => {
       data: result.rows
     });
   } catch (err) {
-    console.error('[BackgroundCheck getExpiredBackgroundChecks]', err);
+    logger.error('[BackgroundCheck getExpiredBackgroundChecks]', err);
     return res.status(500).json({ success: false, message: 'Failed to retrieve expired background checks' });
   }
 };
@@ -152,12 +153,12 @@ const markBackgroundCheckExpired = async () => {
     );
 
     if (result.rows.length > 0) {
-      console.log(
+      logger.info(
         `[BackgroundCheck] Auto-expired ${result.rows.length} driver background check(s)`
       );
     }
   } catch (err) {
-    console.warn('[BackgroundCheck markBackgroundCheckExpired]', err.message);
+    logger.warn('[BackgroundCheck markBackgroundCheckExpired]', err.message);
   }
 };
 

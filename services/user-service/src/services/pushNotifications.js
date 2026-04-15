@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * MOBO Push Notification Service — user-service
  * Sends push notifications via Expo Push Notification API.
@@ -25,7 +26,7 @@ async function sendPushNotification(expoPushToken, title, body, data = {}) {
   }
 
   if (!Expo.isExpoPushToken(expoPushToken)) {
-    console.warn(`[PushNotification] Invalid Expo push token: ${expoPushToken}`);
+    logger.warn(`[PushNotification] Invalid Expo push token: ${expoPushToken}`);
     return { success: false, error: 'Invalid Expo push token' };
   }
 
@@ -45,7 +46,7 @@ async function sendPushNotification(expoPushToken, title, body, data = {}) {
       const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
       ticket = ticketChunk[0];
       if (ticket.status === 'error') {
-        console.error('[PushNotification] Ticket error:', ticket.message, ticket.details);
+        logger.error('[PushNotification] Ticket error:', ticket.message, ticket.details);
         if (ticket.details?.error === 'DeviceNotRegistered') {
           // Token is no longer valid — remove it so we never send to it again
           _removeStalePushToken(expoPushToken).catch(() => {});
@@ -62,12 +63,12 @@ async function sendPushNotification(expoPushToken, title, body, data = {}) {
       );
     } catch (dbErr) {
       // Non-fatal — don't fail the send just because DB write failed
-      console.warn('[PushNotification] DB persist error:', dbErr.message);
+      logger.warn('[PushNotification] DB persist error:', dbErr.message);
     }
 
     return { success: true, ticket };
   } catch (err) {
-    console.error('[PushNotification] Send error:', err.message);
+    logger.error('[PushNotification] Send error:', err.message);
     return { success: false, error: err.message };
   }
 }
@@ -92,7 +93,7 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
   const invalidCount = tokens.length - validTokens.length;
 
   if (invalidCount > 0) {
-    console.warn(`[PushNotification] ${invalidCount} invalid token(s) skipped`);
+    logger.warn(`[PushNotification] ${invalidCount} invalid token(s) skipped`);
   }
 
   if (validTokens.length === 0) {
@@ -119,7 +120,7 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
           sent++;
         } else {
           errors++;
-          console.error('[PushNotification] Bulk ticket error:', ticket.message);
+          logger.error('[PushNotification] Bulk ticket error:', ticket.message);
           if (ticket.details?.error === 'DeviceNotRegistered') {
             const staleToken = chunk[idx]?.to;
             if (staleToken) _removeStalePushToken(staleToken).catch(() => {});
@@ -127,7 +128,7 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
         }
       });
     } catch (err) {
-      console.error('[PushNotification] Bulk chunk error:', err.message);
+      logger.error('[PushNotification] Bulk chunk error:', err.message);
       errors += chunk.length;
     }
   }
@@ -144,7 +145,7 @@ async function sendBulkNotifications(tokens, title, body, data = {}) {
       ]
     );
   } catch (dbErr) {
-    console.warn('[PushNotification] Bulk DB persist error:', dbErr.message);
+    logger.warn('[PushNotification] Bulk DB persist error:', dbErr.message);
   }
 
   return { success: errors === 0, sent, errors };
@@ -169,7 +170,7 @@ async function _removeStalePushToken(token) {
     );
     console.info(`[PushNotification] Removed stale token: ${token.slice(0, 30)}...`);
   } catch (err) {
-    console.warn('[PushNotification] Failed to remove stale token:', err.message);
+    logger.warn('[PushNotification] Failed to remove stale token:', err.message);
   }
 }
 

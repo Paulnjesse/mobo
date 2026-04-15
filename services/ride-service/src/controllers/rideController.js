@@ -5,6 +5,7 @@ const cache = require('../utils/cache');
 const { enqueueFraudCheck } = require('../queues/fraudQueue');
 const { isEnabled } = require('../../../shared/featureFlags');
 const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/currencyUtil');
+const logger = require('../utils/logger');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -294,7 +295,7 @@ const reportLostItem = async (req, res) => {
         }
       }
     } catch (notifyErr) {
-      console.warn('[LostAndFound] Driver notification error:', notifyErr.message);
+      logger.warn('[LostAndFound] Driver notification error:', notifyErr.message);
     }
 
     res.status(201).json({ report: result.rows[0] });
@@ -634,7 +635,7 @@ const requestRide = async (req, res) => {
           commuterDiscount = Math.round(fareCalc.total * (pass.discount_percent / 100));
           fareCalc = { ...fareCalc, total: fareCalc.total - commuterDiscount };
         }
-      } catch (passErr) { console.warn('[CommuterPass]', passErr.message); }
+      } catch (passErr) { logger.warn('[CommuterPass]', passErr.message); }
     }
 
     // Validate price lock server-side: look up the stored lock record rather than
@@ -871,23 +872,25 @@ const getFare = async (req, res) => {
 };
 
 const acceptRide = async (req, res) => {
+  // All eligibility checks and the status update run inside a single transaction
+  // with a row-level lock (FOR UPDATE) on the ride row.  This eliminates the
+  // TOCTOU race where two drivers could both read status='requested', pass all
+  // checks, and both execute the UPDATE — the second driver now waits for the
+  // first transaction to commit and then finds status='accepted', returning 409.
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const driverUserId = req.headers['x-user-id'];
 
-    const driverResult = await pool.query('SELECT id FROM drivers WHERE user_id = $1 AND is_approved = true', [driverUserId]);
+    const driverResult = await client.query(
+      'SELECT id, ar_suspended_until FROM drivers WHERE user_id = $1 AND is_approved = true',
+      [driverUserId]
+    );
     if (!driverResult.rows[0]) return res.status(403).json({ error: 'Not an approved driver' });
     const driverId = driverResult.rows[0].id;
 
-    const ride = await pool.query('SELECT * FROM rides WHERE id = $1 AND status = $2', [id, 'requested']);
-    if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not available' });
-
-    // ── AR suspension check: blocked drivers cannot accept rides ──────────
-    const arCheck = await pool.query(
-      'SELECT ar_suspended_until FROM drivers WHERE id = $1',
-      [driverId]
-    );
-    const suspendedUntil = arCheck.rows[0]?.ar_suspended_until;
+    // ── AR suspension check ────────────────────────────────────────────────
+    const suspendedUntil = driverResult.rows[0].ar_suspended_until;
     if (suspendedUntil && new Date(suspendedUntil) > new Date()) {
       return res.status(403).json({
         error: `Your account is temporarily suspended due to low acceptance rate. Suspension lifts at ${new Date(suspendedUntil).toLocaleString()}.`,
@@ -895,45 +898,62 @@ const acceptRide = async (req, res) => {
       });
     }
 
+    await client.query('BEGIN');
+
+    // Lock the ride row — any concurrent acceptRide call blocks here until
+    // this transaction commits or rolls back.
+    const ride = await client.query(
+      'SELECT * FROM rides WHERE id = $1 AND status = $2 FOR UPDATE',
+      [id, 'requested']
+    );
+    if (!ride.rows[0]) {
+      await client.query('ROLLBACK');
+      // Could be 404 (never existed) or 409 (just accepted by another driver)
+      return res.status(409).json({ error: 'Ride is no longer available' });
+    }
+
     // ── WAV: only wheelchair-accessible vehicles may accept WAV rides ─────
     if (ride.rows[0].ride_type === 'wav') {
-      const wavCheck = await pool.query(
+      const wavCheck = await client.query(
         `SELECT is_wheelchair_accessible FROM vehicles
          WHERE id = (SELECT vehicle_id FROM drivers WHERE id = $1)`,
         [driverId]
       );
       if (!wavCheck.rows[0]?.is_wheelchair_accessible) {
+        await client.query('ROLLBACK');
         return res.status(403).json({ error: 'This ride requires a wheelchair accessible vehicle.' });
       }
     }
 
     // ── EV: only electric vehicles may accept EV rides ────────────────────
     if (ride.rows[0].ride_type === 'ev') {
-      const evCheck = await pool.query(
+      const evCheck = await client.query(
         `SELECT is_electric FROM vehicles
          WHERE id = (SELECT vehicle_id FROM drivers WHERE id = $1)`,
         [driverId]
       );
       if (!evCheck.rows[0]?.is_electric) {
+        await client.query('ROLLBACK');
         return res.status(403).json({ error: 'This is an EV-only ride. Only electric vehicles may accept it.' });
       }
     }
 
     // ── Women+ Connect: enforce gender preference or women ride type ──────────
     const rideType = ride.rows[0].ride_type;
-    const riderPref = await pool.query(
+    const riderPref = await client.query(
       'SELECT gender_preference FROM users WHERE id = $1',
       [ride.rows[0].rider_id]
     );
     const needsWomenDriver = rideType === 'women' || riderPref.rows[0]?.gender_preference === 'women_nonbinary';
     if (needsWomenDriver) {
-      const driverGender = await pool.query(
+      const driverGender = await client.query(
         `SELECT u.gender FROM users u JOIN drivers d ON d.user_id = u.id WHERE d.id = $1`,
         [driverId]
       );
       const g = (driverGender.rows[0]?.gender || '').toLowerCase();
       const womenAllowed = ['female', 'woman', 'non_binary', 'nonbinary', 'non-binary'];
       if (!womenAllowed.includes(g)) {
+        await client.query('ROLLBACK');
         return res.status(403).json({
           error: rideType === 'women'
             ? 'This is a Women+ ride. Only women and non-binary drivers may accept it.'
@@ -944,15 +964,22 @@ const acceptRide = async (req, res) => {
 
     const { randomInt } = require('crypto');
     const otp = randomInt(1000, 10000).toString();
-    const result = await pool.query(
+    const result = await client.query(
       `UPDATE rides SET driver_id = $1, status = 'accepted', pickup_otp = $2,
        accepted_at = NOW(), updated_at = NOW()
-       WHERE id = $3 RETURNING *`,
+       WHERE id = $3 AND status = 'requested' RETURNING *`,
       [driverId, otp, id]
     );
+    // Defensive check: another transaction won the race between our FOR UPDATE
+    // and this UPDATE (should not happen with FOR UPDATE, but be explicit)
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Ride is no longer available' });
+    }
 
-    // Update driver streak + acceptance rate tracking
-    await pool.query(
+    // Update driver streak + acceptance rate (inside transaction so it rolls back
+    // if the ride UPDATE above somehow fails)
+    await client.query(
       `UPDATE drivers SET
          current_streak         = current_streak + 1,
          streak_started_at      = COALESCE(streak_started_at, NOW()),
@@ -967,6 +994,8 @@ const acceptRide = async (req, res) => {
       [driverId]
     );
 
+    await client.query('COMMIT');
+
     // ── Fraud: collusion check (durable BullMQ job, non-blocking) ───────────
     // Previously used setImmediate — lost on process restart. BullMQ persists
     // the job in Redis and retries on ML-service failure (2 attempts, exp back-off).
@@ -976,7 +1005,7 @@ const acceptRide = async (req, res) => {
       // so PII (UUIDs, IP addresses) is never stored in Redis queue payloads.
       enqueueFraudCheck('collusion', {
         rideId: acceptedRide.id,
-      }).catch((err) => console.error('[AcceptRide FraudCheck] Enqueue failed:', err.message));
+      }).catch((err) => logger.error('[AcceptRide FraudCheck] Enqueue failed', { err: err.message }));
     }
 
     // Push notification to rider: driver accepted
@@ -1010,7 +1039,7 @@ const acceptRide = async (req, res) => {
         });
       }
     } catch (pnErr) {
-      console.warn('[AcceptRide PushNotification]', pnErr.message);
+      logger.warn('[AcceptRide PushNotification]', pnErr.message);
     }
 
     // Enrich response:
@@ -1043,7 +1072,12 @@ const acceptRide = async (req, res) => {
       rider_verified_at: rider.rider_verified_at || null,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Roll back if we're inside a transaction (client may have been released already)
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    logger.error('[AcceptRide] Error', { err: err.message });
+    res.status(500).json({ error: 'Failed to accept ride' });
+  } finally {
+    client.release();
   }
 };
 
@@ -1111,7 +1145,7 @@ const updateRideStatus = async (req, res) => {
           });
         }
       } catch (arrErr) {
-        console.warn('[ArrivalNotification]', arrErr.message);
+        logger.warn('[ArrivalNotification]', arrErr.message);
       }
     }
 
@@ -1142,7 +1176,7 @@ const updateRideStatus = async (req, res) => {
           }
         }
       } catch (pnErr) {
-        console.warn('[InProgressPushNotification]', pnErr.message);
+        logger.warn('[InProgressPushNotification]', pnErr.message);
       }
 
       // ── Waiting time charge ──────────────────────────────────────────────
@@ -1164,7 +1198,7 @@ const updateRideStatus = async (req, res) => {
           }
         }
       } catch (waitErr) {
-        console.warn('[WaitingFee]', waitErr.message);
+        logger.warn('[WaitingFee]', waitErr.message);
       }
 
       // Auto-notify trusted contacts with SMS + share link
@@ -1228,7 +1262,7 @@ const updateRideStatus = async (req, res) => {
           }
         }
       } catch (notifyErr) {
-        console.warn('[TrustedContact Notify]', notifyErr.message);
+        logger.warn('[TrustedContact Notify]', notifyErr.message);
       }
     }
 
@@ -1236,72 +1270,78 @@ const updateRideStatus = async (req, res) => {
       const ride = result.rows[0];
       const finalFare = ride.estimated_fare || 0;
       const serviceFee = ride.service_fee || 0;
-      await pool.query(
-        `UPDATE rides SET final_fare = $1 WHERE id = $2`,
-        [finalFare, id]
-      );
 
-      // ── Fraud: fare manipulation check (durable BullMQ job, non-blocking) ──
-      // Enqueued to Redis; retried automatically if ML service is temporarily down.
-      // driverId is intentionally omitted — the worker resolves it from DB to
-      // avoid storing PII in Redis queue payloads.
-      if (isEnabled('fraud_detection_v1')) {
-        enqueueFraudCheck('fare_manipulation', {
-          rideId:        id,
-          estimatedFare: ride.estimated_fare,
-          finalFare,
-        }).catch((err) => console.error('[UpdateRideStatus FareCheck] Enqueue failed:', err.message));
-      }
-
-      // Give loyalty points: 1 point per 100 XAF
-      const points = Math.floor(finalFare / 100);
-      await pool.query(
-        `UPDATE users SET loyalty_points = loyalty_points + $1, total_rides = total_rides + 1 WHERE id = $2`,
-        [points, ride.rider_id]
-      );
-      // Driver earnings
-      const driverEarning = finalFare - serviceFee;
-      await pool.query(
-        `UPDATE drivers SET total_earnings = total_earnings + $1 WHERE id = $2`,
-        [driverEarning, ride.driver_id]
-      );
-      // Increment driver's trip counter for fatigue tracking
-      await pool.query(
-        'UPDATE drivers SET total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $1',
-        [ride.driver_id]
-      );
-
-      // ── Referral qualification: pay referrer on rider's first completed ride ──
+      // ── Wrap all financial mutations in a single transaction ──────────────
+      // If any step fails (e.g. loyalty points update), ALL are rolled back so
+      // the ride is not left in a partially-settled state.
+      const completionClient = await pool.connect();
       try {
-        const riderRideCount = await pool.query(
+        await completionClient.query('BEGIN');
+
+        await completionClient.query(
+          `UPDATE rides SET final_fare = $1 WHERE id = $2`,
+          [finalFare, id]
+        );
+
+        // Loyalty points: 1 point per 100 XAF
+        const points = Math.floor(finalFare / 100);
+        await completionClient.query(
+          `UPDATE users SET loyalty_points = loyalty_points + $1, total_rides = total_rides + 1 WHERE id = $2`,
+          [points, ride.rider_id]
+        );
+
+        // Driver earnings
+        const driverEarning = finalFare - serviceFee;
+        await completionClient.query(
+          `UPDATE drivers SET total_earnings = total_earnings + $1,
+           total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $2`,
+          [driverEarning, ride.driver_id]
+        );
+
+        // Referral qualification: pay referrer on rider's first completed ride
+        const riderRideCount = await completionClient.query(
           `SELECT COUNT(*) FROM rides WHERE rider_id = $1 AND status = 'completed'`,
           [ride.rider_id]
         );
         if (parseInt(riderRideCount.rows[0].count) === 1) {
-          const referral = await pool.query(
+          const referral = await completionClient.query(
             `SELECT * FROM referrals WHERE referred_id = $1 AND status = 'pending'`,
             [ride.rider_id]
           );
           if (referral.rows[0]) {
-            await pool.query(
+            await completionClient.query(
               `UPDATE referrals SET status = 'paid', qualified_at = NOW(), paid_at = NOW() WHERE id = $1`,
               [referral.rows[0].id]
             );
-            await pool.query(
+            await completionClient.query(
               `UPDATE users SET referral_credits = referral_credits + 1000,
                wallet_balance = wallet_balance + 1000 WHERE id = $1`,
               [referral.rows[0].referrer_id]
             );
           }
         }
-      } catch (refErr) {
-        console.warn('[Referral] qualify error:', refErr.message);
+
+        await completionClient.query('COMMIT');
+      } catch (txErr) {
+        await completionClient.query('ROLLBACK');
+        logger.error('[UpdateRideStatus] Completion transaction failed', { rideId: id, err: txErr.message });
+        // Non-fatal: ride status is already set to completed above; log and continue
+      } finally {
+        completionClient.release();
+      }
+
+      // ── Fraud: fare manipulation check (durable BullMQ job, non-blocking) ──
+      if (isEnabled('fraud_detection_v1')) {
+        enqueueFraudCheck('fare_manipulation', {
+          rideId:        id,
+          estimatedFare: ride.estimated_fare,
+          finalFare,
+        }).catch((err) => logger.error('[UpdateRideStatus FareCheck] Enqueue failed', { err: err.message }));
       }
 
       // ── Driver challenge progress: increment rides_count challenges ──────────
       try {
         const driverId = ride.driver_id;
-        // Increment rides_count challenges
         await pool.query(
           `UPDATE driver_challenge_progress dcp
            SET current_value = dcp.current_value + 1
@@ -1314,7 +1354,6 @@ const updateRideStatus = async (req, res) => {
              AND dcp.completed = false`,
           [driverId]
         );
-        // Mark newly completed challenges
         await pool.query(
           `UPDATE driver_challenge_progress dcp
            SET completed = true, completed_at = NOW()
@@ -1325,7 +1364,6 @@ const updateRideStatus = async (req, res) => {
              AND dcp.completed = false`,
           [driverId]
         );
-        // Auto-pay completed bonuses
         const pendingBonuses = await pool.query(
           `SELECT dcp.id, bc.bonus_amount
            FROM driver_challenge_progress dcp
@@ -1349,7 +1387,7 @@ const updateRideStatus = async (req, res) => {
           );
         }
       } catch (bonusErr) {
-        console.warn('[Bonus] progress update error:', bonusErr.message);
+        logger.warn('[Bonus] progress update error', { err: bonusErr.message });
       }
 
       // ── Commuter pass: consume one ride ──────────────────────────────────
@@ -1358,7 +1396,7 @@ const updateRideStatus = async (req, res) => {
           const { consumePassRide } = require('./commuterPassController');
           await consumePassRide(ride.commuter_pass_id);
         }
-      } catch (passErr) { console.warn('[CommuterPass consume]', passErr.message); }
+      } catch (passErr) { logger.warn('[CommuterPass consume]', { err: passErr.message }); }
 
       // ── Push notification: ride completed ────────────────────────────────
       try {
@@ -1378,7 +1416,7 @@ const updateRideStatus = async (req, res) => {
           });
         }
       } catch (pnErr) {
-        console.warn('[CompletedPushNotification]', pnErr.message);
+        logger.warn('[CompletedPushNotification]', pnErr.message);
       }
 
       // ── Send ride receipt email ──────────────────────────────────────────
@@ -1413,7 +1451,7 @@ const updateRideStatus = async (req, res) => {
           });
         }
       } catch (emailErr) {
-        console.warn('[ReceiptEmail]', emailErr.message);
+        logger.warn('[ReceiptEmail]', emailErr.message);
       }
     }
 
@@ -1545,7 +1583,7 @@ const cancelRide = async (req, res) => {
           ]
         );
       } catch (feeErr) {
-        console.warn('[CancelFee] charge error:', feeErr.message);
+        logger.warn('[CancelFee] charge error:', feeErr.message);
       }
     }
 
@@ -1587,7 +1625,7 @@ const cancelRide = async (req, res) => {
         }
       }
     } catch (pnErr) {
-      console.warn('[CancelPushNotification]', pnErr.message);
+      logger.warn('[CancelPushNotification]', pnErr.message);
     }
 
     res.json({
@@ -1739,7 +1777,7 @@ const rateRide = async (req, res) => {
             [JSON.stringify({ rider_id: raterId, consecutive_count: 5 })]
           );
 
-          console.log('[RatingAbuse] Flagged rider:', raterId);
+          logger.info('[RatingAbuse] Flagged rider:', raterId);
         } else {
           // Update consecutive counter (reset if they gave > 1 star)
           const latestRating = recentRatings.rows[0]?.rating;
@@ -1751,7 +1789,7 @@ const rateRide = async (req, res) => {
           }
         }
       } catch (abuseErr) {
-        console.warn('[RatingAbuse]', abuseErr.message);
+        logger.warn('[RatingAbuse]', abuseErr.message);
       }
     }
 
