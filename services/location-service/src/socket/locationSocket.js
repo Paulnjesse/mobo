@@ -1,10 +1,42 @@
 'use strict';
 const logger = require('../utils/logger');
 
-
 const { verifyJwt } = require('../../../shared/jwtUtil');
 const db    = require('../config/database');
 const cache = require('../../../shared/redis');
+
+// ── Africa network optimisation — server-side location throttle ───────────────
+// Problem: GPS hardware fires at 1 Hz (every second). Broadcasting every update
+// would mean ~3,600 DB writes/hour per driver and constant WebSocket traffic —
+// catastrophic on 3G where each socket frame costs real bandwidth.
+//
+// Solution: enforce a server-side minimum interval between accepted updates.
+// The client can still emit at 1 Hz for GPS accuracy; we silently drop frames
+// that arrive too soon.  The client never needs to know or change its code.
+//
+// Intervals by ride phase (set via socket event or inferred from speed):
+//   Active ride   : 4 s  — smooth enough for the rider's tracking map
+//   Searching/idle: 8 s  — driver is stopped or slow-moving; less urgency
+//
+// At 4 s: 900 updates/hr/driver  (vs 3,600 unthrottled) — 75% reduction
+// At 8 s: 450 updates/hr/driver — 87.5% reduction
+const THROTTLE_ACTIVE_MS = 4_000;  // 4 seconds — driver in a live ride
+const THROTTLE_IDLE_MS   = 8_000;  // 8 seconds — driver searching/offline
+const _lastUpdateMs      = new Map(); // driverId → last accepted timestamp (ms)
+
+function shouldThrottle(driverId, isActive) {
+  const intervalMs = isActive ? THROTTLE_ACTIVE_MS : THROTTLE_IDLE_MS;
+  const last = _lastUpdateMs.get(driverId) || 0;
+  const now  = Date.now();
+  if (now - last < intervalMs) return true;  // drop this frame
+  _lastUpdateMs.set(driverId, now);
+  return false;
+}
+
+// Cleanup throttle map when driver disconnects (prevents memory leak)
+function clearDriverThrottle(driverId) {
+  _lastUpdateMs.delete(driverId);
+}
 
 // Driver location cache TTL — 60 seconds.
 // If a driver stops emitting (disconnect, crash), their entry expires naturally.
@@ -145,12 +177,19 @@ function initLocationSocket(io) {
       }
 
       const { latitude, longitude, heading, speed, accuracy, timestamp,
-              dropoff_lat, dropoff_lng } = data;
+              dropoff_lat, dropoff_lng,
+              is_active_ride } = data;  // client may hint whether a ride is in progress
       if (latitude == null || longitude == null) {
         return socket.emit('error', { message: 'update_location requires latitude and longitude' });
       }
 
       const driverId = String(socket.user.id);
+
+      // ── Africa throttle — drop frames that arrive too fast ────────────────
+      // Protects DB, Redis, and downstream WebSocket bandwidth on 3G networks.
+      // We use is_active_ride from the payload if provided, otherwise assume idle.
+      const isActive = !!is_active_ride;
+      if (shouldThrottle(driverId, isActive)) return; // silently drop — no error to client
 
       // SEC-003: Enforce GDPR location_tracking consent before recording GPS data.
       // Drivers must have granted location_tracking consent (Article 6 lawful basis).
@@ -374,6 +413,7 @@ function initLocationSocket(io) {
         if (stored === socket.id) {
           driverSockets.delete(String(userId));
           onlineDrivers.delete(String(userId));
+          clearDriverThrottle(String(userId)); // free throttle memory
           // Evict from Redis cache — driver is no longer streaming location
           cacheDelDriverLocation(String(userId)).catch(() => {});
 

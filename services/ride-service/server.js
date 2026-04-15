@@ -25,6 +25,7 @@ if (process.env.NODE_ENV === 'production') {
 
 const http = require('http');
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -44,6 +45,9 @@ const { startFraudWorker }            = require('./src/queues/fraudWorker');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
+
+// Gzip/Brotli compression — reduces JSON payloads ~70% on slow 3G connections
+app.use(compression({ threshold: 512 })); // only compress responses > 512 bytes
 app.use(requestId);
 app.use(Sentry.Handlers.requestHandler());
 const PORT = process.env.PORT || 3002;

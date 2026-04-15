@@ -4,6 +4,21 @@ const logger = require('../utils/logger');
 const { verifyJwt } = require('../../../shared/jwtUtil');
 const db = require('../config/database');
 
+// ── Africa network optimisation — in-ride location throttle ──────────────────
+// GPS fires at 1 Hz; broadcasting at 1 Hz to riders during a live ride costs
+// ~3,600 WebSocket frames/hr/driver on already-congested 3G connections.
+// 4-second minimum keeps the rider's map smooth without flooding the network.
+const RIDE_LOC_THROTTLE_MS = 4_000;
+const _rideLocLastMs = new Map(); // driverId → last broadcast timestamp
+
+function shouldThrottleRideLoc(driverId) {
+  const last = _rideLocLastMs.get(driverId) || 0;
+  const now  = Date.now();
+  if (now - last < RIDE_LOC_THROTTLE_MS) return true;
+  _rideLocLastMs.set(driverId, now);
+  return false;
+}
+
 /**
  * Map of rideId -> Set of socketIds currently in that ride room.
  * Used for diagnostics and targeted broadcasts.
@@ -131,6 +146,10 @@ function initRideSocket(io) {
         return socket.emit('error', { message: 'Only drivers may emit driver_location_update' });
       }
 
+      // Africa throttle: drop frames < 4 s apart — client doesn't need to change
+      const driverId = String(socket.user.id);
+      if (shouldThrottleRideLoc(driverId)) return;
+
       const payload = {
         rideId,
         latitude,
@@ -138,7 +157,7 @@ function initRideSocket(io) {
         heading: heading ?? null,
         speed: speed ?? null,
         timestamp: timestamp || Date.now(),
-        driverId: String(socket.user.id),
+        driverId,
       };
 
       // Broadcast to everyone in the ride room EXCEPT the driver themselves

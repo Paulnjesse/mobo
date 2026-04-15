@@ -25,11 +25,13 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { globalLimiter } = require('./src/middleware/rateLimit');
 const routes = require('./src/routes/index');
+const { cacheHeaders } = require('./src/middleware/cacheHeaders');
 const requestId = require('./src/middleware/requestId');
 const { getAllServiceHealth } = require('./src/middleware/serviceCircuitBreaker');
 const { initFeatureFlags, destroyFeatureFlags } = require('../services/shared/featureFlags');
@@ -37,6 +39,9 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./src/swagger');
 
 const app = express();
+
+// Gzip/Brotli compression — reduces JSON payloads ~70% on slow 3G connections
+app.use(compression({ threshold: 512 })); // only compress responses > 512 bytes
 app.use(requestId);
 app.use(Sentry.Handlers.requestHandler());
 const PORT = process.env.PORT || 3000;
@@ -211,6 +216,12 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   swaggerOptions: { persistAuthorization: true },
 }));
 app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
+
+// ============================================================
+// Cache-Control headers (Africa bandwidth optimisation)
+// ============================================================
+// Applied before proxy routes so headers are set on every outgoing response.
+app.use(cacheHeaders);
 
 // ============================================================
 // Proxy Routes

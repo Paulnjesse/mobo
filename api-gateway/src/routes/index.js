@@ -30,8 +30,26 @@ const stripTrustedHeaders = (req, _res, next) => {
 };
 
 // ─── Proxy factory ────────────────────────────────────────────────────────────
-function proxy(target, rewrite) {
-  return createProxyMiddleware({ target, changeOrigin: true, pathRewrite: rewrite, on: { error: onError } });
+// Africa 3G tuning:
+//   proxyTimeout  — how long the gateway waits for the downstream service to
+//                   respond.  Default Node http is 0 (infinite).  We set 20 s
+//                   for normal routes; payment routes get 30 s (mobile money
+//                   APIs in West Africa often take 10–15 s to settle).
+//   timeout       — Express req timeout before gateway gives up.
+//                   Slightly longer than proxyTimeout so the proxy has time to
+//                   return a structured error instead of a silent TCP hang.
+function proxy(target, rewrite, timeoutMs = 20_000) {
+  return createProxyMiddleware({
+    target,
+    changeOrigin: true,
+    pathRewrite: rewrite,
+    proxyTimeout: timeoutMs,
+    timeout:      timeoutMs + 2_000,
+    on: { error: onError },
+  });
+}
+function paymentProxy(target, rewrite) {
+  return proxy(target, rewrite, 30_000); // mobile money APIs can take 15 s
 }
 
 // Pass context as first arg — Express does NOT strip the prefix,
@@ -70,8 +88,8 @@ module.exports = (app) => {
   app.use('/api/disputes',    rideCB,  verifyToken,                      proxy(RIDE_SERVICE,     { '^/api/disputes':    '/rides/disputes' }));
   app.use('/api/v1/disputes', rideCB,  verifyToken,                      proxy(RIDE_SERVICE,     { '^/api/v1/disputes': '/rides/disputes' }));
 
-  app.use('/api/payments',    paymentCB, verifyToken, paymentLimiter,    proxy(PAYMENT_SERVICE, { '^/api/payments':    '/payments' }));
-  app.use('/api/v1/payments', paymentCB, verifyToken, paymentLimiter,    proxy(PAYMENT_SERVICE, { '^/api/v1/payments': '/payments' }));
+  app.use('/api/payments',    paymentCB, verifyToken, paymentLimiter,    paymentProxy(PAYMENT_SERVICE, { '^/api/payments':    '/payments' }));
+  app.use('/api/v1/payments', paymentCB, verifyToken, paymentLimiter,    paymentProxy(PAYMENT_SERVICE, { '^/api/v1/payments': '/payments' }));
 
   app.use('/api/location',       locationCB, verifyToken, locationLimiter, proxy(LOCATION_SERVICE, { '^/api/location':       '/location'         }));
   app.use('/api/v1/location',    locationCB, verifyToken, locationLimiter, proxy(LOCATION_SERVICE, { '^/api/v1/location':    '/location'         }));

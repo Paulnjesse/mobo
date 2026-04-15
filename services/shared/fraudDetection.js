@@ -17,10 +17,12 @@ const logger = require('./logger');
  *   POST /score/collusion  — Ride collusion (Random Forest)
  */
 
-const axios = require('axios');
+const { axiosAfrica } = require('./networkResilience');
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://ml-service:8000';
-const ML_TIMEOUT_MS  = parseInt(process.env.ML_TIMEOUT_MS || '800', 10);  // fast path — reject if >800ms
+// Africa 3G: ML service cold-start on Render can take 2–3 s after spin-down.
+// Allow 5 s before falling back to rule-based checks (was 800 ms — too aggressive).
+const ML_TIMEOUT_MS  = parseInt(process.env.ML_TIMEOUT_MS || '5000', 10);
 
 // Lazy-load pg pool — each service provides DATABASE_URL in its env
 let _pool = null;
@@ -67,7 +69,9 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 
 async function callML(endpoint, payload) {
   try {
-    const res = await axios.post(`${ML_SERVICE_URL}${endpoint}`, payload, {
+    // axiosAfrica adds automatic retry (2 attempts, exponential back-off) for
+    // transient 3G failures and Render cold-start delays.
+    const res = await axiosAfrica.post(`${ML_SERVICE_URL}${endpoint}`, payload, {
       timeout: ML_TIMEOUT_MS,
       headers: {
         'Content-Type': 'application/json',
@@ -76,7 +80,7 @@ async function callML(endpoint, payload) {
     });
     return res.data;
   } catch (err) {
-    // ML service unavailable — fall back to rule-based
+    // ML service unavailable after retries — fall back to rule-based checks
     if (process.env.NODE_ENV === 'production') {
       logger.warn(`[FraudDetection] ML service unavailable (${endpoint}):`, err.message);
     }
