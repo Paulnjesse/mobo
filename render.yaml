@@ -155,7 +155,7 @@ services:
       - key: APPLE_KEY_ID
         sync: false
       - key: CORS_ORIGIN
-        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
+        value: https://api.moboride.com,https://app.moboride.com,https://moboride.com
 
   # ── Ride Service ──────────────────────────────────────────────────────────────
   - type: web
@@ -190,7 +190,7 @@ services:
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: SOCKET_CORS_ORIGIN
-        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
+        value: https://api.moboride.com,https://app.moboride.com,https://moboride.com
 
   # ── Payment Service ───────────────────────────────────────────────────────────
   - type: web
@@ -235,7 +235,7 @@ services:
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
-        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
+        value: https://api.moboride.com,https://app.moboride.com,https://moboride.com
 
   # ── Location Service ──────────────────────────────────────────────────────────
   - type: web
@@ -266,7 +266,7 @@ services:
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
-        value: https://mobo-api-gateway.onrender.com,https://mobo.cm,https://app.mobo.cm
+        value: https://api.moboride.com,https://app.moboride.com,https://moboride.com
 
   # ── API Gateway ───────────────────────────────────────────────────────────────
   - type: web
@@ -277,6 +277,9 @@ services:
     buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /health
+    # Custom domain: api.moboride.com → CNAME mobo-api-gateway.onrender.com
+    domains:
+      - api.moboride.com
     scaling:
       minInstances: 2
       maxInstances: 8
@@ -299,7 +302,7 @@ services:
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
-        value: https://mobo.cm,https://app.mobo.cm,https://admin.mobo.cm
+        value: https://moboride.com,https://www.moboride.com,https://app.moboride.com,https://admin.moboride.com
 
   # ── ML Fraud Detection Service ────────────────────────────────────────────────
   - name: mobo-ml-service
@@ -322,8 +325,11 @@ services:
     runtime: docker
     rootDir: admin
     healthCheckPath: /
+    # Custom domain: admin.moboride.com → CNAME mobo-admin.onrender.com
+    domains:
+      - admin.moboride.com
     envVars:
       - key: REACT_APP_API_URL
-        value: https://mobo-api-gateway.onrender.com/api
+        value: https://api.moboride.com/api
       - key: REACT_APP_STRIPE_PUBLISHABLE_KEY
         sync: false

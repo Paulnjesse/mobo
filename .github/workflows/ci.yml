@@ -1233,7 +1233,7 @@ jobs:
     if: needs.deploy-gate.outputs.authorized == 'true'
     environment:
       name: production
-      url: https://mobo-api-gateway.onrender.com
+      url: https://api.moboride.com
     steps:
       - uses: actions/checkout@v4
 
@@ -1274,7 +1274,7 @@ jobs:
 
           echo "Checking service health..."
           SERVICES=(
-            "https://mobo-api-gateway.onrender.com/health"
+            "https://api.moboride.com/health"
           )
 
           for url in "${SERVICES[@]}"; do
@@ -1300,7 +1300,7 @@ jobs:
 
       - name: Smoke test — health endpoints
         run: |
-          BASE="https://mobo-api-gateway.onrender.com"
+          BASE="https://api.moboride.com"
           FAILED=0
 
           echo "Running post-deploy smoke tests..."
@@ -1323,7 +1323,7 @@ jobs:
       - name: Security headers validation
         run: |
           echo "Validating security response headers..."
-          BASE="https://mobo-api-gateway.onrender.com"
+          BASE="https://api.moboride.com"
 
           HEADERS=$(curl -sI "$BASE/health" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
@@ -1363,7 +1363,7 @@ jobs:
       - name: TLS/SSL grade check
         run: |
           echo "Checking TLS configuration grade..."
-          HOST="mobo-api-gateway.onrender.com"
+          HOST="api.moboride.com"
 
           # Check TLS version — must be 1.2 minimum, prefer 1.3
           TLS_VERSION=$(curl -sv --max-time 15 "https://$HOST/health" 2>&1 | \
@@ -1384,7 +1384,7 @@ jobs:
           echo "  Commit:  ${{ github.sha }}"
           echo "  By:      ${{ github.actor }}"
           echo "  At:      $(date -u '+%Y-%m-%d %H:%M UTC')"
-          echo "  URL:     https://mobo-api-gateway.onrender.com"
+          echo "  URL:     https://api.moboride.com"
           echo "══════════════════════════════════════════════"
 
       - name: Notify on failure (Slack webhook)
