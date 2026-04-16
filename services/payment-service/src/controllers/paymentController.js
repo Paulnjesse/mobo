@@ -451,13 +451,18 @@ const addPaymentMethod = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Card number required' });
       }
       const cleanCard = card_number.replace(/\s/g, '');
-      if (cleanCard.length < 4) {
-        return res.status(400).json({ success: false, message: 'Invalid card number' });
+      // 13–19 digit numeric string (Visa 13/16, Amex 15, Mastercard 16, others up to 19)
+      if (!/^\d{13,19}$/.test(cleanCard)) {
+        return res.status(400).json({ success: false, message: 'Invalid card number — must be 13–19 digits' });
       }
       card_last4 = cleanCard.slice(-4);
     } else {
       if (!phone) {
         return res.status(400).json({ success: false, message: 'Phone number required for mobile money' });
+      }
+      // E.164-style: optional +, 7–15 digits (covers African mobile number formats)
+      if (!/^\+?\d{7,15}$/.test(phone.replace(/[\s\-().]/g, ''))) {
+        return res.status(400).json({ success: false, message: 'Invalid phone number format' });
       }
     }
 

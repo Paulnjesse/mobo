@@ -1,5 +1,5 @@
 'use strict';
-const logger = require('./utils/logger');
+const logger = require('../utils/logger');
 
 /**
  * rbac.js — Granular Role-Based Access Control middleware

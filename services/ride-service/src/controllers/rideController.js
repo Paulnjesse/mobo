@@ -111,6 +111,25 @@ const lockPrice = async (req, res) => {
     const userId = req.headers['x-user-id'];
     const { pickup_location, dropoff_location, pickup_address, dropoff_address, ride_type = 'standard' } = req.body;
 
+    // Validate coordinate ranges when provided
+    if (pickup_location) {
+      const { lat, lng } = pickup_location;
+      if (typeof lat !== 'number' || typeof lng !== 'number' ||
+          lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: 'pickup_location has invalid lat/lng coordinates' });
+      }
+    }
+    if (dropoff_location) {
+      const { lat, lng } = dropoff_location;
+      if (typeof lat !== 'number' || typeof lng !== 'number' ||
+          lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: 'dropoff_location has invalid lat/lng coordinates' });
+      }
+    }
+    if (!RIDE_TYPE_RATES[ride_type]) {
+      return res.status(400).json({ error: `Invalid ride_type. Valid types: ${Object.keys(RIDE_TYPE_RATES).join(', ')}` });
+    }
+
     const userResult = await pool.query('SELECT subscription_plan FROM users WHERE id = $1', [userId]);
     const subscription = userResult.rows[0]?.subscription_plan || 'none';
 
@@ -163,6 +182,12 @@ const triggerCheckin = async (req, res) => {
   try {
     const { ride_id, checkin_type, location, address } = req.body;
     const userId = req.headers['x-user-id'];
+
+    if (!ride_id) return res.status(400).json({ error: 'ride_id is required' });
+    const VALID_CHECKIN_TYPES = ['safety', 'arrival', 'pickup', 'dropoff'];
+    if (!checkin_type || !VALID_CHECKIN_TYPES.includes(checkin_type)) {
+      return res.status(400).json({ error: `checkin_type must be one of: ${VALID_CHECKIN_TYPES.join(', ')}` });
+    }
 
     const result = await pool.query(
       `INSERT INTO ride_checkins (ride_id, user_id, checkin_type, location, address)
@@ -243,6 +268,18 @@ const reportLostItem = async (req, res) => {
   try {
     const { ride_id, item_description, item_category } = req.body;
     const reporterId = req.user.id;
+
+    if (!ride_id) return res.status(400).json({ error: 'ride_id is required' });
+    if (!item_description || typeof item_description !== 'string' || item_description.trim().length < 3) {
+      return res.status(400).json({ error: 'item_description must be at least 3 characters' });
+    }
+    if (item_description.length > 500) {
+      return res.status(400).json({ error: 'item_description must not exceed 500 characters' });
+    }
+    const VALID_CATEGORIES = ['electronics', 'clothing', 'bag', 'document', 'jewellery', 'keys', 'wallet', 'other'];
+    if (item_category && !VALID_CATEGORIES.includes(item_category)) {
+      return res.status(400).json({ error: `item_category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+    }
 
     // Get driver from ride and verify requester was the rider
     const ride = await pool.query(
