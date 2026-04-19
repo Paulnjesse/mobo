@@ -65,7 +65,7 @@ function poolFare(distanceKm, durationMin, riderCount = 1, surgeMultiplier = 1.0
  */
 const requestPoolRide = async (req, res) => {
   try {
-    const riderId = req.headers['x-user-id'];
+    const riderId = String(req.user?.id);
     const {
       pickup_location,
       pickup_address,
@@ -247,7 +247,7 @@ const requestPoolRide = async (req, res) => {
 const getPoolGroup = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const userId      = req.headers['x-user-id'];
+    const userId      = String(req.user?.id);
 
     const groupResult = await pool.query(
       `SELECT pg.*,

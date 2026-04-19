@@ -32,7 +32,7 @@ async function createTwilioProxySession(callerPhone, calleePhone) {
 const initiateCall = async (req, res) => {
   try {
     const { id: rideId } = req.params;
-    const callerId = req.headers['x-user-id'];
+    const callerId = String(req.user?.id);
 
     // Get ride + both parties
     const ride = await pool.query(

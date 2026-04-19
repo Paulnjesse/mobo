@@ -38,7 +38,8 @@ const photoUpload = multer({
 });
 const tcCtrl  = require('../controllers/trustedContactController');
 const bgCtrl  = require('../controllers/backgroundCheckController');
-const { validateProfileUpdate, validateCreateTeenAccount } = require('../middleware/validateProfile');
+const { validateProfileUpdate, validateCreateTeenAccount, validateUpdateLanguage, validateBlockRider, validatePushToken } = require('../middleware/validateProfile');
+const { profileUpdateLimiter, photoUploadLimiter, teenAccountLimiter, loyaltyLimiter, blockLimiter } = require('../middleware/perUserRateLimiter');
 const { getDataExport } = require('../controllers/dataExportController');
 const { requestErasure, executeErasure, listErasureRequests } = require('../controllers/gdprController');
 const { requirePermission } = require('../middleware/rbac');
@@ -53,14 +54,14 @@ router.get('/drivers/background-checks/expired', bgCtrl.getExpiredBackgroundChec
 router.patch('/drivers/:id/background-check',    bgCtrl.updateBackgroundCheck);
 
 router.get('/profile', getProfile);
-router.put('/profile', validateProfileUpdate, updateProfile);
+router.put('/profile', profileUpdateLimiter, validateProfileUpdate, updateProfile);
 // Photo upload: accepts multipart/form-data (field: photo) OR JSON body (image_base64)
-router.post('/profile/photo', photoUpload.single('photo'), uploadProfilePhoto);
+router.post('/profile/photo', photoUploadLimiter, photoUpload.single('photo'), uploadProfilePhoto);
 
-router.post('/teen-account', validateCreateTeenAccount, createTeenAccount);
+router.post('/teen-account', teenAccountLimiter, validateCreateTeenAccount, createTeenAccount);
 router.get('/teen-accounts', getTeenAccounts);
 
-router.put('/language', updateLanguage);
+router.put('/language', validateUpdateLanguage, updateLanguage);
 
 router.delete('/account', deleteAccount);
 
@@ -68,14 +69,14 @@ router.delete('/account', deleteAccount);
 router.get('/data-export', getDataExport);
 
 // Driver specific rider-blocking & appeal
-router.post('/block/:riderId', blockRider);
-router.delete('/block/:riderId', unblockRider);
+router.post('/block/:riderId', blockLimiter, validateBlockRider, blockRider);
+router.delete('/block/:riderId', blockLimiter, unblockRider);
 router.post('/appeal', submitAppeal);
 
 router.get('/notifications', getNotifications);
 router.put('/notifications/:id/read', markNotificationRead);
 
-router.get('/loyalty', getLoyaltyInfo);
+router.get('/loyalty', loyaltyLimiter, getLoyaltyInfo);
 
 // Corporate account routes
 router.post('/corporate', createCorporateAccount);
@@ -88,7 +89,7 @@ router.get('/corporate/rides', getCorporateRides);
 router.get('/subscription', getSubscription);
 
 // Push notification token
-router.put('/push-token', updateExpoPushToken);
+router.put('/push-token', validatePushToken, updateExpoPushToken);
 
 // Trusted contacts
 router.get('/users/me/trusted-contacts', tcCtrl.getTrustedContacts);

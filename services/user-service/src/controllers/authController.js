@@ -11,6 +11,7 @@ const redis = require('../../../shared/redis');
 
 const { signToken, decodeIgnoreExpiry } = require('../../../shared/jwtUtil');
 const audit = require('../../../shared/auditLog');
+const logger = require('../utils/logger');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // OTP rate limiting: max 3 requests per phone per hour

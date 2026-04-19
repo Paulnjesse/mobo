@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const ctrl            = require('../controllers/rideController');
+const { validateRequestRide, validateRateRide, validateSendMessage, validateCancelRide, validateAddTip, validateDispute, validatePoolRequest } = require('../middleware/validators');
+const { rideRequestLimiter, rateLimiter, messageLimiter, disputeLimiter, sosLimiter } = require('../middleware/perUserRateLimiter');
 const disputeCtrl     = require('../controllers/disputeController');
 const shareCtrl       = require('../controllers/shareTripController');
 const recordingCtrl   = require('../controllers/recordingController');
@@ -27,7 +29,7 @@ const inspectionCtrl     = require('../controllers/vehicleInspectionController')
 
 // ── Pool / Carpool ─────────────────────────────────────────────────────────────
 router.get('/pool/estimate',                   authenticate, carpoolCtrl.estimatePoolFare);
-router.post('/pool/request',                   authenticate, carpoolCtrl.requestPoolRide);
+router.post('/pool/request',                   authenticate, validatePoolRequest, carpoolCtrl.requestPoolRide);
 router.get('/pool/groups/:groupId',            authenticate, carpoolCtrl.getPoolGroup);
 router.post('/pool/groups/:groupId/dispatch',  authenticate, carpoolCtrl.dispatchPoolGroup);
 
@@ -167,7 +169,7 @@ router.get('/lost-and-found', authenticate, ctrl.getLostAndFound);
 router.patch('/lost-and-found/:id', authenticate, ctrl.updateLostAndFoundStatus);
 
 // Ride CRUD
-router.post('/', authenticate, ctrl.requestRide);
+router.post('/', authenticate, rideRequestLimiter, validateRequestRide, ctrl.requestRide);
 router.get('/', authenticate, ctrl.listRides);
 router.get('/:id', authenticate, ctrl.getRide);
 
@@ -179,12 +181,12 @@ router.post('/:id/accept',  authenticate, ctrl.acceptRide);
 router.post('/:id/decline', authenticate, ctrl.declineRide);
 router.post('/:id/share', authenticate, shareCtrl.generateShareToken);
 router.patch('/:id/status', authenticate, ctrl.updateRideStatus);
-router.post('/:id/cancel', authenticate, ctrl.cancelRide);
+router.post('/:id/cancel', authenticate, validateCancelRide, ctrl.cancelRide);
 router.get('/:id/cancellation-fee', authenticate, ctrl.getCancellationFeePreview);
 router.post('/:id/initiate-call', authenticate, callProxyCtrl.initiateCall);
 router.post('/:id/end-call', authenticate, callProxyCtrl.endCallSession);
-router.post('/:id/rate', authenticate, ctrl.rateRide);
-router.post('/:id/tip', authenticate, ctrl.addTip);
+router.post('/:id/rate', authenticate, rateLimiter, validateRateRide, ctrl.rateRide);
+router.post('/:id/tip', authenticate, validateAddTip, ctrl.addTip);
 router.post('/:id/round-up', authenticate, ctrl.roundUpFare);
 
 // Fare splitting
@@ -203,10 +205,10 @@ router.get('/quick-replies', authenticate, ctrl.getQuickReplies);
 
 // Messages
 router.get('/:id/messages', authenticate, ctrl.getMessages);
-router.post('/:id/messages', authenticate, ctrl.sendMessage);
+router.post('/:id/messages', authenticate, messageLimiter, validateSendMessage, ctrl.sendMessage);
 
 // SOS
-router.post('/:id/sos', authenticate, sosCtrl.triggerSOS);
+router.post('/:id/sos', authenticate, sosLimiter, sosCtrl.triggerSOS);
 
 // Ride audio recordings
 router.post('/:id/recording',  authenticate, recordingCtrl.saveRecording);

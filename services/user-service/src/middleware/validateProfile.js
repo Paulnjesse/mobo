@@ -1,6 +1,18 @@
 'use strict';
 
+const { body, validationResult } = require('express-validator');
 const AppError = require('../utils/AppError');
+
+/**
+ * Shared express-validator result handler
+ */
+const handleValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: 'Validation failed', details: errors.array() });
+  }
+  next();
+};
 
 /**
  * Validation rules for profile update fields.
@@ -115,4 +127,30 @@ function validateCreateTeenAccount(req, res, next) {
   next();
 }
 
-module.exports = { validateProfileUpdate, validateCreateTeenAccount };
+/**
+ * Express middleware: validates language_code update body.
+ * Supports all MOBO-supported locale codes.
+ */
+const validateUpdateLanguage = [
+  body('language_code').isIn(['fr', 'en', 'sw', 'ha', 'yo', 'ig', 'am']).withMessage('Unsupported language code'),
+  handleValidation,
+];
+
+/**
+ * Express middleware: validates driver block-rider body.
+ */
+const validateBlockRider = [
+  body('rider_id').notEmpty().withMessage('rider_id required'),
+  body('reason').optional().isString().trim().isLength({ max: 500 }),
+  handleValidation,
+];
+
+/**
+ * Express middleware: validates Expo push token update body.
+ */
+const validatePushToken = [
+  body('expo_push_token').optional().isString().trim().isLength({ max: 200 }),
+  handleValidation,
+];
+
+module.exports = { validateProfileUpdate, validateCreateTeenAccount, validateUpdateLanguage, validateBlockRider, validatePushToken };

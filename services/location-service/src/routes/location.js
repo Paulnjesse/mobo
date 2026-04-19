@@ -14,9 +14,11 @@ const {
 const driverCtrl = require('../controllers/driverDestinationController');
 const safetyCtrl = require('../controllers/safetyController');
 const szCtrl     = require('../controllers/safetyZoneController');
+const { locationUpdateLimiter, nearbyDriversLimiter, routeEstimateLimiter } = require('../middleware/perUserRateLimiter');
+const { validateLocationUpdate, validateGetNearbyDrivers, validateRouteEstimate } = require('../middleware/validators');
 
 // Update location (driver or rider)
-router.post('/location/update', authenticate, updateLocation);
+router.post('/location/update', authenticate, locationUpdateLimiter, validateLocationUpdate, updateLocation);
 
 // Get location history for self (must come BEFORE /:userId)
 router.get('/location/history', authenticate, getLocationHistory);
@@ -25,7 +27,7 @@ router.get('/location/history', authenticate, getLocationHistory);
 router.get('/location/surge', authenticate, checkSurgeZone);
 
 // Route estimate between two points
-router.get('/location/route/estimate', authenticate, getRouteEstimate);
+router.get('/location/route/estimate', authenticate, routeEstimateLimiter, validateRouteEstimate, getRouteEstimate);
 
 // Driver online/offline status
 router.post('/location/driver/status', authenticate, requireDriver, updateDriverStatus);
@@ -34,7 +36,7 @@ router.post('/location/driver/status', authenticate, requireDriver, updateDriver
 router.get('/location/:userId', authenticate, getLocation);
 
 // Nearby drivers
-router.get('/drivers/nearby', authenticate, getNearbyDrivers);
+router.get('/drivers/nearby', authenticate, nearbyDriversLimiter, validateGetNearbyDrivers, getNearbyDrivers);
 
 // Ride route (active ride tracking)
 router.get('/rides/:id/route', authenticate, getRideRoute);

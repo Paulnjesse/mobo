@@ -1,6 +1,20 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
+const idempotency = require('../middleware/idempotency');
+const {
+  validateChargeRide,
+  validateAddPaymentMethod,
+  validateSubscription,
+  validateRefund,
+  validateCashout,
+} = require('../middleware/validators');
+const {
+  chargeLimiter,
+  methodLimiter,
+  cashoutLimiter,
+  subscribeLimiter,
+} = require('../middleware/perUserRateLimiter');
 const {
   addPaymentMethod,
   listPaymentMethods,
@@ -32,33 +46,33 @@ router.post('/webhook/flutterwave', webhookFlutterwave);
 router.use(authenticate);
 
 // Payment methods
-router.post('/methods',               addPaymentMethod);
+router.post('/methods',               methodLimiter, validateAddPaymentMethod, addPaymentMethod);
 router.get('/methods',                listPaymentMethods);
 router.put('/methods/:id/default',    setDefaultMethod);
 router.delete('/methods/:id',         deletePaymentMethod);
 
 // Charge + async status polling
-router.post('/charge',                chargeRide);
+router.post('/charge',                chargeLimiter, idempotency, validateChargeRide, chargeRide);
 router.get('/status/:referenceId',    checkPaymentStatus);
 
 // History
 router.get('/history',                getPaymentHistory);
 
 // Refund
-router.post('/refund/:id',            refundPayment);
+router.post('/refund/:id',            validateRefund, refundPayment);
 
 // Wallet
 router.get('/wallet',                 getWalletBalance);
 
 // Subscription
-router.post('/subscribe',             processSubscription);
+router.post('/subscribe',             subscribeLimiter, validateSubscription, processSubscription);
 router.get('/subscription',           getSubscriptionStatus);
 
 // Stripe payment sheet — creates a PaymentIntent; client uses client_secret with Stripe SDK
-router.post('/stripe/payment-intent', createStripePaymentIntent);
+router.post('/stripe/payment-intent', idempotency, createStripePaymentIntent);
 
 // Driver cashout (payout to mobile money / bank)
-router.post('/driver/cashout',         driverCashout);
+router.post('/driver/cashout',         cashoutLimiter, idempotency, validateCashout, driverCashout);
 router.get('/driver/cashout-history',  getDriverCashoutHistory);
 
 module.exports = router;

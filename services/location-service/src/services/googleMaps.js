@@ -5,6 +5,23 @@ const logger = require('../utils/logger');
  * when GOOGLE_MAPS_API_KEY is absent.
  */
 
+/**
+ * withRetry — retries an async function on failure with linear back-off.
+ * @param {Function} fn   Async function that may throw
+ * @param {number} retries  Number of additional attempts after the first (default 2)
+ * @param {number} delayMs  Base delay in ms; multiplied by attempt number (default 500)
+ * @returns {Promise<any>}
+ */
+async function withRetry(fn, retries = 2, delayMs = 500) {
+  for (let i = 0; i <= retries; i++) {
+    try { return await fn(); }
+    catch (err) {
+      if (i === retries) throw err;
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+}
+
 let Client, mapsClient;
 try {
   ({ Client } = require('@googlemaps/google-maps-services-js'));
@@ -61,7 +78,7 @@ async function getDirections(origin, destination) {
   }
 
   try {
-    const response = await mapsClient.directions({
+    const response = await withRetry(() => mapsClient.directions({
       params: {
         origin: `${origin.lat},${origin.lng}`,
         destination: `${destination.lat},${destination.lng}`,
@@ -69,7 +86,7 @@ async function getDirections(origin, destination) {
         key: API_KEY
       },
       timeout: 8000
-    });
+    }));
 
     const data = response.data;
 
@@ -164,7 +181,7 @@ async function getDistanceMatrix(origins, destinations) {
     const originsStr = origins.map((o) => `${o.lat},${o.lng}`);
     const destinationsStr = destinations.map((d) => `${d.lat},${d.lng}`);
 
-    const response = await mapsClient.distancematrix({
+    const response = await withRetry(() => mapsClient.distancematrix({
       params: {
         origins: originsStr,
         destinations: destinationsStr,
@@ -172,7 +189,7 @@ async function getDistanceMatrix(origins, destinations) {
         key: API_KEY
       },
       timeout: 8000
-    });
+    }));
 
     const data = response.data;
 
@@ -244,13 +261,13 @@ async function geocodeAddress(address) {
   }
 
   try {
-    const response = await mapsClient.geocode({
+    const response = await withRetry(() => mapsClient.geocode({
       params: {
         address,
         key: API_KEY
       },
       timeout: 8000
-    });
+    }));
 
     const data = response.data;
 
@@ -289,13 +306,13 @@ async function reverseGeocode(lat, lng) {
   }
 
   try {
-    const response = await mapsClient.reverseGeocode({
+    const response = await withRetry(() => mapsClient.reverseGeocode({
       params: {
         latlng: `${lat},${lng}`,
         key: API_KEY
       },
       timeout: 8000
-    });
+    }));
 
     const data = response.data;
 

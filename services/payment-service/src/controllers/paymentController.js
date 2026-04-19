@@ -1722,8 +1722,9 @@ const getDriverCashoutHistory = async (req, res) => {
 /**
  * POST /payments/webhook/flutterwave  (public — no auth middleware)
  *
- * Flutterwave sends a `verif-hash` header equal to the FLUTTERWAVE_WEBHOOK_HASH
- * secret you set in the Flutterwave dashboard. We use timingSafeEqual to prevent
+ * Flutterwave sends a `verif-hash` header equal to the FLW_SECRET_HASH (also
+ * accepted as FLUTTERWAVE_WEBHOOK_HASH for backwards compatibility) secret you
+ * set in the Flutterwave dashboard. We use timingSafeEqual to prevent
  * timing-oracle attacks even on this simpler comparison.
  *
  * Security: https://developer.flutterwave.com/docs/integration-guides/webhooks/
@@ -1731,7 +1732,9 @@ const getDriverCashoutHistory = async (req, res) => {
 const webhookFlutterwave = async (req, res) => {
   try {
     // ── Signature verification ────────────────────────────────────────────────
-    const webhookHash = process.env.FLUTTERWAVE_WEBHOOK_HASH;
+    // FLW_SECRET_HASH is the canonical Flutterwave env var name; fall back to
+    // FLUTTERWAVE_WEBHOOK_HASH for backwards compatibility.
+    const webhookHash = process.env.FLW_SECRET_HASH || process.env.FLUTTERWAVE_WEBHOOK_HASH;
     if (webhookHash) {
       const provided = req.headers['verif-hash'] || '';
       if (!provided) {
@@ -1749,7 +1752,7 @@ const webhookFlutterwave = async (req, res) => {
         return res.sendStatus(401);
       }
     } else {
-      logger.warn('[Webhook/Flutterwave] FLUTTERWAVE_WEBHOOK_HASH not set — skipping signature check');
+      logger.warn('[Webhook/Flutterwave] FLW_SECRET_HASH not set — skipping signature check');
     }
 
     const body = req.body || {};

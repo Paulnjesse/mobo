@@ -8,7 +8,7 @@ const db = require('../config/database');
  */
 const fileDispute = async (req, res) => {
   try {
-    const reporterId = req.user ? req.user.id : req.headers['x-user-id'];
+    const reporterId = String(req.user?.id);
     const { ride_id, category, description, evidence_urls = [] } = req.body;
 
     if (!ride_id || !category || !description) {
@@ -31,9 +31,9 @@ const fileDispute = async (req, res) => {
     const ride = rideResult.rows[0];
     let reporter_role = null;
 
-    if (ride.rider_id === reporterId) {
+    if (String(ride.rider_id) === reporterId) {
       reporter_role = 'rider';
-    } else if (ride.driver_user_id === reporterId) {
+    } else if (String(ride.driver_user_id) === reporterId) {
       reporter_role = 'driver';
     } else {
       return res.status(403).json({ success: false, message: 'You were not part of this ride' });
@@ -60,7 +60,7 @@ const fileDispute = async (req, res) => {
  */
 const getMyDisputes = async (req, res) => {
   try {
-    const reporterId = req.user ? req.user.id : req.headers['x-user-id'];
+    const reporterId = String(req.user?.id);
 
     const result = await db.query(
       `SELECT rd.*,
@@ -85,8 +85,8 @@ const getMyDisputes = async (req, res) => {
  */
 const getDisputeById = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : req.headers['x-user-id'];
-    const userRole = req.user ? req.user.role : req.headers['x-user-role'];
+    const userId = String(req.user?.id);
+    const userRole = req.user?.role;
     const { id } = req.params;
 
     const result = await db.query(
@@ -126,8 +126,8 @@ const getDisputeById = async (req, res) => {
  */
 const resolveDispute = async (req, res) => {
   try {
-    const adminId = req.user ? req.user.id : req.headers['x-user-id'];
-    const userRole = req.user ? req.user.role : req.headers['x-user-role'];
+    const adminId = String(req.user?.id);
+    const userRole = req.user?.role;
 
     if (userRole !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin access required' });

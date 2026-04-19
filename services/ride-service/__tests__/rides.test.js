@@ -14,9 +14,12 @@ jest.mock('nodemailer', () => ({
   createTransport: () => ({ sendMail: jest.fn().mockResolvedValue({}) }),
 }));
 jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../src/utils/logger', () => ({
-  info: jest.fn(), warn: jest.fn(), error: jest.fn(), http: jest.fn(), debug: jest.fn(),
-}));
+jest.mock('../src/utils/logger', () => {
+  const child = jest.fn();
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), http: jest.fn(), debug: jest.fn(), child };
+  child.mockReturnValue(logger);
+  return logger;
+});
 
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
@@ -47,13 +50,14 @@ describe('Fare Estimation', () => {
   });
 
   test('POST /rides/fare returns fare for authenticated user', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] }); // auth check
+    // auth does not query the DB; first mock is consumed by getFare's subscription lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 1, subscription_plan: 'none' }] });
     const res = await request(app)
       .post('/rides/fare')
       .set('Authorization', `Bearer ${riderToken}`)
       .send({
-        pickup_lat: 3.848, pickup_lng: 11.502,
-        dropoff_lat: 3.866, dropoff_lng: 11.516,
+        pickup_location:  { lat: 3.848, lng: 11.502 },
+        dropoff_location: { lat: 3.866, lng: 11.516 },
         ride_type: 'standard',
       });
     expect([200, 400]).toContain(res.status);
@@ -158,9 +162,8 @@ describe('Ride Status', () => {
   });
 
   test('GET /rides/:id returns 404 for non-existent ride', async () => {
-    mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] }) // auth check
-      .mockResolvedValueOnce({ rows: [] }); // ride not found
+    // auth does not query the DB; only mock the ride lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // ride not found
     const res = await request(app)
       .get('/rides/99999')
       .set('Authorization', `Bearer ${riderToken}`);
@@ -221,9 +224,8 @@ describe('Ride Cancellation', () => {
   });
 
   test('POST /rides/:id/cancel returns 404 for non-existent ride', async () => {
-    mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] }) // auth check
-      .mockResolvedValueOnce({ rows: [] }); // ride not found
+    // auth does not query the DB; only mock the ride lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // ride not found
     const res = await request(app)
       .post('/rides/999/cancel')
       .set('Authorization', `Bearer ${riderToken}`);
@@ -255,9 +257,8 @@ describe('Ride Rating and Tipping', () => {
   });
 
   test('POST /rides/:id/rate returns 404 for non-existent ride', async () => {
-    mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] })
-      .mockResolvedValueOnce({ rows: [] }); // ride not found
+    // auth does not query the DB; only mock the ride lookup
+    mockDb.query.mockResolvedValueOnce({ rows: [] }); // ride not found
     const res = await request(app)
       .post('/rides/999/rate')
       .set('Authorization', `Bearer ${riderToken}`)

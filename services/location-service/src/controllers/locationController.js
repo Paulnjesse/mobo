@@ -684,6 +684,12 @@ const getRideRoute = async (req, res) => {
  */
 const getLocationHistory = async (req, res) => {
   try {
+    // Authorization: only allow users to view their own history (or admins)
+    const requestedUserId = req.params.userId || req.query.user_id;
+    if (requestedUserId && String(requestedUserId) !== String(req.user.id) && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied — you can only view your own location history' });
+    }
+
     const userId = req.user.id;
     const { limit = 50, since } = req.query;
 

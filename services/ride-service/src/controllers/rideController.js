@@ -75,7 +75,7 @@ const updateRideStops = async (req, res) => {
   try {
     const { id } = req.params;
     const { stops } = req.body; // array of { address, location: { lat, lng } }
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
 
     const ride = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
@@ -108,7 +108,7 @@ const updateRideStops = async (req, res) => {
 // ---- PRICE LOCK (upfront pricing — available to all users like Uber) ----
 const lockPrice = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const { pickup_location, dropoff_location, pickup_address, dropoff_address, ride_type = 'standard' } = req.body;
 
     // Validate coordinate ranges when provided
@@ -181,7 +181,7 @@ const lockPrice = async (req, res) => {
 const triggerCheckin = async (req, res) => {
   try {
     const { ride_id, checkin_type, location, address } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
 
     if (!ride_id) return res.status(400).json({ error: 'ride_id is required' });
     const VALID_CHECKIN_TYPES = ['safety', 'arrival', 'pickup', 'dropoff'];
@@ -207,7 +207,7 @@ const respondToCheckin = async (req, res) => {
   try {
     const { id } = req.params;
     const { response } = req.body; // 'safe' | 'need_help'
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
 
     const result = await pool.query(
       `UPDATE ride_checkins SET response = $1, responded_at = NOW()
@@ -234,8 +234,8 @@ const respondToCheckin = async (req, res) => {
 const getCheckins = async (req, res) => {
   try {
     const { ride_id } = req.params;
-    const requestingUserId = req.headers['x-user-id'];
-    const userRole = req.headers['x-user-role'];
+    const requestingUserId = String(req.user?.id);
+    const userRole = req.user?.role;
 
     // Authorize: only the ride's rider, assigned driver, or admin
     if (userRole !== 'admin') {
@@ -343,7 +343,7 @@ const reportLostItem = async (req, res) => {
 
 const getLostAndFound = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const result = await pool.query(
       `SELECT lf.*, r.pickup_address, r.dropoff_address, r.completed_at,
               u.full_name as driver_name, u.phone as driver_phone
@@ -365,8 +365,8 @@ const updateLostAndFoundStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, driver_response } = req.body;
-    const userId = req.headers['x-user-id'];
-    const userRole = req.headers['x-user-role'];
+    const userId = String(req.user?.id);
+    const userRole = req.user?.role;
 
     // Only the reporter or the driver on the associated ride may update the report
     const result = await pool.query(
@@ -395,7 +395,7 @@ const updateLostAndFoundStatus = async (req, res) => {
 // ---- PREFERRED DRIVERS ----
 const addPreferredDriver = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const { driver_id, ride_id } = req.body;
 
     const result = await pool.query(
@@ -414,7 +414,7 @@ const addPreferredDriver = async (req, res) => {
 
 const getPreferredDrivers = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const result = await pool.query(
       `SELECT pd.*, u.full_name, u.profile_picture, u.rating,
               v.make, v.model, v.color, v.plate, v.vehicle_type
@@ -434,7 +434,7 @@ const getPreferredDrivers = async (req, res) => {
 
 const removePreferredDriver = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const { driver_id } = req.params;
     await pool.query('DELETE FROM preferred_drivers WHERE user_id = $1 AND driver_id = $2', [userId, driver_id]);
     res.json({ success: true });
@@ -446,7 +446,7 @@ const removePreferredDriver = async (req, res) => {
 // ---- CONCIERGE ----
 const createConciergeBooking = async (req, res) => {
   try {
-    const bookedBy = req.headers['x-user-id'];
+    const bookedBy = String(req.user?.id);
     const { passenger_name, passenger_phone, pickup_address, dropoff_address, scheduled_at, notes } = req.body;
 
     // Check admin/corporate role
@@ -470,7 +470,7 @@ const createConciergeBooking = async (req, res) => {
 
 const getConciergeBookings = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const result = await pool.query(
       `SELECT cb.*, u.full_name as booked_by_name
        FROM concierge_bookings cb
@@ -488,7 +488,7 @@ const getConciergeBookings = async (req, res) => {
 // ---- EXISTING FUNCTIONS (kept intact) ----
 const requestRide = async (req, res) => {
   try {
-    const riderId = req.headers['x-user-id'];
+    const riderId = String(req.user?.id);
     const {
       pickup_address, pickup_location, dropoff_address, dropoff_location,
       ride_type = 'standard', payment_method = 'cash', scheduled_at,
@@ -833,7 +833,7 @@ const requestRide = async (req, res) => {
 const getFare = async (req, res) => {
   try {
     const { pickup_location, dropoff_location, ride_type = 'standard', stops = [] } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
 
     // Cache key includes country_code so each currency market gets its own cached response
     const countryCode = req.currency?.country_code || 'CM';
@@ -917,7 +917,7 @@ const acceptRide = async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const driverUserId = req.headers['x-user-id'];
+    const driverUserId = String(req.user?.id);
 
     const driverResult = await client.query(
       'SELECT id, ar_suspended_until FROM drivers WHERE user_id = $1 AND is_approved = true',
@@ -1122,7 +1122,7 @@ const updateRideStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const validStatuses = ['arriving','in_progress','completed'];
     if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
@@ -1523,7 +1523,7 @@ const cancelRide = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
 
     const ride = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found' });
@@ -1681,8 +1681,8 @@ const cancelRide = async (req, res) => {
 const getRide = async (req, res) => {
   try {
     const { id } = req.params;
-    const requestingUserId = req.headers['x-user-id'];
-    const userRole = req.headers['x-user-role'];
+    const requestingUserId = String(req.user?.id);
+    const userRole = req.user?.role;
 
     const result = await pool.query(
       `SELECT r.*,
@@ -1725,7 +1725,7 @@ const getRide = async (req, res) => {
 
 const listRides = async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const { limit = 20, offset = 0, status } = req.query;
     const safeLimit = Math.min(Math.max(1, parseInt(limit) || 20), 100);
     let whereClause = 'WHERE (r.rider_id = $1 OR d.user_id = $1)';
@@ -1754,7 +1754,7 @@ const rateRide = async (req, res) => {
   try {
     const { id } = req.params;
     const { rating, comment } = req.body;
-    const raterId = req.headers['x-user-id'];
+    const raterId = String(req.user?.id);
 
     const ride = await pool.query('SELECT * FROM rides WHERE id = $1 AND status = $2', [id, 'completed']);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Completed ride not found' });
@@ -1844,7 +1844,7 @@ const rateRide = async (req, res) => {
 const addTip = async (req, res) => {
   try {
     const { id } = req.params;
-    const riderId = req.headers['x-user-id'];
+    const riderId = String(req.user?.id);
     const amount = parseInt(req.body.tip_amount ?? req.body.amount ?? 0, 10);
     if (amount < 0) return res.status(400).json({ error: 'Tip amount cannot be negative' });
     const MAX_TIP_XAF = 50000;
@@ -1883,7 +1883,7 @@ const addTip = async (req, res) => {
 const roundUpFare = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const ride = await pool.query('SELECT * FROM rides WHERE id = $1 AND rider_id = $2', [id, userId]);
     if (!ride.rows[0]) return res.status(404).json({ error: 'Ride not found or not authorised' });
     const r = ride.rows[0];
@@ -1937,7 +1937,7 @@ const getSurgePricing = async (req, res) => {
 const applyPromoCode = async (req, res) => {
   try {
     const { code, fare } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     const result = await pool.query(
       `SELECT * FROM promo_codes WHERE code = $1 AND is_active = true
        AND (expires_at IS NULL OR expires_at > NOW()) AND used_count < max_uses`,
@@ -1989,7 +1989,7 @@ const getActivePromos = async (req, res) => {
 const getMessages = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     // Verify caller is the rider or driver of this ride
     const access = await pool.query(
       `SELECT 1 FROM rides r
@@ -2014,7 +2014,7 @@ const sendMessage = async (req, res) => {
   try {
     const { id } = req.params;
     const { content, receiver_id } = req.body;
-    const senderId = req.headers['x-user-id'];
+    const senderId = String(req.user?.id);
     // Verify sender is a party to this ride
     const access = await pool.query(
       `SELECT 1 FROM rides r
@@ -2164,7 +2164,7 @@ const markSplitParticipantPaid = async (req, res) => {
   try {
     const { participantId } = req.params;
     const { payment_method } = req.body;
-    const userId = req.headers['x-user-id'];
+    const userId = String(req.user?.id);
     // Caller must be the participant themselves, or the split initiator
     const result = await pool.query(
       `UPDATE fare_split_participants fsp SET paid = true, paid_at = NOW(), payment_method = $1
@@ -2298,7 +2298,7 @@ const declineRide = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const driverUserId = req.headers['x-user-id'];
+    const driverUserId = String(req.user?.id);
 
     const driverResult = await pool.query('SELECT id FROM drivers WHERE user_id = $1', [driverUserId]);
     if (!driverResult.rows[0]) return res.status(403).json({ error: 'Not a driver' });
@@ -2387,7 +2387,7 @@ const QUICK_REPLIES = {
 const getRideReceipt = async (req, res) => {
   try {
     const { id } = req.params;
-    const requesterId = req.headers['x-user-id'];
+    const requesterId = String(req.user?.id);
     const requesterRole = req.user?.role;
 
     const rideResult = await pool.query('SELECT * FROM rides WHERE id = $1', [id]);
