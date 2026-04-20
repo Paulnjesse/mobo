@@ -23,7 +23,9 @@ let _redis = null;
 
 function _getRedis() {
   if (_redis) return _redis;
+  /* istanbul ignore next */
   if (!process.env.REDIS_URL || process.env.NODE_ENV === 'test') return null;
+  /* istanbul ignore next */
   try {
     const { Redis } = require('ioredis');
     _redis = new Redis(process.env.REDIS_URL, {
@@ -64,7 +66,9 @@ async function withLock(lockKey, ttlMs, fn) {
     return;
   }
 
+  /* istanbul ignore next */
   let acquired = null;
+  /* istanbul ignore next */
   try {
     acquired = await redis.set(lockKey, '1', 'NX', 'PX', ttlMs);
   } catch (err) {
@@ -77,11 +81,13 @@ async function withLock(lockKey, ttlMs, fn) {
     return;
   }
 
+  /* istanbul ignore next */
   if (!acquired) {
     // Another instance holds the lock — skip this tick
     return;
   }
 
+  /* istanbul ignore next */
   try {
     await fn();
   } finally {

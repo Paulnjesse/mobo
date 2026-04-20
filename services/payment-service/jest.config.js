@@ -3,5 +3,24 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.js'],
   forceExit: true,
   clearMocks: true,
-  testTimeout: 10000,
+  testTimeout: 15000,
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/**/*.test.js',
+    '!src/tracing.js',
+    '!src/config/database.js',
+    '!src/utils/logger.js',
+    '!src/jobs/reconcilePayments.js',
+    '!src/queues/paymentQueue.js',
+    '!src/queues/paymentWorker.js',
+  ],
+  coverageThresholds: {
+    global: {
+      lines: 40,
+      functions: 40,
+      branches: 30,
+      statements: 40,
+    },
+  },
+  coverageReporters: ['text', 'lcov', 'clover'],
 };

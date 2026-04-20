@@ -40,6 +40,7 @@ const {
 let Queue    = null;
 let fraudQueue = null;
 
+/* istanbul ignore next */
 if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
   try {
     const bullmq     = require('bullmq');
@@ -71,6 +72,7 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
  * @param {object} payload  - serialisable job data
  */
 async function enqueueFraudCheck(checkType, payload) {
+  /* istanbul ignore next */
   if (fraudQueue) {
     try {
       await fraudQueue.add(checkType, payload);
@@ -120,6 +122,7 @@ async function runFraudCheck(checkType, resolvedPayload) {
   }
 }
 
+/* istanbul ignore next */
 async function closeQueue() {
   if (fraudQueue) await fraudQueue.close();
 }

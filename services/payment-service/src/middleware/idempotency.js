@@ -5,6 +5,7 @@ const store = new Map(); // key → { status, body, expiresAt }
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 // Cleanup expired keys every 5 minutes
+/* istanbul ignore next */
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of store) {

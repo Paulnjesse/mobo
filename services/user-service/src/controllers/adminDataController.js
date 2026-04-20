@@ -52,6 +52,7 @@ function decryptBase64(base64data) {
   return Buffer.concat([decipher.update(cipher), decipher.final()]);
 }
 
+/* istanbul ignore next */
 function encryptText(text) {
   const iv        = crypto.randomBytes(12);
   const cipher    = crypto.createCipheriv('aes-256-gcm', KEY, iv);

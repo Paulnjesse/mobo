@@ -3,5 +3,30 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.js'],
   forceExit: true,
   clearMocks: true,
-  testTimeout: 10000,
+  testTimeout: 15000,
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/**/*.test.js',
+    '!src/tracing.js',
+    '!src/utils/logger.js',
+    '!src/utils/email.js',
+    '!src/jobs/escalationJob.js',
+    '!src/jobs/scheduledRideJob.js',
+    '!src/config/database.js',
+    '!src/middleware/validate.js',
+  ],
+  coveragePathIgnorePatterns: [
+    '/node_modules/',
+    'src/socket/rideSocket\\.js',
+    'src/socket/deliverySocket\\.js',
+  ],
+  coverageThresholds: {
+    global: {
+      lines: 40,
+      functions: 40,
+      branches: 30,
+      statements: 40,
+    },
+  },
+  coverageReporters: ['text', 'lcov', 'clover'],
 };

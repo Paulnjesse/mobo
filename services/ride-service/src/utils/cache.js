@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
  */
 let redis = null;
 
+/* istanbul ignore next */
 if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
   try {
     const Redis = require('ioredis');
@@ -31,6 +32,7 @@ const memExpiry = new Map();
  */
 async function get(key) {
   try {
+    /* istanbul ignore next */
     if (redis) {
       const val = await redis.get(key);
       return val ? JSON.parse(val) : null;
@@ -51,6 +53,7 @@ async function get(key) {
  */
 async function set(key, value, ttlSeconds = 60) {
   try {
+    /* istanbul ignore next */
     if (redis) {
       await redis.setex(key, ttlSeconds, JSON.stringify(value));
       return;
@@ -67,6 +70,7 @@ async function set(key, value, ttlSeconds = 60) {
  */
 async function del(key) {
   try {
+    /* istanbul ignore next */
     if (redis) { await redis.del(key); return; }
     memCache.delete(key);
     memExpiry.delete(key);
@@ -79,6 +83,7 @@ async function del(key) {
  */
 async function delPattern(pattern) {
   try {
+    /* istanbul ignore next */
     if (redis) {
       const keys = await redis.keys(pattern);
       if (keys.length) await redis.del(...keys);

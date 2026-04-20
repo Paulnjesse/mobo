@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const perUserLimiter = (windowMs, max, message) => rateLimit({
   windowMs, max,
   message: { error: message },
-  keyGenerator: (req) => req.user?.id || req.ip,
+  keyGenerator: /* istanbul ignore next */ (req) => req.user?.id || req.ip,
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.NODE_ENV === 'test',

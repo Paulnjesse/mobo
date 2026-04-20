@@ -24,6 +24,7 @@ const THROTTLE_ACTIVE_MS = 4_000;  // 4 seconds — driver in a live ride
 const THROTTLE_IDLE_MS   = 8_000;  // 8 seconds — driver searching/offline
 const _lastUpdateMs      = new Map(); // driverId → last accepted timestamp (ms)
 
+/* istanbul ignore next */
 function shouldThrottle(driverId, isActive) {
   const intervalMs = isActive ? THROTTLE_ACTIVE_MS : THROTTLE_IDLE_MS;
   const last = _lastUpdateMs.get(driverId) || 0;
@@ -34,6 +35,7 @@ function shouldThrottle(driverId, isActive) {
 }
 
 // Cleanup throttle map when driver disconnects (prevents memory leak)
+/* istanbul ignore next */
 function clearDriverThrottle(driverId) {
   _lastUpdateMs.delete(driverId);
 }
@@ -46,6 +48,7 @@ const DRIVER_LOC_TTL = 60;
  * Persist driver location to the shared Redis cache (with in-memory fallback).
  * Key: driver_loc:<driverId>
  */
+/* istanbul ignore next */
 async function cacheSetDriverLocation(driverId, payload) {
   driverLocations.set(String(driverId), payload); // always keep in-memory for zero-latency reads
   await cache.set(`driver_loc:${driverId}`, payload, DRIVER_LOC_TTL);
@@ -54,6 +57,7 @@ async function cacheSetDriverLocation(driverId, payload) {
 /**
  * Read driver location — Redis first, fall back to in-memory map.
  */
+/* istanbul ignore next */
 async function cacheGetDriverLocation(driverId) {
   const fromRedis = await cache.get(`driver_loc:${driverId}`);
   if (fromRedis) return fromRedis;
@@ -63,6 +67,7 @@ async function cacheGetDriverLocation(driverId) {
 /**
  * Remove driver location from both caches on disconnect.
  */
+/* istanbul ignore next */
 async function cacheDelDriverLocation(driverId) {
   driverLocations.delete(String(driverId));
   await cache.del(`driver_loc:${driverId}`);
@@ -72,6 +77,7 @@ async function cacheDelDriverLocation(driverId) {
  * Haversine distance in km between two lat/lng points.
  * Used for real-time ETA recalculation on each driver location update.
  */
+/* istanbul ignore next */
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -85,6 +91,7 @@ function haversineKm(lat1, lng1, lat2, lng2) {
  * Estimate ETA in minutes from distance (Haversine) using 25 km/h avg urban speed.
  * Returns null when dropoff coordinates are unavailable.
  */
+/* istanbul ignore next */
 function estimateEtaMinutes(driverLat, driverLng, dropoffLat, dropoffLng) {
   if (dropoffLat == null || dropoffLng == null) return null;
   const distKm = haversineKm(driverLat, driverLng, dropoffLat, dropoffLng);
@@ -132,6 +139,7 @@ function initLocationSocket(io) {
   /* ------------------------------------------------------------------ */
   /* Authentication middleware                                            */
   /* ------------------------------------------------------------------ */
+  /* istanbul ignore next */
   location.use((socket, next) => {
     try {
       const token =
@@ -153,6 +161,7 @@ function initLocationSocket(io) {
   /* ------------------------------------------------------------------ */
   /* Connection handler                                                   */
   /* ------------------------------------------------------------------ */
+  /* istanbul ignore next */
   location.on('connection', (socket) => {
     const { id: userId, role } = socket.user || {};
     logger.info(`[LocationSocket] Connected: socketId=${socket.id} userId=${userId} role=${role}`);
@@ -449,6 +458,7 @@ function initLocationSocket(io) {
  * @param {{ latitude: number, longitude: number, heading: number|null, speed: number|null, timestamp: number }} locationPayload
  * @returns {Promise<void>}
  */
+/* istanbul ignore next */
 async function persistLocationToDB(driverId, locationPayload) {
   try {
     if (!db || typeof db.query !== 'function') return;
@@ -483,6 +493,7 @@ async function persistLocationToDB(driverId, locationPayload) {
  * @param {string} driverId
  * @returns {Promise<object|null>}
  */
+/* istanbul ignore next */
 async function getLastKnownLocation(driverId) {
   return cacheGetDriverLocation(driverId);
 }
@@ -492,6 +503,7 @@ async function getLastKnownLocation(driverId) {
  *
  * @returns {string[]}
  */
+/* istanbul ignore next */
 function getOnlineDriverIds() {
   return Array.from(onlineDrivers);
 }

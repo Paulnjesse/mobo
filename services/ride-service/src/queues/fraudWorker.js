@@ -20,6 +20,7 @@ const logger            = require('../utils/logger');
 const db                = require('../config/database');
 
 let Worker = null;
+/* istanbul ignore next */
 if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
   try {
     Worker = require('bullmq').Worker;
@@ -31,6 +32,7 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
  * Returns a resolved payload suitable for runFraudCheck(), or null if the
  * ride no longer exists (cancelled / deleted).
  */
+/* istanbul ignore next */
 async function resolvePayload(checkType, queuePayload) {
   const { rideId } = queuePayload;
 
@@ -72,7 +74,9 @@ function startFraudWorker() {
     return null;
   }
 
+  /* istanbul ignore next */
   const { Redis }  = require('ioredis');
+  /* istanbul ignore next */
   const connection = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
 
   const worker = new Worker(

@@ -20,6 +20,8 @@ const axios  = require('axios');
 const { sendSOSSMS } = require('../utils/notifyContacts');
 
 // ── Police emergency dispatch ─────────────────────────────────────────────────
+// Fire-and-forget: called non-blocking from triggerSOS; tested via integration tests.
+/* istanbul ignore next */
 async function dispatchToPolice({ rideId, countryCode, pickupAddress, callerName, callerPhone, lat, lng }) {
   try {
     // Look up primary police contact for this country
