@@ -32,9 +32,10 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 
-const rideRoutes = require('./src/routes/rides');
-const adsRoutes  = require('./src/routes/ads');
-const foodRoutes = require('./src/routes/food');
+const rideRoutes      = require('./src/routes/rides');
+const adsRoutes       = require('./src/routes/ads');
+const foodRoutes      = require('./src/routes/food');
+const adminRideRoutes = require('./src/routes/adminRides');
 const { initRideSocket }              = require('./src/socket/rideSocket');
 const { initDeliverySocket }          = require('./src/socket/deliverySocket');
 const { startEscalationJob }          = require('./src/jobs/escalationJob');
@@ -89,8 +90,9 @@ app.use(limiter);
 app.use('/ads',   adsRoutes);
 app.use('/food',  foodRoutes);
 app.use('/rides', rideRoutes);
-app.use('/ride', rideRoutes);
-app.use('/fare', rideRoutes);
+app.use('/ride',  rideRoutes);
+app.use('/fare',  rideRoutes);
+app.use('/admin', adminRideRoutes);
 
 // Prometheus metrics — restricted to internal scraper IPs only
 const promClient = require('prom-client');

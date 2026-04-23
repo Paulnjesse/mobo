@@ -40,6 +40,7 @@ const fleetRoutes = require('./src/routes/fleet');
 const socialRoutes = require('./src/routes/social');
 const adminMgmtRoutes  = require('./src/routes/adminManagement');
 const adminDataRoutes  = require('./src/routes/adminData');
+const adminRoutes      = require('./src/routes/admin');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -141,6 +142,7 @@ app.use('/auth', authLimiter, authRoutes);
 app.use('/users', profileRoutes);
 app.use('/fleet', fleetRoutes);
 app.use('/social', socialRoutes);
+app.use('/admin',            adminRoutes);
 app.use('/admin/admin-mgmt', adminMgmtRoutes);
 app.use('/admin/admin-data', adminDataRoutes);
 

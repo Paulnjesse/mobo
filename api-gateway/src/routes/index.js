@@ -99,4 +99,16 @@ module.exports = (app) => {
   app.use('/api/v1/safety',      locationCB, verifyToken,                  proxy(LOCATION_SERVICE, { '^/api/v1/safety':      '/safety'           }));
   app.use('/api/safety-zones',    locationCB, verifyToken,                  proxy(LOCATION_SERVICE, { '^/api/safety-zones':    '/safety-zones'   }));
   app.use('/api/v1/safety-zones', locationCB, verifyToken,                  proxy(LOCATION_SERVICE, { '^/api/v1/safety-zones': '/safety-zones'   }));
+
+  // ── Admin routes (JWT required; RBAC enforced in each service) ───────────────
+  // Ride-specific admin: rides, surge, promotions, map/active-rides, payments
+  app.use('/api/admin/rides',      rideCB, verifyToken, proxy(RIDE_SERVICE, { '^/api/admin': '/admin' }));
+  app.use('/api/admin/surge',      rideCB, verifyToken, proxy(RIDE_SERVICE, { '^/api/admin': '/admin' }));
+  app.use('/api/admin/promotions', rideCB, verifyToken, proxy(RIDE_SERVICE, { '^/api/admin': '/admin' }));
+  app.use('/api/admin/map/active-rides', rideCB, verifyToken, proxy(RIDE_SERVICE, { '^/api/admin': '/admin' }));
+  app.use('/api/admin/payments',   rideCB, verifyToken, paymentProxy(RIDE_SERVICE, { '^/api/admin': '/admin' }));
+
+  // User-service admin: dashboard, users, drivers, map/drivers, notifications, settings, admin-mgmt, admin-data
+  app.use('/api/admin',    userCB, verifyToken, proxy(USER_SERVICE, { '^/api/admin': '/admin' }));
+  app.use('/api/v1/admin', userCB, verifyToken, proxy(USER_SERVICE, { '^/api/v1/admin': '/admin' }));
 };
