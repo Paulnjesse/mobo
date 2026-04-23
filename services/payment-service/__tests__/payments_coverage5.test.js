@@ -168,8 +168,8 @@ describe('POST /payments/charge — mobile money provider error', () => {
       .set('Authorization', token)
       .send({ ride_id: 'ride-mtn-err', method: 'mtn_mobile_money', phone: '+237650000099' });
 
-    // 502 = provider error, 500 = fallback
-    expect([502, 500]).toContain(res.statusCode);
+    // 502 = provider error, 500 = fallback, 503 = circuit breaker open
+    expect([502, 500, 503]).toContain(res.statusCode);
 
     delete process.env.MTN_API_USER_ID;
     delete process.env.MTN_API_KEY;

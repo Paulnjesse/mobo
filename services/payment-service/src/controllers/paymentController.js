@@ -4,7 +4,35 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 const { checkPaymentFraud } = require('../../../shared/fraudDetection');
 const { convertFromXAF, getCurrencyCode, getStripeCurrency } = require('../../../shared/currencyUtil');
+const { callWithBreaker } = require('../../../shared/circuitBreaker');
 const logger  = require('../utils/logger');
+
+// ── Payment provider circuit breaker helpers ──────────────────────────────────
+// Each external payment API (MTN, Orange, Wave, Stripe) is wrapped in an Opossum
+// circuit breaker. If the provider's error rate exceeds 50% over 10 requests the
+// breaker OPENS and all subsequent calls fail fast (no network round-trip) for
+// 30 s. This prevents cascading failures: a flaky MTN API won't exhaust the
+// Node.js event loop or the HTTP connection pool.
+//
+// Fallback: returns { success: false, provider_unavailable: true } so the caller
+// can surface "Mobile money is temporarily unavailable — please pay with cash"
+// rather than a generic 500.
+/* istanbul ignore next */
+function providerFallback(providerName) {
+  return () => ({
+    success:             false,
+    provider_unavailable: true,
+    message:             `${providerName} is temporarily unavailable. Please try again or pay with cash.`,
+  });
+}
+
+/* istanbul ignore next */
+async function withProviderBreaker(name, fn) {
+  return callWithBreaker(name, fn, {
+    fallback: providerFallback(name),
+    breaker:  { timeout: 15000, errorThresholdPercent: 50, resetTimeout: 30000, volumeThreshold: 3 },
+  });
+}
 
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {
@@ -424,6 +452,12 @@ async function resolvePendingPayment(paymentId, status, transactionId, failureRe
       "UPDATE rides SET payment_status = 'paid', payment_method = $1 WHERE id = $2",
       [p.method, p.ride_id]
     );
+    // Saga settlement: move pending driver earnings to drivers.total_earnings now
+    // that payment is confirmed. Non-blocking — settlement failure is logged and
+    // flagged for ops review; the payment itself is already confirmed.
+    const { settleDriverEarnings } = require('../jobs/settleEarnings');
+    settleDriverEarnings(p.ride_id, { notes: `Payment ${paymentId} confirmed via ${p.method}` })
+      .catch((err) => logger.error('[resolvePendingPayment] Earnings settlement failed', { rideId: p.ride_id, err: err.message }));
   }
 }
 
@@ -660,8 +694,12 @@ const chargeRide = async (req, res) => {
       let initResult;
       try {
         initResult = method === 'mtn_mobile_money'
-          ? await processMtnMobileMoney(paymentPhone, amount, chargeCurrency)
-          : await processOrangeMoney(paymentPhone, amount, chargeCurrency);
+          ? await withProviderBreaker('mtn_mobile_money', () => processMtnMobileMoney(paymentPhone, amount, chargeCurrency))
+          : await withProviderBreaker('orange_money',     () => processOrangeMoney(paymentPhone, amount, chargeCurrency));
+
+        if (initResult && initResult.provider_unavailable) {
+          return res.status(503).json({ success: false, message: initResult.message });
+        }
       } catch (providerErr) {
         logger.error(`[${method}] Init error:`, providerErr.message);
         return res.status(502).json({
@@ -733,7 +771,7 @@ const chargeRide = async (req, res) => {
         if (!paymentPhone) {
           return res.status(400).json({ success: false, message: 'Phone number required for Wave' });
         }
-        paymentResult = await processWave(paymentPhone, amount, chargeCurrency);
+        paymentResult = await withProviderBreaker('wave', () => processWave(paymentPhone, amount, chargeCurrency));
         break;
 
       case 'card': {
@@ -746,7 +784,7 @@ const chargeRide = async (req, res) => {
           });
         }
         // Stripe charges in local currency (supports NGN, KES, ZAR natively)
-        paymentResult = await processStripe(amount, getStripeCurrency(countryCode), stripeToken);
+        paymentResult = await withProviderBreaker('stripe', () => processStripe(amount, getStripeCurrency(countryCode), stripeToken));
         break;
       }
 
@@ -1297,17 +1335,15 @@ const processSubscription = async (req, res) => {
         paymentResult = { success: true, transaction_id: `CASH-SUB-${Date.now()}`, provider_ref: 'CASH' };
         break;
       case 'mtn_mobile_money':
-        // Subscriptions via mobile money use the same async flow but we simplify here
-        // (production should use the full async flow)
-        paymentResult = await processMtnMobileMoney(phone, planData.price, 'XAF')
-          .then((r) => ({ success: r.status === 'pending', ...r }));
+        paymentResult = await withProviderBreaker('mtn_mobile_money', () => processMtnMobileMoney(phone, planData.price, 'XAF'))
+          .then((r) => (r.provider_unavailable ? r : { success: r.status === 'pending', ...r }));
         break;
       case 'orange_money':
-        paymentResult = await processOrangeMoney(phone, planData.price, 'XAF')
-          .then((r) => ({ success: r.status === 'pending', ...r }));
+        paymentResult = await withProviderBreaker('orange_money', () => processOrangeMoney(phone, planData.price, 'XAF'))
+          .then((r) => (r.provider_unavailable ? r : { success: r.status === 'pending', ...r }));
         break;
       case 'wave':
-        paymentResult = await processWave(phone, planData.price, 'XAF');
+        paymentResult = await withProviderBreaker('wave', () => processWave(phone, planData.price, 'XAF'));
         break;
       case 'wallet': {
         const userResult = await db.query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);

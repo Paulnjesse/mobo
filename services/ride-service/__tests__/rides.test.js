@@ -4,6 +4,7 @@ process.env.DATABASE_URL = 'postgresql://localhost/mobo_test';
 
 const mockDb = {
   query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  queryRead: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
 };
 
@@ -32,6 +33,8 @@ const driverToken = jwt.sign({ id: 2, role: 'driver' }, JWT_SECRET, { expiresIn:
 beforeEach(() => {
   mockDb.query.mockReset();
   mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockDb.queryRead.mockReset();
+  mockDb.queryRead.mockResolvedValue({ rows: [], rowCount: 0 });
 });
 
 describe('Ride Service — Health', () => {
@@ -135,9 +138,7 @@ describe('Ride Listing', () => {
   });
 
   test('GET /rides returns list for authenticated user', async () => {
-    mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] }) // auth check
-      .mockResolvedValueOnce({ rows: [{ id: 1 }, { id: 2 }] }); // rides query
+    mockDb.queryRead.mockResolvedValueOnce({ rows: [{ id: 1 }, { id: 2 }] }); // rides query
     const res = await request(app)
       .get('/rides')
       .set('Authorization', `Bearer ${riderToken}`);
@@ -152,9 +153,7 @@ describe('Ride Status', () => {
   });
 
   test('GET /rides/:id returns ride details for participant', async () => {
-    mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 1, role: 'rider' }] }) // auth check
-      .mockResolvedValueOnce({ rows: [{ id: 1, status: 'completed', rider_id: 1 }] }); // ride query
+    mockDb.queryRead.mockResolvedValueOnce({ rows: [{ id: 1, status: 'completed', rider_id: 1 }] }); // ride query
     const res = await request(app)
       .get('/rides/1')
       .set('Authorization', `Bearer ${riderToken}`);
@@ -163,7 +162,7 @@ describe('Ride Status', () => {
 
   test('GET /rides/:id returns 404 for non-existent ride', async () => {
     // auth does not query the DB; only mock the ride lookup
-    mockDb.query.mockResolvedValueOnce({ rows: [] }); // ride not found
+    mockDb.queryRead.mockResolvedValueOnce({ rows: [] }); // ride not found
     const res = await request(app)
       .get('/rides/99999')
       .set('Authorization', `Bearer ${riderToken}`);

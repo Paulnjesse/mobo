@@ -111,6 +111,51 @@ app.use(globalLimiter);
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+
+// SLO metrics: HTTP request counter + latency histogram (used by alerting-rules.yml)
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests by method, route, and status',
+  labelNames: ['method', 'route', 'status'],
+  registers: [promRegister],
+});
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request latency in seconds',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [promRegister],
+});
+
+// Business metrics: ride completions, payment outcomes
+const rideCompletionsTotal = new promClient.Counter({
+  name: 'ride_completions_total',
+  help: 'Total completed rides by payment method',
+  labelNames: ['payment_method'],
+  registers: [promRegister],
+});
+const paymentOutcomesTotal = new promClient.Counter({
+  name: 'payment_outcomes_total',
+  help: 'Payment charge outcomes by provider and result',
+  labelNames: ['provider', 'result'],
+  registers: [promRegister],
+});
+
+// Record HTTP metrics on every response
+app.use((req, res, next) => {
+  const end = httpRequestDuration.startTimer();
+  res.on('finish', () => {
+    const route = req.route ? req.route.path : req.path.replace(/\/[0-9a-f-]{8,}$/i, '/:id');
+    const labels = { method: req.method, route, status: String(res.statusCode) };
+    httpRequestsTotal.inc(labels);
+    end(labels);
+  });
+  next();
+});
+
+// Export metrics helpers for downstream services to increment business counters
+app.locals.metrics = { rideCompletionsTotal, paymentOutcomesTotal };
+
 const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
 app.get('/metrics', async (req, res) => {
   const clientIp = req.ip || (req.connection && req.connection.remoteAddress) || '';

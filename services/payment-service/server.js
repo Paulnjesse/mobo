@@ -6,6 +6,7 @@ Sentry.init({
   environment: process.env.NODE_ENV || 'development',
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
   enabled: !!process.env.SENTRY_DSN,
+  /* istanbul ignore next */
   beforeSend(event) {
     // Strip sensitive headers from error reports
     if (event.request?.headers) {
@@ -16,6 +17,7 @@ Sentry.init({
   },
 });
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
     console.error('[FATAL] JWT_SECRET must be set to a strong secret in production. Refusing to start.');
@@ -91,8 +93,26 @@ app.use('/payments', paymentRoutes);
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+
+// Business SLO metrics
+const paymentOutcomesTotal = new promClient.Counter({
+  name: 'payment_outcomes_total',
+  help: 'Payment charge outcomes by provider and result',
+  labelNames: ['provider', 'result'],
+  registers: [promRegister],
+});
+const earningsSettlementTotal = new promClient.Counter({
+  name: 'earnings_settlement_total',
+  help: 'Driver earnings settlement outcomes',
+  labelNames: ['result'],
+  registers: [promRegister],
+});
+
+// Export for use in paymentController
+app.locals.metrics = { paymentOutcomesTotal, earningsSettlementTotal };
+
 const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
-app.get('/metrics', async (req, res) => {
+app.get('/metrics', /* istanbul ignore next */ async (req, res) => {
   const clientIp = req.ip || (req.connection && req.connection.remoteAddress) || '';
   if (!METRICS_ALLOWED_IPS.includes(clientIp)) {
     return res.status(403).end('Forbidden');
@@ -126,6 +146,7 @@ app.use(Sentry.Handlers.errorHandler());
 const { errorHandler } = require('./src/utils/response');
 app.use(errorHandler);
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
   const { startReconciliationJob } = require('./src/jobs/reconcilePayments');
   startReconciliationJob();

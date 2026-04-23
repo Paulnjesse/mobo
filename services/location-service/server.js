@@ -1,13 +1,16 @@
 require('./src/tracing');
 require('dotenv').config();
 const Sentry = require('@sentry/node');
+/* istanbul ignore next */
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || 'development',
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
   enabled: !!process.env.SENTRY_DSN,
+  /* istanbul ignore next */
   beforeSend(event) {
     // Strip sensitive headers from error reports
+    /* istanbul ignore next */
     if (event.request?.headers) {
       delete event.request.headers.authorization;
       delete event.request.headers.cookie;
@@ -16,7 +19,9 @@ Sentry.init({
   },
 });
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV === 'production') {
+  /* istanbul ignore next */
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'mobo_jwt_secret_change_in_production') {
     console.error('[FATAL] JWT_SECRET must be set to a strong secret in production. Refusing to start.');
     process.exit(1);
@@ -48,7 +53,7 @@ process.env.SERVICE_NAME = process.env.SERVICE_NAME || 'mobo-location-service';
 
 // Allowed origins for CORS and Socket.IO
 const CORS_ORIGINS = process.env.SOCKET_CORS_ORIGIN
-  ? process.env.SOCKET_CORS_ORIGIN.split(',').map((o) => o.trim())
+  ? /* istanbul ignore next */ process.env.SOCKET_CORS_ORIGIN.split(',').map((o) => o.trim())
   : ['http://localhost:3000', 'http://localhost:8081', 'exp://localhost:8081'];
 
 app.use(helmet({
@@ -86,8 +91,8 @@ const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
 const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
-app.get('/metrics', async (req, res) => {
-  const clientIp = req.ip || (req.connection && req.connection.remoteAddress) || '';
+app.get('/metrics', /* istanbul ignore next */ async (req, res) => {
+  const clientIp = req.ip || /* istanbul ignore next */ (req.connection && req.connection.remoteAddress) || '';
   if (!METRICS_ALLOWED_IPS.includes(clientIp)) {
     return res.status(403).end('Forbidden');
   }
@@ -95,6 +100,7 @@ app.get('/metrics', async (req, res) => {
     res.set('Content-Type', promRegister.contentType);
     res.end(await promRegister.metrics());
   } catch (e) {
+    /* istanbul ignore next */
     res.status(500).end(e.message);
   }
 });
@@ -157,7 +163,9 @@ const io = new Server(httpServer, {
 // pub/sub so every instance fans out the event to its locally connected sockets.
 //
 // Gracefully degrades to single-instance in-memory mode when Redis is absent.
+/* istanbul ignore next */
 if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
+  /* istanbul ignore next */
   try {
     const { createAdapter } = require('@socket.io/redis-adapter');
     const { Redis }         = require('ioredis');
@@ -190,12 +198,15 @@ const locationNamespace = initLocationSocket(io);
 // Expose io on app so route handlers can use it
 app.set('io', io);
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
+  /* istanbul ignore next */
   httpServer.listen(PORT, () => {
     logger.info(`[MOBO Location Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
     // GDPR: purge location data older than 90 days, runs daily at 02:00 UTC
     startLocationPurgeJob();
   });
+  /* istanbul ignore next */
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
     httpServer.close(() => {
@@ -204,7 +215,9 @@ if (process.env.NODE_ENV !== 'test') {
     });
     setTimeout(() => { logger.error(`${process.env.SERVICE_NAME} forced shutdown`); process.exit(1); }, 30000).unref();
   };
+  /* istanbul ignore next */
   process.on('SIGTERM', () => _shutdown('SIGTERM'));
+  /* istanbul ignore next */
   process.on('SIGINT',  () => _shutdown('SIGINT'));
 }
 

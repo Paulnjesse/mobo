@@ -20,6 +20,7 @@ const mockClient = {
 
 const mockDb = {
   query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  queryRead: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   connect: jest.fn().mockResolvedValue(mockClient),
 };
 
@@ -55,6 +56,8 @@ const adminToken  = jwt.sign({ id: 9, role: 'admin'  }, JWT_SECRET, { expiresIn:
 beforeEach(() => {
   mockDb.query.mockReset();
   mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockDb.queryRead.mockReset();
+  mockDb.queryRead.mockResolvedValue({ rows: [], rowCount: 0 });
   mockClient.query.mockReset();
   mockClient.query.mockResolvedValue({ rows: [], rowCount: 0 });
   mockDb.connect.mockResolvedValue(mockClient);
@@ -226,7 +229,7 @@ describe('cancelRide — extended', () => {
 // ─────────────────────────────────────────────
 describe('getRide — extended', () => {
   test('returns ride data for the owning rider', async () => {
-    mockDb.query.mockResolvedValueOnce({
+    mockDb.queryRead.mockResolvedValueOnce({
       rows: [{ id: 1, rider_id: 1, driver_user_id: 2, status: 'completed' }],
     });
     const res = await request(app)
@@ -237,7 +240,7 @@ describe('getRide — extended', () => {
   });
 
   test('admin can view any ride', async () => {
-    mockDb.query.mockResolvedValueOnce({
+    mockDb.queryRead.mockResolvedValueOnce({
       rows: [{ id: 1, rider_id: 99, driver_user_id: 88, status: 'completed' }],
     });
     const res = await request(app)
@@ -254,7 +257,7 @@ describe('getRide — extended', () => {
 // ─────────────────────────────────────────────
 describe('listRides', () => {
   test('returns paginated rides for authenticated user', async () => {
-    mockDb.query.mockResolvedValueOnce({
+    mockDb.queryRead.mockResolvedValueOnce({
       rows: [{ id: 1 }, { id: 2 }],
     });
     const res = await request(app)
@@ -265,7 +268,7 @@ describe('listRides', () => {
   });
 
   test('filters by status when provided', async () => {
-    mockDb.query.mockResolvedValueOnce({ rows: [{ id: 5, status: 'completed' }] });
+    mockDb.queryRead.mockResolvedValueOnce({ rows: [{ id: 5, status: 'completed' }] });
     const res = await request(app)
       .get('/rides?status=completed')
       .set('Authorization', `Bearer ${riderToken}`)

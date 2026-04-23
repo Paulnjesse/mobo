@@ -234,9 +234,21 @@ function initLocationSocket(io) {
           });
         }
       } catch (consentErr) {
-        // If the user_consents table doesn't exist yet (pre-migration), fail open with a warning.
-        // This prevents a schema rollout from blocking all drivers. Remove once migration_030 is confirmed applied.
-        logger.warn(`[LocationSocket] Consent check failed for driver ${driverId} — failing open:`, consentErr.message);
+        // SEC-003 (fail-CLOSED): consent check failure blocks the location update.
+        // Migration_030 introduced user_consents — if the table is missing it is
+        // a deployment error, not a driver error. We log and reject rather than
+        // silently broadcasting location data without a valid consent record.
+        // To re-enable the grace period for a schema rollout, temporarily set
+        // LOCATION_CONSENT_GRACE=true in the environment.
+        if (process.env.LOCATION_CONSENT_GRACE === 'true') {
+          logger.warn(`[LocationSocket] Consent check failed for driver ${driverId} — GRACE MODE active (remove LOCATION_CONSENT_GRACE before next release):`, consentErr.message);
+        } else {
+          logger.error(`[LocationSocket] Consent check failed for driver ${driverId} — blocking update (fail-closed):`, consentErr.message);
+          return socket.emit('error', {
+            code: 'CONSENT_CHECK_FAILED',
+            message: 'Could not verify location tracking consent. Please reconnect.',
+          });
+        }
       }
 
       // Compute live ETA from driver's current position to dropoff (if provided)

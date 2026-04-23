@@ -1344,26 +1344,40 @@ const updateRideStatus = async (req, res) => {
           [points, ride.rider_id]
         );
 
-        // Driver earnings
+        // ── Saga: earnings settlement (migration_038) ─────────────────────────
+        // Cash rides: driver collects payment in person → credit immediately.
+        // Digital rides (wallet / MoMo / card): payment may not be confirmed yet.
+        //   → write to earnings_pending; earningsSettler BullMQ job settles to
+        //     drivers.total_earnings once payment_status flips to 'paid'.
+        //   → 24-hour cron flags stale pending rows for ops review.
+        // This closes HIGH-001: driver earnings can no longer exceed collected revenue.
         const driverEarning = finalFare - serviceFee;
-        await completionClient.query(
-          `UPDATE drivers SET total_earnings = total_earnings + $1,
-           total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $2`,
-          [driverEarning, ride.driver_id]
-        );
+        const isCash = ride.payment_method === 'cash';
+        const isPaid = ride.payment_status === 'paid';
 
-        // Driver earnings gate (HIGH-001): only credit earnings immediately for
-        // cash rides (driver collects in person) or rides already confirmed paid.
-        // For wallet / MoMo / card rides where payment is still pending, log a
-        // warning — the payment service credits earnings via its own flow once
-        // the payment webhook confirms.
-        const isCash   = ride.payment_method === 'cash';
-        const isPaid   = ride.payment_status === 'paid';
-        if (!isCash && !isPaid) {
-          logger.warn('[UpdateRideStatus] Non-cash ride completed with payment_status!=paid — deferring earnings', {
-            rideId: id,
-            payment_method: ride.payment_method,
-            payment_status: ride.payment_status,
+        if (isCash || isPaid) {
+          // Immediate settlement — payment is either in hand (cash) or confirmed
+          await completionClient.query(
+            `UPDATE drivers SET total_earnings = total_earnings + $1,
+             total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $2`,
+            [driverEarning, ride.driver_id]
+          );
+        } else {
+          // Deferred settlement — hold in saga table until payment confirmed
+          await completionClient.query(
+            `INSERT INTO earnings_pending
+               (ride_id, driver_id, amount_xaf, payment_method, status)
+             VALUES ($1, $2, $3, $4, 'pending')
+             ON CONFLICT (ride_id) WHERE status = 'pending' DO NOTHING`,
+            [ride.id, ride.driver_id, driverEarning, ride.payment_method]
+          );
+          // Still increment trip counter (non-financial, always immediate)
+          await completionClient.query(
+            `UPDATE drivers SET total_trips_today = COALESCE(total_trips_today, 0) + 1 WHERE id = $1`,
+            [ride.driver_id]
+          );
+          logger.info('[UpdateRideStatus] Earnings held in earnings_pending (saga) — awaiting payment confirmation', {
+            rideId: id, driverEarning, payment_method: ride.payment_method,
           });
         }
 
@@ -1711,7 +1725,8 @@ const getRide = async (req, res) => {
     const requestingUserId = String(req.user?.id);
     const userRole = req.user?.role;
 
-    const result = await pool.query(
+    // READ-REPLICA: pure SELECT — route to read replica to reduce primary load
+    const result = await pool.queryRead(
       `SELECT r.*,
         ST_X(r.pickup_location::geometry) as pickup_lng,
         ST_Y(r.pickup_location::geometry) as pickup_lat,
@@ -1759,7 +1774,8 @@ const listRides = async (req, res) => {
     const params = [userId, safeLimit, parseInt(offset) || 0];
     if (status) { whereClause += ` AND r.status = $4`; params.push(status); }
 
-    const result = await pool.query(
+    // READ-REPLICA: list query — route to replica to offload primary write path
+    const result = await pool.queryRead(
       `SELECT r.id, r.status, r.ride_type, r.pickup_address, r.dropoff_address,
               r.estimated_fare, r.final_fare, r.payment_method, r.created_at, r.completed_at,
               u.full_name as rider_name, du.full_name as driver_name

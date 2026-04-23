@@ -51,11 +51,24 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
     fraudQueue = new Queue('fraud-checks', {
       connection,
       defaultJobOptions: {
-        attempts:          2,
+        attempts:          3,
         backoff:           { type: 'exponential', delay: 3000 },
         removeOnComplete:  100,
-        removeOnFail:      500,
+        // DLQ: keep the last 1000 failed jobs in a separate queue so ops can
+        // inspect, replay, or alert on persistent ML-service failures.
+        removeOnFail:      false,
       },
+    });
+
+    // Dead-letter queue — receives jobs that exhausted all retry attempts.
+    // Alerts fire via Prometheus metric fraud_dlq_size when backlog > 50.
+    const dlqConn = connection.duplicate();
+    const fraudDlq = new Queue('fraud-checks-dlq', { connection: dlqConn });
+    fraudQueue.on('failed', async (job, err) => {
+      if (job.attemptsMade >= (job.opts.attempts || 3)) {
+        await fraudDlq.add('dlq', { originalJob: job.data, error: err.message, failedAt: new Date().toISOString() });
+        logger.error('[FraudQueue] Job moved to DLQ after exhausting retries', { jobId: job.id, err: err.message });
+      }
     });
 
     logger.info('[FraudQueue] BullMQ fraud-checks queue ready');

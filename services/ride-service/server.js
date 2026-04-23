@@ -96,6 +96,24 @@ app.use('/fare', rideRoutes);
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+
+// Business SLO metrics
+const rideCompletionsTotal = new promClient.Counter({
+  name: 'ride_completions_total',
+  help: 'Total completed rides by payment method',
+  labelNames: ['payment_method'],
+  registers: [promRegister],
+});
+const rideRequestsTotal = new promClient.Counter({
+  name: 'ride_requests_total',
+  help: 'Total ride requests by status outcome',
+  labelNames: ['outcome'],
+  registers: [promRegister],
+});
+
+// Export for use in rideController
+app.locals.metrics = { rideCompletionsTotal, rideRequestsTotal };
+
 const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
 app.get('/metrics', async (req, res) => {
   const clientIp = req.ip || (req.connection && req.connection.remoteAddress) || '';
