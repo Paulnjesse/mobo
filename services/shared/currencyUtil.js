@@ -61,13 +61,23 @@ const COUNTRY_NAME_TO_ISO = {
  * Convert an XAF integer amount to the local currency of a country.
  * Always returns an integer (rounded).
  *
- * @param {number} amountXAF   — amount in XAF (must be an integer)
+ * MEDIUM-004 — Rounding rule (enforced here, must not be changed per-callsite):
+ *   Always Math.round() to the nearest integer local-currency unit.
+ *   Rationale: symmetric rounding avoids systematic bias for either party and
+ *   is consistent with how MTN MoMo / Orange Money display amounts.
+ *   Do NOT use Math.floor (shortchanges riders) or Math.ceil (overcharges).
+ *   All callers (paymentController, fareController) rely on this function and
+ *   must NOT apply additional rounding — amountXAF must already be an integer.
+ *
+ * @param {number} amountXAF   — amount in XAF (must be an integer; never a float)
  * @param {string} countryCode — ISO 3166-1 alpha-2 (e.g. 'NG', 'KE', 'ZA')
  * @returns {{ amount: number, currency_code: string, currency_symbol: string, amount_xaf: number }}
  */
 function convertFromXAF(amountXAF, countryCode) {
   const currencyCode = COUNTRY_CURRENCY[countryCode] || 'XAF';
   const rate         = RATES[currencyCode] || RATES.XAF;
+  // Integer arithmetic: multiply first then divide to avoid float precision loss.
+  // Math.round — see rounding rule in JSDoc above.
   const amount       = Math.round((amountXAF * rate.xaf_rate_x1000) / 1000);
   return {
     amount,

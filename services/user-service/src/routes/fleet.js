@@ -1,11 +1,16 @@
 const router = require('express').Router();
 const { authenticate, requireFleetOwner, requireAdmin } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/rbac');
 const fleetController = require('../controllers/fleetController');
 const { auditAdmin } = require('../middleware/adminAudit');
 const adminIpGuard    = require('../middleware/adminIpGuard');
 
 // ── Admin-only routes (IP guard + auth + RBAC + audit) ────────────────────────
-router.get('/admin/all', adminIpGuard, authenticate, requireAdmin, fleetController.getAllFleets);
+// MEDIUM-003: requirePermission adds a DB-level permission check on top of the
+// JWT role check in requireAdmin. This ensures that admins whose permissions are
+// revoked mid-session cannot list fleet data until their JWT expires.
+// 'fleet:read' is seeded for 'admin', 'support', and 'ops' roles (migration_023).
+router.get('/admin/all', adminIpGuard, authenticate, requireAdmin, requirePermission('fleet:read'), fleetController.getAllFleets);
 router.post('/:id/approve',  adminIpGuard, authenticate, requireAdmin, auditAdmin('fleet.approve',  'fleet',  (req) => req.params.id), fleetController.approveFleet);
 router.post('/:id/suspend',  adminIpGuard, authenticate, requireAdmin, auditAdmin('fleet.suspend',  'fleet',  (req) => req.params.id), fleetController.suspendFleet);
 router.post('/:id/vehicles/:vehicleId/approve', adminIpGuard, authenticate, requireAdmin, auditAdmin('vehicle.approve', 'vehicle', (req) => req.params.vehicleId), fleetController.approveVehicle);

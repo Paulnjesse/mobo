@@ -412,6 +412,24 @@ const assignDriver = async (req, res) => {
 
     const driver = driverResult.rows[0];
 
+    // HIGH-002: Prevent a driver from being silently double-assigned.
+    // If the driver is already assigned to any fleet vehicle (including one in
+    // a different fleet), return 409 so the caller must unassign first.
+    const alreadyAssigned = await db.query(
+      `SELECT fv.id, f.name AS fleet_name
+       FROM fleet_vehicles fv
+       JOIN fleets f ON f.id = fv.fleet_id
+       WHERE fv.assigned_driver_id = $1 AND fv.id != $2
+       LIMIT 1`,
+      [driver.id, vehicleId]
+    );
+    if (alreadyAssigned.rows[0]) {
+      return res.status(409).json({
+        success: false,
+        message: `${driver.full_name} is already assigned to another vehicle in fleet "${alreadyAssigned.rows[0].fleet_name}". Unassign them first.`,
+      });
+    }
+
     // Assign driver to vehicle
     await db.query(
       'UPDATE fleet_vehicles SET assigned_driver_id = $1 WHERE id = $2',

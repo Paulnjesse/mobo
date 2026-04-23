@@ -18,12 +18,13 @@ process.env.JWT_SECRET = 'test_secret_minimum_32_chars_long_abc';
 process.env.DATABASE_URL = 'postgresql://localhost/mobo_test';
 // Deliberately NOT setting MTN/Orange credentials → forces dev mock path in processMtnMobileMoney
 
+const mockClient = {
+  query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  release: jest.fn(),
+};
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-  connect: jest.fn().mockResolvedValue({
-    query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-    release: jest.fn(),
-  }),
+  connect: jest.fn().mockResolvedValue(mockClient),
 };
 
 jest.mock('../src/config/database', () => mockDb);
@@ -52,6 +53,9 @@ const driverToken = jwt.sign({ id: 2, role: 'driver', phone: '+237699000001' }, 
 beforeEach(() => {
   mockDb.query.mockReset();
   mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockClient.query.mockReset();
+  mockClient.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockDb.connect.mockResolvedValue(mockClient);
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -161,6 +165,7 @@ describe('POST /payments/charge — cash success with full audit chain', () => {
 
   test('wallet success path (covers wallet balance deduction + ride update)', async () => {
     const payId = 'pay-wallet-success-1';
+    // Pool queries: ride lookup + 5 fraud check queries
     mockDb.query
       .mockResolvedValueOnce({ rows: [{ id: 'ride-wallet', payment_status: 'unpaid', final_fare: 1000, estimated_fare: 1000, rider_id: 1 }] })
       .mockResolvedValueOnce({ rows: [{ count: '0' }] })
@@ -168,16 +173,17 @@ describe('POST /payments/charge — cash success with full audit chain', () => {
       .mockResolvedValueOnce({ rows: [{ count: '0' }] })
       .mockResolvedValueOnce({ rows: [{ avg: null }] })
       .mockResolvedValueOnce({ rows: [{ age: '400' }] })
-      // wallet UPDATE returns row (sufficient balance)
-      .mockResolvedValueOnce({ rows: [{ wallet_balance: 4000 }] })
-      // INSERT payment
-      .mockResolvedValueOnce({ rows: [{ id: payId, amount: 1000 }] })
-      // audit payment_initiated
+      // after transaction commits: audit payment_initiated, UPDATE rides, audit payment_completed
       .mockResolvedValueOnce({ rows: [] })
-      // UPDATE rides
       .mockResolvedValueOnce({ rows: [] })
-      // audit payment_completed
       .mockResolvedValueOnce({ rows: [] });
+
+    // Transaction client: BEGIN, wallet UPDATE (balance ok), payment INSERT, COMMIT
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] })                                        // BEGIN
+      .mockResolvedValueOnce({ rows: [{ wallet_balance: 4000 }] })               // wallet UPDATE
+      .mockResolvedValueOnce({ rows: [{ id: payId, amount: 1000 }] })            // INSERT payment
+      .mockResolvedValueOnce({ rows: [] });                                       // COMMIT
 
     const res = await request(app)
       .post('/payments/charge')

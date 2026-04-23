@@ -717,6 +717,7 @@ const chargeRide = async (req, res) => {
 
     // ── SYNCHRONOUS METHODS ────────────────────────────────────────────────────
     let paymentResult;
+    let walletPayment = null; // set inside wallet case when atomic INSERT succeeds
 
     switch (method) {
       case 'cash':
@@ -750,25 +751,44 @@ const chargeRide = async (req, res) => {
       }
 
       case 'wallet': {
-        // Wallet is always stored in XAF internally
-        const walletUpdate = await db.query(
-          `UPDATE users SET wallet_balance = wallet_balance - $1
-           WHERE id = $2 AND wallet_balance >= $1
-           RETURNING wallet_balance`,
-          [amountXAF, userId]
-        );
-        if (!walletUpdate.rows[0]) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient wallet balance. Need ${amountXAF.toLocaleString()} XAF (${localCurrency.currency_symbol} ${amount.toLocaleString()} ${chargeCurrency}).`,
-          });
+        // CRITICAL-003: Wrap wallet deduction + payment INSERT in a single DB
+        // transaction so there is no window where the wallet is debited but no
+        // payment record exists (e.g. process crash between the two queries).
+        const walletClient = await db.connect();
+        try {
+          await walletClient.query('BEGIN');
+          const walletUpdate = await walletClient.query(
+            `UPDATE users SET wallet_balance = wallet_balance - $1
+             WHERE id = $2 AND wallet_balance >= $1
+             RETURNING wallet_balance`,
+            [amountXAF, userId]
+          );
+          if (!walletUpdate.rows[0]) {
+            await walletClient.query('ROLLBACK');
+            return res.status(400).json({
+              success: false,
+              message: `Insufficient wallet balance. Need ${amountXAF.toLocaleString()} XAF (${localCurrency.currency_symbol} ${amount.toLocaleString()} ${chargeCurrency}).`,
+            });
+          }
+          const txId = `WALLET-${Date.now()}`;
+          const walletPaymentRow = await walletClient.query(
+            `INSERT INTO payments
+               (ride_id, user_id, amount, currency, method, status, transaction_id, provider_ref, failure_reason, metadata)
+             VALUES ($1, $2, $3, $4, $5, 'completed', $6, 'WALLET', NULL, $7)
+             RETURNING *`,
+            [ride_id, userId, amountXAF, chargeCurrency, method, txId,
+             JSON.stringify({ method, phone: paymentPhone || null })]
+          );
+          await walletClient.query('COMMIT');
+          // paymentResult and walletPayment used downstream to skip the shared INSERT
+          paymentResult = { success: true, transaction_id: txId, provider_ref: 'WALLET', message: 'Wallet payment successful' };
+          walletPayment = walletPaymentRow.rows[0];
+        } catch (walletErr) {
+          await walletClient.query('ROLLBACK');
+          throw walletErr;
+        } finally {
+          walletClient.release();
         }
-        paymentResult = {
-          success: true,
-          transaction_id: `WALLET-${Date.now()}`,
-          provider_ref: 'WALLET',
-          message: 'Wallet payment successful',
-        };
         break;
       }
 
@@ -778,19 +798,23 @@ const chargeRide = async (req, res) => {
 
     const paymentStatus = paymentResult.success ? 'completed' : 'failed';
 
-    const payment = await db.query(
-      `INSERT INTO payments
-         (ride_id, user_id, amount, currency, method, status, transaction_id, provider_ref, failure_reason, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING *`,
-      [
-        ride_id, userId, amountXAF, chargeCurrency, method, paymentStatus,
-        paymentResult.transaction_id || null,
-        paymentResult.provider_ref   || null,
-        paymentResult.success ? null : paymentResult.message,
-        JSON.stringify({ method, phone: paymentPhone || null }),
-      ]
-    );
+    // Wallet already did its own atomic INSERT (CRITICAL-003 fix); all other
+    // methods use the shared INSERT below.
+    const payment = walletPayment
+      ? { rows: [walletPayment] }
+      : await db.query(
+          `INSERT INTO payments
+             (ride_id, user_id, amount, currency, method, status, transaction_id, provider_ref, failure_reason, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING *`,
+          [
+            ride_id, userId, amountXAF, chargeCurrency, method, paymentStatus,
+            paymentResult.transaction_id || null,
+            paymentResult.provider_ref   || null,
+            paymentResult.success ? null : paymentResult.message,
+            JSON.stringify({ method, phone: paymentPhone || null }),
+          ]
+        );
 
     // PCI DSS 10.2 — log synchronous payment initiation
     await writePaymentAudit({

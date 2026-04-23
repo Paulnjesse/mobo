@@ -937,6 +937,23 @@ const acceptRide = async (req, res) => {
 
     await client.query('BEGIN');
 
+    // CRITICAL-001: Prevent a driver from holding multiple concurrent rides.
+    // If the driver is already 'accepted', 'arriving', or 'in_progress' on any
+    // ride, refuse the new acceptance immediately (inside the transaction so the
+    // check and the downstream UPDATE are serialised for this driver).
+    const activeRideCheck = await client.query(
+      `SELECT id FROM rides
+       WHERE driver_id = $1 AND status IN ('accepted','arriving','in_progress')
+       LIMIT 1`,
+      [driverId]
+    );
+    if (activeRideCheck.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'You already have an active ride. Complete or cancel it before accepting a new one.',
+      });
+    }
+
     // Lock the ride row — any concurrent acceptRide call blocks here until
     // this transaction commits or rolls back.
     const ride = await client.query(
@@ -1335,27 +1352,37 @@ const updateRideStatus = async (req, res) => {
           [driverEarning, ride.driver_id]
         );
 
-        // Referral qualification: pay referrer on rider's first completed ride
-        const riderRideCount = await completionClient.query(
-          `SELECT COUNT(*) FROM rides WHERE rider_id = $1 AND status = 'completed'`,
+        // Driver earnings gate (HIGH-001): only credit earnings immediately for
+        // cash rides (driver collects in person) or rides already confirmed paid.
+        // For wallet / MoMo / card rides where payment is still pending, log a
+        // warning — the payment service credits earnings via its own flow once
+        // the payment webhook confirms.
+        const isCash   = ride.payment_method === 'cash';
+        const isPaid   = ride.payment_status === 'paid';
+        if (!isCash && !isPaid) {
+          logger.warn('[UpdateRideStatus] Non-cash ride completed with payment_status!=paid — deferring earnings', {
+            rideId: id,
+            payment_method: ride.payment_method,
+            payment_status: ride.payment_status,
+          });
+        }
+
+        // Referral qualification (LOW-001): use an atomic UPDATE … RETURNING to
+        // claim the referral so concurrent completions for the same rider cannot
+        // both satisfy the count=1 check and double-pay the referrer.
+        const referralClaim = await completionClient.query(
+          `UPDATE referrals
+           SET status = 'paid', qualified_at = NOW(), paid_at = NOW()
+           WHERE referred_id = $1 AND status = 'pending'
+           RETURNING referrer_id`,
           [ride.rider_id]
         );
-        if (parseInt(riderRideCount.rows[0].count) === 1) {
-          const referral = await completionClient.query(
-            `SELECT * FROM referrals WHERE referred_id = $1 AND status = 'pending'`,
-            [ride.rider_id]
+        if (referralClaim.rows[0]) {
+          await completionClient.query(
+            `UPDATE users SET referral_credits = referral_credits + 1000,
+             wallet_balance = wallet_balance + 1000 WHERE id = $1`,
+            [referralClaim.rows[0].referrer_id]
           );
-          if (referral.rows[0]) {
-            await completionClient.query(
-              `UPDATE referrals SET status = 'paid', qualified_at = NOW(), paid_at = NOW() WHERE id = $1`,
-              [referral.rows[0].id]
-            );
-            await completionClient.query(
-              `UPDATE users SET referral_credits = referral_credits + 1000,
-               wallet_balance = wallet_balance + 1000 WHERE id = $1`,
-              [referral.rows[0].referrer_id]
-            );
-          }
         }
 
         await completionClient.query('COMMIT');

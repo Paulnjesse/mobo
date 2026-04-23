@@ -140,7 +140,7 @@ function initLocationSocket(io) {
   /* Authentication middleware                                            */
   /* ------------------------------------------------------------------ */
   /* istanbul ignore next */
-  location.use((socket, next) => {
+  location.use(async (socket, next) => {
     try {
       const token =
         socket.handshake.auth?.token ||
@@ -151,6 +151,23 @@ function initLocationSocket(io) {
       // Uses shared jwtUtil — honours RS256 in production, HS256 in dev/test.
       // Consistent with the HTTP auth middleware (location-service/src/middleware/auth.js).
       const decoded = verifyJwt(token);
+
+      // HIGH-003: JWT is a point-in-time snapshot. Check current account status
+      // in the DB so suspended/deactivated users cannot maintain open sockets
+      // after their account is actioned (JWT would otherwise remain valid for
+      // up to 7 days).
+      const statusRow = await db.query(
+        'SELECT is_active, is_suspended FROM users WHERE id = $1',
+        [decoded.id]
+      );
+      const userStatus = statusRow.rows[0];
+      if (!userStatus) {
+        return next(new Error('Authentication failed: user not found'));
+      }
+      if (!userStatus.is_active || userStatus.is_suspended) {
+        return next(new Error('Authentication failed: account is inactive or suspended'));
+      }
+
       socket.user = decoded; // { id, role, name, ... }
       next();
     } catch (err) {
