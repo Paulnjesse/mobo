@@ -98,30 +98,15 @@ function createSocket(url, token, label) {
     autoConnect: false,
   });
 
-  // --- Lifecycle logging ---
-  socket.on('connect', () => {
-    console.log(`[Socket:${label}] Connected — id: ${socket.id}`);
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log(`[Socket:${label}] Disconnected — reason: ${reason}`);
-  });
-
-  socket.on('connect_error', (err) => {
-    console.warn(`[Socket:${label}] Connection error — ${err.message}`);
-  });
-
-  socket.on('reconnect', (attempt) => {
-    console.log(`[Socket:${label}] Reconnected after ${attempt} attempt(s)`);
-  });
-
-  socket.on('reconnect_attempt', (attempt) => {
-    console.log(`[Socket:${label}] Reconnect attempt #${attempt}`);
-  });
-
-  socket.on('error', (err) => {
-    console.error(`[Socket:${label}] Error — ${err?.message || err}`);
-  });
+  // --- Lifecycle logging — __DEV__ only so no PII leaks in production builds ---
+  if (__DEV__) {
+    socket.on('connect',          ()       => console.log(`[Socket:${label}] Connected — id: ${socket.id}`));
+    socket.on('disconnect',       (reason) => console.log(`[Socket:${label}] Disconnected — reason: ${reason}`));
+    socket.on('connect_error',    (err)    => console.warn(`[Socket:${label}] Connection error — ${err.message}`));
+    socket.on('reconnect',        (n)      => console.log(`[Socket:${label}] Reconnected after ${n} attempt(s)`));
+    socket.on('reconnect_attempt',(n)      => console.log(`[Socket:${label}] Reconnect attempt #${n}`));
+    socket.on('error',            (err)    => console.error(`[Socket:${label}] Error — ${err?.message || err}`));
+  }
 
   return socket;
 }

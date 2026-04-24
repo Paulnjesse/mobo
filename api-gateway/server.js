@@ -40,6 +40,10 @@ const swaggerSpec = require('./src/swagger');
 
 const app = express();
 
+// Enable ETag for conditional GET (304 Not Modified) — saves bandwidth on 3G
+// when the client already has a fresh copy of the response.
+app.set('etag', 'strong');
+
 // Gzip/Brotli compression — reduces JSON payloads ~70% on slow 3G connections
 app.use(compression({ threshold: 512 })); // only compress responses > 512 bytes
 app.use(requestId);

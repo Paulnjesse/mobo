@@ -46,6 +46,12 @@ const RULES = [
   // Promo / active promos: changes rarely
   { pattern: /\/api\/v?1?\/rides\/promos\/active/,      maxAge: 120,  swr: 240 },
 
+  // Admin promotion + surge reads: low-traffic, cache for dashboard polling
+  { pattern: /\/api\/v?1?\/admin\/(promotions|surge)$/, maxAge: 30,  swr: 60 },
+
+  // Admin dashboard stats: refresh every 30 s is fast enough
+  { pattern: /\/api\/v?1?\/admin\/dashboard/,           maxAge: 30,  swr: 60 },
+
   // Health check: short cache to reduce monitoring noise
   { pattern: /\/health$/,                               maxAge: 10,   swr: 30 },
 ];
