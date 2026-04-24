@@ -206,9 +206,25 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ride_ratings_ride_id
   ON ride_ratings (ride_id);
 
 -- Driver rating history (profile, weighted average computation)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ride_ratings_driver_created
-  ON ride_ratings (driver_id, created_at DESC)
-  WHERE driver_id IS NOT NULL;
+-- ride_ratings schema uses rated_id (not driver_id) — guard with column existence check
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ride_ratings' AND column_name = 'driver_id'
+  ) THEN
+    EXECUTE $idx$CREATE INDEX IF NOT EXISTS idx_ride_ratings_driver_created
+      ON ride_ratings (driver_id, created_at DESC) WHERE driver_id IS NOT NULL$idx$;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ride_ratings' AND column_name = 'rated_id'
+  ) THEN
+    -- rated_id is the actual column in this schema
+    EXECUTE $idx$CREATE INDEX IF NOT EXISTS idx_ride_ratings_rated_created
+      ON ride_ratings (rated_id, created_at DESC)$idx$;
+  END IF;
+END
+$$;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
