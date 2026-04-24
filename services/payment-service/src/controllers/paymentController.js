@@ -1135,28 +1135,26 @@ const getPaymentHistory = async (req, res) => {
     const { limit = 20, offset = 0 } = req.query;
     const safeLimit = Math.min(Math.max(1, parseInt(limit) || 20), 100);
 
-    const result = await db.query(
-      `SELECT
-        p.*,
-        r.pickup_address, r.dropoff_address, r.ride_type,
-        r.distance_km, r.duration_minutes
-       FROM payments p
-       LEFT JOIN rides r ON p.ride_id = r.id
-       WHERE p.user_id = $1
-       ORDER BY p.created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, safeLimit, parseInt(offset)]
-    );
-
-    const countResult = await db.query(
-      'SELECT COUNT(*) FROM payments WHERE user_id = $1',
-      [userId]
-    );
-
-    const totalSpentResult = await db.query(
-      "SELECT SUM(amount) AS total FROM payments WHERE user_id = $1 AND status = 'completed'",
-      [userId]
-    );
+    // READ-REPLICA: payment history is read-only — offload to replica
+    const [result, countResult, totalSpentResult] = await Promise.all([
+      db.queryRead(
+        `SELECT
+          p.*,
+          r.pickup_address, r.dropoff_address, r.ride_type,
+          r.distance_km, r.duration_minutes
+         FROM payments p
+         LEFT JOIN rides r ON p.ride_id = r.id
+         WHERE p.user_id = $1
+         ORDER BY p.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, safeLimit, parseInt(offset)]
+      ),
+      db.queryRead('SELECT COUNT(*) FROM payments WHERE user_id = $1', [userId]),
+      db.queryRead(
+        "SELECT SUM(amount) AS total FROM payments WHERE user_id = $1 AND status = 'completed'",
+        [userId]
+      ),
+    ]);
 
     res.json({
       success: true,
@@ -1260,7 +1258,8 @@ const getWalletBalance = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const result = await db.query(
+    // READ-REPLICA: wallet balance is read-only
+    const result = await db.queryRead(
       'SELECT wallet_balance, loyalty_points FROM users WHERE id = $1',
       [userId]
     );

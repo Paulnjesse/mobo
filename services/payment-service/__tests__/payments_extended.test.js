@@ -20,6 +20,7 @@ const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
 };
+mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);
 jest.mock('stripe', () => () => ({

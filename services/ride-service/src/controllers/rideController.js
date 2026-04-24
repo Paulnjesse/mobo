@@ -824,17 +824,20 @@ const requestRide = async (req, res) => {
           return { ...d, score };
         }).sort((a, b) => b.score - a.score).slice(0, 5); // notify top 5 drivers
 
-        for (const driver of scored) {
-          if (!driver.push_token) continue;
-          await notifyRideRequested(driver.push_token, {
-            ride_id:         createdRide.id,
-            pickup_address,
-            dropoff_address,
-            ride_type,
-            fare:            fareCalc.total,
-            distance_km:     distanceKm.toFixed(1),
-          }).catch(() => {}); // never let push failure affect ride creation
-        }
+        // Fire all driver push notifications in parallel — sequential await
+        // added ~80 ms latency per driver (5 drivers = ~400 ms wasted).
+        await Promise.allSettled(
+          scored
+            .filter((d) => d.push_token)
+            .map((driver) => notifyRideRequested(driver.push_token, {
+              ride_id:         createdRide.id,
+              pickup_address,
+              dropoff_address,
+              ride_type,
+              fare:            fareCalc.total,
+              distance_km:     distanceKm.toFixed(1),
+            }))
+        );
       } catch (_err) {
         // Non-blocking — dispatch errors must never affect the rider response
       }

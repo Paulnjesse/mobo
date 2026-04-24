@@ -21,6 +21,7 @@ const mockDb = {
     release: jest.fn(),
   }),
 };
+mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);
 

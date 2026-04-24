@@ -7,9 +7,10 @@ process.env.ORANGE_WEBHOOK_SECRET = 'test_orange_webhook_secret';
 process.env.STRIPE_SECRET_KEY = 'sk_live_test_mobo_key';
 
 const mockDb = {
-  query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
   connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
 };
+mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);
 jest.mock('stripe', () => () => ({

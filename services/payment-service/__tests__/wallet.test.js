@@ -17,9 +17,11 @@ process.env.DATABASE_URL = 'postgresql://localhost/mobo_test';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 const mockDb = {
-  query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-  connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
+  query:     jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  connect:   jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
 };
+// queryRead delegates to query so existing mockResolvedValueOnce chains work for both
+mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);
 jest.mock('stripe', () => () => ({

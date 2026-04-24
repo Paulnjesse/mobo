@@ -94,6 +94,11 @@ const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
 
+// HTTP request latency histogram (p50 / p95 / p99 SLO tracking)
+const { createLatencyHistogram, httpLatencyMiddleware } = require('../shared/latencyMiddleware');
+const httpLatencyHistogram = createLatencyHistogram(promRegister, 'mobo-payment-service');
+app.use(httpLatencyMiddleware(httpLatencyHistogram));
+
 // Business SLO metrics
 const paymentOutcomesTotal = new promClient.Counter({
   name: 'payment_outcomes_total',
@@ -156,6 +161,8 @@ if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(PORT, () => {
     logger.info(`[MOBO Payment Service] Running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
   });
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout   = 70_000;
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
     server.close(() => {

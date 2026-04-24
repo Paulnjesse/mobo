@@ -99,6 +99,11 @@ const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
 
+// HTTP request latency histogram (p50 / p95 / p99 SLO tracking)
+const { createLatencyHistogram, httpLatencyMiddleware } = require('../shared/latencyMiddleware');
+const httpLatencyHistogram = createLatencyHistogram(promRegister, 'mobo-ride-service');
+app.use(httpLatencyMiddleware(httpLatencyHistogram));
+
 // Business SLO metrics
 const rideCompletionsTotal = new promClient.Counter({
   name: 'ride_completions_total',
@@ -205,6 +210,12 @@ const deliveriesNamespace = initDeliverySocket(io);
 app.set('io', io);
 
 if (process.env.NODE_ENV !== 'test') {
+  // Tune HTTP keep-alive to avoid connection-churn under load.
+  // keepAliveTimeout > upstream proxy/load-balancer idle timeout prevents
+  // "ECONNRESET on idle connection" errors seen at Uber/Lyft scale.
+  httpServer.keepAliveTimeout = 65_000;   // 65 s (> Nginx/Render LB 60 s default)
+  httpServer.headersTimeout   = 70_000;   // must be > keepAliveTimeout
+
   httpServer.listen(PORT, () => {
     logger.info(`[MOBO Ride Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
     startEscalationJob();

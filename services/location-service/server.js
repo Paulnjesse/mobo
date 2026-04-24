@@ -90,6 +90,11 @@ app.use('/', locationRoutes);
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+
+// HTTP request latency histogram (p50 / p95 / p99 SLO tracking)
+const { createLatencyHistogram, httpLatencyMiddleware } = require('../shared/latencyMiddleware');
+const httpLatencyHistogram = createLatencyHistogram(promRegister, 'mobo-location-service');
+app.use(httpLatencyMiddleware(httpLatencyHistogram));
 const METRICS_ALLOWED_IPS = (process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1').split(',').map(s => s.trim());
 app.get('/metrics', /* istanbul ignore next */ async (req, res) => {
   const clientIp = req.ip || /* istanbul ignore next */ (req.connection && req.connection.remoteAddress) || '';
@@ -235,6 +240,8 @@ app.set('io', io);
 
 /* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
+  httpServer.keepAliveTimeout = 65_000;
+  httpServer.headersTimeout   = 70_000;
   /* istanbul ignore next */
   httpServer.listen(PORT, () => {
     logger.info(`[MOBO Location Service] HTTP + Socket.IO running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });
