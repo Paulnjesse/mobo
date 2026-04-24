@@ -23,6 +23,7 @@ const {
   chargeRide,
   checkPaymentStatus,
   createStripePaymentIntent,
+  confirmStripePayment,
   webhookMtn,
   webhookOrange,
   webhookFlutterwave,
@@ -70,6 +71,8 @@ router.get('/subscription',           getSubscriptionStatus);
 
 // Stripe payment sheet — creates a PaymentIntent; client uses client_secret with Stripe SDK
 router.post('/stripe/payment-intent', idempotency, createStripePaymentIntent);
+// Stripe confirm — called by mobile app after payment sheet completes; verifies PI + records payment
+router.post('/stripe/confirm',        idempotency, confirmStripePayment);
 
 // Driver cashout (payout to mobile money / bank)
 router.post('/driver/cashout',         cashoutLimiter, idempotency, validateCashout, driverCashout);

@@ -1510,6 +1510,96 @@ const createStripePaymentIntent = async (req, res) => {
 };
 
 /**
+ * POST /payments/stripe/confirm
+ * Called by the mobile app after the user completes the Stripe payment sheet.
+ * The Stripe SDK returns a PaymentIntent ID; this endpoint:
+ *   1. Retrieves the PI from Stripe to verify its status.
+ *   2. Records the payment row (or updates an existing one) in our DB.
+ *   3. Returns the final status so the app can show a receipt or retry prompt.
+ *
+ * Body: { payment_intent_id, ride_id? }
+ */
+const confirmStripePayment = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { payment_intent_id, ride_id } = req.body;
+
+    if (!payment_intent_id) {
+      return res.status(400).json({ success: false, message: 'payment_intent_id is required' });
+    }
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey || stripeKey === 'sk_test_xxxx') {
+      // Dev/test mode — trust the client's assertion
+      return res.json({
+        success: true,
+        mock: true,
+        status: 'succeeded',
+        message: 'Payment recorded (mock mode)',
+      });
+    }
+
+    const stripe = require('stripe')(stripeKey);
+    let pi;
+    try {
+      pi = await stripe.paymentIntents.retrieve(payment_intent_id);
+    } catch (stripeErr) {
+      logger.error('[ConfirmStripe] Failed to retrieve PaymentIntent', stripeErr.message);
+      return res.status(400).json({ success: false, message: `Invalid payment_intent_id: ${stripeErr.message}` });
+    }
+
+    // Verify the PI belongs to this user (metadata set in createStripePaymentIntent)
+    if (pi.metadata?.user_id && pi.metadata.user_id !== String(userId)) {
+      return res.status(403).json({ success: false, message: 'PaymentIntent does not belong to this user' });
+    }
+
+    const succeeded = pi.status === 'succeeded';
+    const amount    = pi.amount; // XAF integer (zero-decimal currency)
+
+    // Upsert payment record
+    await db.query(
+      `INSERT INTO payments
+         (user_id, ride_id, amount, method, status, provider, provider_ref,
+          stripe_payment_intent_id, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, 'card', $4, 'stripe', $5, $5, $6, NOW(), NOW())
+       ON CONFLICT (stripe_payment_intent_id) DO UPDATE
+         SET status     = EXCLUDED.status,
+             updated_at = NOW()`,
+      [
+        userId,
+        ride_id || pi.metadata?.ride_id || null,
+        amount,
+        succeeded ? 'completed' : pi.status,
+        pi.id,
+        JSON.stringify({ stripe_status: pi.status, currency: pi.currency }),
+      ]
+    );
+
+    // Mark ride as paid if succeeded and ride_id provided
+    if (succeeded && (ride_id || pi.metadata?.ride_id)) {
+      const rideId = ride_id || pi.metadata?.ride_id;
+      await db.query(
+        `UPDATE rides
+         SET payment_status = 'paid', payment_method = 'card', updated_at = NOW()
+         WHERE id = $1 AND rider_id = $2`,
+        [rideId, userId]
+      );
+    }
+
+    res.json({
+      success:  succeeded,
+      status:   pi.status,
+      amount,
+      currency: pi.currency.toUpperCase(),
+      message:  succeeded ? 'Payment confirmed' : `Payment status: ${pi.status}`,
+    });
+  } catch (err) {
+    logger.error('[ConfirmStripe Error]', err.message);
+    res.status(500).json({ success: false, message: `Payment confirmation failed: ${err.message}` });
+  }
+};
+
+/**
  * POST /payments/webhook/stripe
  * Handles Stripe webhook events. Must receive the raw request body (not JSON-parsed)
  * so that signature verification works. Registered in server.js before express.json().
@@ -1857,6 +1947,7 @@ module.exports = {
   chargeRide,
   checkPaymentStatus,
   createStripePaymentIntent,
+  confirmStripePayment,
   webhookMtn,
   webhookOrange,
   webhookStripe,

@@ -9,8 +9,64 @@ const logger = require('./logger');
 let redis = null;
 let redisAvailable = false;
 
-// Only connect if REDIS_URL is provided
-if (process.env.REDIS_URL) {
+// ── Redis connection mode ────────────────────────────────────────────────────
+// REDIS_SENTINEL_HOSTS  — comma-separated "host:port" list (Sentinel HA mode)
+//   e.g. REDIS_SENTINEL_HOSTS=sentinel1:26379,sentinel2:26379,sentinel3:26379
+//        REDIS_SENTINEL_MASTER=mymaster   (default: 'mymaster')
+// REDIS_URL             — single standalone URL (dev / Render managed Redis)
+//
+// Sentinel mode is preferred when REDIS_SENTINEL_HOSTS is set.  It provides
+// automatic failover: if the primary Redis crashes, a replica is promoted and
+// ioredis reconnects transparently within seconds.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SENTINEL_HOSTS  = process.env.REDIS_SENTINEL_HOSTS;
+const SENTINEL_MASTER = process.env.REDIS_SENTINEL_MASTER || 'mymaster';
+
+if (SENTINEL_HOSTS) {
+  // Sentinel (HA) mode via ioredis
+  try {
+    const Redis = require('ioredis');
+    const sentinels = SENTINEL_HOSTS.split(',').map((h) => {
+      const [host, port] = h.trim().split(':');
+      return { host, port: Number(port) || 26379 };
+    });
+
+    redis = new Redis({
+      sentinels,
+      name:              SENTINEL_MASTER,
+      password:          process.env.REDIS_PASSWORD || undefined,
+      enableReadyCheck:  true,
+      maxRetriesPerRequest: 3,
+      retryStrategy: /* istanbul ignore next */ (times) => Math.min(times * 200, 5_000),
+    });
+
+    redis.on('error', /* istanbul ignore next */ (err) => {
+      logger.warn('[Redis/Sentinel] Connection error (non-fatal):', err.message);
+      redisAvailable = false;
+    });
+    redis.on('ready', /* istanbul ignore next */ () => {
+      logger.info('[Redis/Sentinel] Connected and ready');
+      redisAvailable = true;
+    });
+    redis.on('+failover-end', /* istanbul ignore next */ () => {
+      logger.warn('[Redis/Sentinel] Failover completed — reconnected to new primary');
+    });
+
+    // Wrap ioredis into the same { get, setEx, del, keys } API as node-redis
+    // so the rest of the module is interface-compatible.
+    redis = {
+      get:    (k)          => redis.get(k),
+      setEx:  (k, ttl, v)  => redis.set(k, v, 'EX', ttl),
+      del:    (...keys)    => redis.del(...keys),
+      keys:   (pattern)    => redis.keys(pattern),
+    };
+
+    redisAvailable = true;
+  } catch (err) {
+    logger.warn('[Redis/Sentinel] ioredis not available:', err.message);
+  }
+} else if (process.env.REDIS_URL) {
   try {
     const { createClient } = require('redis');
 
@@ -20,7 +76,6 @@ if (process.env.REDIS_URL) {
     if (process.env.NODE_ENV === 'production') {
       // Render's managed Redis provides rediss:// URL (TLS) automatically.
       // For self-hosted Redis, use REDIS_URL=rediss://... to enable TLS.
-      // rejectUnauthorized: true validates the Redis server certificate.
       if (process.env.REDIS_URL.startsWith('rediss://')) {
         clientOptions.socket = { tls: true, rejectUnauthorized: true };
       } else {
@@ -36,7 +91,7 @@ if (process.env.REDIS_URL) {
       redisAvailable = false;
     });
     redis.on('ready', () => {
-      console.info('[Redis] Connected and ready');
+      logger.info('[Redis] Connected and ready');
       redisAvailable = true;
     });
     redis.connect().catch((err) => {

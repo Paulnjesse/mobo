@@ -5,7 +5,8 @@ const cache = require('../utils/cache');
 const { enqueueFraudCheck } = require('../queues/fraudQueue');
 const { isEnabled } = require('../../../shared/featureFlags');
 const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/currencyUtil');
-const logger = require('../utils/logger');
+const logger     = require('../utils/logger');
+const { getEtaMinutes } = require('../services/mapsService');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -1088,17 +1089,21 @@ const acceptRide = async (req, res) => {
       }).catch((err) => logger.error('[AcceptRide FraudCheck] Enqueue failed', { err: err.message }));
     }
 
-    // Push notification to rider: driver accepted
+    // Push notification to rider: driver accepted (with live ETA)
     try {
       const ride = result.rows[0];
       const { notifyRiderDriverAccepted } = require('../services/pushNotifications');
       const notifInfo = await pool.query(
         `SELECT
-           u_rider.push_token   AS rider_token,
-           u_driver.full_name   AS driver_name,
-           v.make || ' ' || v.model AS vehicle,
+           u_rider.push_token          AS rider_token,
+           u_driver.full_name          AS driver_name,
+           v.make || ' ' || v.model    AS vehicle,
            v.plate,
-           v.color              AS vehicle_color
+           v.color                     AS vehicle_color,
+           ST_Y(d.current_location::geometry) AS driver_lat,
+           ST_X(d.current_location::geometry) AS driver_lng,
+           ST_Y(r.pickup_location::geometry)  AS pickup_lat,
+           ST_X(r.pickup_location::geometry)  AS pickup_lng
          FROM rides r
          JOIN users u_rider  ON u_rider.id  = r.rider_id
          JOIN drivers d      ON d.id         = r.driver_id
@@ -1109,12 +1114,22 @@ const acceptRide = async (req, res) => {
       );
       const info = notifInfo.rows[0];
       if (info?.rider_token) {
+        // Calculate live ETA: driver current location → rider pickup point
+        let eta_minutes = 5; // safe default if location data missing
+        if (info.driver_lat != null && info.pickup_lat != null) {
+          const etaResult = await getEtaMinutes(
+            { lat: info.driver_lat, lng: info.driver_lng },
+            { lat: info.pickup_lat, lng: info.pickup_lng }
+          );
+          eta_minutes = etaResult.eta_minutes;
+          logger.info('[AcceptRide ETA]', { eta_minutes, source: etaResult.source, ride_id: ride.id });
+        }
         await notifyRiderDriverAccepted(info.rider_token, {
           ride_id:     ride.id,
           driver_name: info.driver_name,
           vehicle:     info.vehicle || '',
           plate:       info.plate   || '',
-          eta_minutes: 5,
+          eta_minutes,
           user_id:     ride.rider_id,
         });
       }
@@ -1240,7 +1255,15 @@ const updateRideStatus = async (req, res) => {
           });
         }
       } catch (arrErr) {
-        logger.warn('[ArrivalNotification]', arrErr.message);
+        logger.warn('[ArrivalNotification] Push failed — attempting SMS fallback', arrErr.message);
+        // SMS fallback: rider must know driver is here even if push fails
+        try {
+          const { notifyDriverArriving } = require('../services/smsService');
+          const rideRow = result.rows[0];
+          const phoneRow = await pool.query('SELECT phone, language FROM users WHERE id = $1', [rideRow.rider_id]);
+          const u = phoneRow.rows[0];
+          if (u?.phone) await notifyDriverArriving(u.phone, { eta_minutes: 1, language: u.language });
+        } catch (_) {}
       }
     }
 
@@ -1757,7 +1780,18 @@ const cancelRide = async (req, res) => {
         }
       }
     } catch (pnErr) {
-      logger.warn('[CancelPushNotification]', pnErr.message);
+      logger.warn('[CancelPushNotification] Push failed — attempting SMS fallback', pnErr.message);
+      // SMS fallback: cancellation is a critical event — user must be informed
+      try {
+        const { notifyCancelled } = require('../services/smsService');
+        const cancelledRide = result.rows[0];
+        const notifyUserId  = cancelledBy === 'rider' ? null : cancelledRide.rider_id;
+        if (notifyUserId) {
+          const uRow = await pool.query('SELECT phone, language FROM users WHERE id = $1', [notifyUserId]);
+          const u = uRow.rows[0];
+          if (u?.phone) await notifyCancelled(u.phone, { reason, language: u.language });
+        }
+      } catch (_) {}
     }
 
     res.json({
