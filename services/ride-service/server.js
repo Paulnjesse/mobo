@@ -171,6 +171,32 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 1e6,
 });
 
+// ── Socket.IO reconnection rate limiter (mirrors location-service) ───────────
+// Prevents reconnect storms on rolling deploys from overloading a fresh instance.
+const RIDE_RATE_WINDOW_MS      = 30_000;
+const RIDE_MAX_CONN_PER_WINDOW = 10;
+const _rideConnAttempts = new Map();
+
+function isRideConnectionRateLimited(ip) {
+  const now    = Date.now();
+  const window = now - RIDE_RATE_WINDOW_MS;
+  const times  = (_rideConnAttempts.get(ip) || []).filter((t) => t > window);
+  if (times.length >= RIDE_MAX_CONN_PER_WINDOW) return true;
+  times.push(now);
+  _rideConnAttempts.set(ip, times);
+  return false;
+}
+
+io.use((socket, next) => {
+  const ip = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
+           || socket.handshake.address;
+  if (isRideConnectionRateLimited(ip)) {
+    logger.warn('[RideSocket] Connection rate-limited', { ip });
+    return next(new Error('rate_limit_exceeded'));
+  }
+  next();
+});
+
 // Initialise Socket.IO namespaces
 const ridesNamespace    = initRideSocket(io);
 const deliveriesNamespace = initDeliverySocket(io);

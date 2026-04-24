@@ -3,10 +3,14 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { requirePermission }          = require('../middleware/rbac');
 const ctrl = require('../controllers/adminRideController');
 
 // All admin ride routes require a valid admin JWT
 router.use(authenticate, requireAdmin);
+
+// Finance-scoped permission — only finance team / super_admin may read revenue data
+const canReadFinance = requirePermission('finance:read');
 
 // ── Rides ─────────────────────────────────────────────────────────────────────
 router.get('/rides/stats', ctrl.getRideStats);
@@ -30,10 +34,10 @@ router.delete('/promotions/:id',         ctrl.deletePromotion);
 // ── Live map ──────────────────────────────────────────────────────────────────
 router.get('/map/active-rides', ctrl.getActiveRides);
 
-// ── Payments ──────────────────────────────────────────────────────────────────
-router.get('/payments/stats',   ctrl.getPaymentStats);
-router.get('/payments/revenue', ctrl.getPaymentRevenue);
-router.get('/payments/methods', ctrl.getPaymentMethodBreakdown);
-router.get('/payments',         ctrl.listPayments);
+// ── Payments (finance:read required) ──────────────────────────────────────────
+router.get('/payments/stats',   canReadFinance, ctrl.getPaymentStats);
+router.get('/payments/revenue', canReadFinance, ctrl.getPaymentRevenue);
+router.get('/payments/methods', canReadFinance, ctrl.getPaymentMethodBreakdown);
+router.get('/payments',         canReadFinance, ctrl.listPayments);
 
 module.exports = router;

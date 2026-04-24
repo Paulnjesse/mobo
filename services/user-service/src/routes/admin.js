@@ -10,12 +10,15 @@ const ctrl                           = require('../controllers/adminController')
 router.use(authenticate, requireAdmin);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
-router.get('/dashboard/stats',          ctrl.getStats);
-router.get('/dashboard/revenue',        ctrl.getRevenueChart);
-router.get('/dashboard/rides-chart',    ctrl.getRidesChart);
-router.get('/dashboard/payment-methods', ctrl.getPaymentMethods);
-router.get('/dashboard/recent-rides',   ctrl.getRecentRides);
-router.get('/dashboard/recent-users',   ctrl.getRecentUsers);
+const canReadFinance = requirePermission('finance:read');
+
+router.get('/dashboard/stats',           ctrl.getStats);
+// Revenue and payment breakdowns require finance:read — restricts to finance team / super_admin
+router.get('/dashboard/revenue',         canReadFinance, ctrl.getRevenueChart);
+router.get('/dashboard/rides-chart',     ctrl.getRidesChart);
+router.get('/dashboard/payment-methods', canReadFinance, ctrl.getPaymentMethods);
+router.get('/dashboard/recent-rides',    ctrl.getRecentRides);
+router.get('/dashboard/recent-users',    ctrl.getRecentUsers);
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 const canReadUsers  = requirePermission('users:read');

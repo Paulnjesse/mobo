@@ -148,8 +148,10 @@ app.use(errorHandler);
 
 /* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
-  const { startReconciliationJob } = require('./src/jobs/reconcilePayments');
+  const { startReconciliationJob }     = require('./src/jobs/reconcilePayments');
+  const { startFlagStalePaymentsJob }  = require('./src/jobs/flagStalePayments');
   startReconciliationJob();
+  startFlagStalePaymentsJob();  // 1-hour cron: flag mobile-money pending > 1h as 'review'
 
   const server = app.listen(PORT, () => {
     logger.info(`[MOBO Payment Service] Running on port ${PORT}`, { port: PORT, env: process.env.NODE_ENV });

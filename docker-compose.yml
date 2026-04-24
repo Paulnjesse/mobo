@@ -91,13 +91,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis ─────────────────────────────────────────────────────────────────
+  # ── Redis (primary) ───────────────────────────────────────────────────────
   # WHY: Without Redis the following features degrade silently:
   #   1. Socket.IO adapter           → single-instance only (broadcast bug at 2+ instances)
   #   2. BullMQ fraud-check queue    → setImmediate fallback (jobs lost on crash)
   #   3. BullMQ payment webhook queue → direct processing (no retry)
   #   4. Rate-limit Redis store       → per-instance counters (limits multiply by N)
   #   5. Driver location cache        → in-memory only (not shared across instances)
+  #
+  # PRODUCTION HA: In production, use Redis Sentinel or Redis Cluster.
+  # Add to your managed Redis provider (Upstash, Redis Cloud, Render Redis):
+  #   REDIS_SENTINEL_MASTER=mymaster
+  #   REDIS_SENTINEL_NODES=sentinel1:26379,sentinel2:26379,sentinel3:26379
+  # All services' redis.js already reads REDIS_URL from the environment and will
+  # connect to the Sentinel-managed master.  The shared/redis.js module should be
+  # updated to use ioredis Sentinel mode when REDIS_SENTINEL_NODES is set.
   redis:
     image: redis:7.2-alpine
     container_name: mobo_redis
@@ -109,6 +117,29 @@ services:
       --save ""
     ports:
       - "6379:6379"   # exposed for local debugging / redis-cli
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_pass_CHANGE_ME", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis read replica ─────────────────────────────────────────────────────
+  # Offloads read-heavy workloads (rate-limit counters, location cache reads)
+  # from the primary. Socket.IO adapter and BullMQ always write to primary.
+  redis-replica:
+    image: redis:7.2-alpine
+    container_name: mobo_redis_replica
+    command: >
+      redis-server
+      --requirepass redis_dev_pass_CHANGE_ME
+      --replicaof redis 6379
+      --masterauth redis_dev_pass_CHANGE_ME
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "redis_dev_pass_CHANGE_ME", "ping"]
       interval: 10s
@@ -130,8 +161,13 @@ services:
       JWT_SECRET:           mobo_jwt_dev_secret_CHANGE_ME_use_64_chars_minimum_in_prod!!
       INTERNAL_SERVICE_KEY: mobo_internal_dev_key_CHANGE_ME
       REDIS_URL:            redis://:redis_dev_pass_CHANGE_ME@redis:6379
+      # OpenTelemetry → Jaeger
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME:            mobo-api-gateway
     depends_on:
       redis:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
       user-service:
         condition: service_started
@@ -158,6 +194,8 @@ services:
       INTERNAL_SERVICE_KEY:  mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_USER: mobo_user_svc_dev_key_CHANGE_ME
       REDIS_URL:             redis://:redis_dev_pass_CHANGE_ME@redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME:            mobo-user-service
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -182,6 +220,8 @@ services:
       INTERNAL_SERVICE_KEY:  mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_RIDE: mobo_ride_svc_dev_key_CHANGE_ME
       REDIS_URL:             redis://:redis_dev_pass_CHANGE_ME@redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME:            mobo-ride-service
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -208,6 +248,8 @@ services:
       INTERNAL_SERVICE_KEY:    mobo_internal_dev_key_CHANGE_ME
       INTERNAL_SERVICE_KEY_PAYMENT: mobo_payment_svc_dev_key_CHANGE_ME
       REDIS_URL:               redis://:redis_dev_pass_CHANGE_ME@redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME:            mobo-payment-service
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -231,6 +273,8 @@ services:
       INTERNAL_SERVICE_KEY_LOCATION: mobo_location_svc_dev_key_CHANGE_ME
       # REDIS_URL enables the Socket.IO Redis adapter — critical for multi-instance
       REDIS_URL:              redis://:redis_dev_pass_CHANGE_ME@redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME:            mobo-location-service
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -253,6 +297,28 @@ services:
       test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8000/health').raise_for_status()\""]
       interval: 30s
       timeout: 10s
+      retries: 5
+
+  # ── Jaeger — distributed tracing UI ──────────────────────────────────────
+  # Receives OTLP traces from all Node.js services via OpenTelemetry.
+  # All services already have auto-instrumentation (src/tracing.js) exporting
+  # to the OTLP HTTP endpoint.  Set OTEL_EXPORTER_OTLP_ENDPOINT in each service
+  # to point to http://jaeger:4318 so traces flow automatically.
+  #
+  # UI: http://localhost:16686  (search by service, trace ID, or operation)
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: mobo_jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:14269/health || exit 1"]
+      interval: 15s
+      timeout: 5s
       retries: 5
 
   # ── Unleash: self-hosted feature flags ────────────────────────────────────

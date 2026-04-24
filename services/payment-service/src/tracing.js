@@ -5,6 +5,7 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
   const exporter = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT })
@@ -23,5 +24,6 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   sdk.start();
+  /* istanbul ignore next */
   process.on('SIGTERM', () => sdk.shutdown().catch(console.error));
 }

@@ -192,6 +192,41 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
   logger.warn('[LocationService] REDIS_URL not set — Socket.IO running in single-instance mode (ok for dev, NOT for production scale)');
 }
 
+// ── Socket.IO reconnection rate limiter ──────────────────────────────────────
+// Problem: when Render performs a rolling deploy, all sockets disconnect
+// simultaneously. Every client reconnects within the same 10-second window
+// causing a "thundering-herd" that can exhaust the event loop and delay the
+// new instance from becoming ready.
+//
+// Mitigation: allow each client IP at most MAX_CONN_PER_WINDOW new connections
+// within RATE_WINDOW_MS. Excess connections are rejected immediately so the
+// Socket.IO client backs off (it reads the disconnect reason and applies
+// randomizationFactor to its next attempt).
+const RATE_WINDOW_MS        = 30_000;  // 30-second sliding window
+const MAX_CONN_PER_WINDOW   = 10;      // 10 connections per IP per window (generous for normal use)
+// ip → [timestamp, ...] — capped at MAX_CONN_PER_WINDOW entries
+const _connAttempts = new Map();
+
+function isConnectionRateLimited(ip) {
+  const now    = Date.now();
+  const window = now - RATE_WINDOW_MS;
+  const times  = (_connAttempts.get(ip) || []).filter((t) => t > window);
+  if (times.length >= MAX_CONN_PER_WINDOW) return true;
+  times.push(now);
+  _connAttempts.set(ip, times);
+  return false;
+}
+
+io.use(/* istanbul ignore next */ (socket, next) => {
+  const ip = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim()
+           || socket.handshake.address;
+  if (isConnectionRateLimited(ip)) {
+    logger.warn('[LocationSocket] Connection rate-limited', { ip });
+    return next(new Error('rate_limit_exceeded'));
+  }
+  next();
+});
+
 // Initialise the /location namespace with all location event handlers
 const locationNamespace = initLocationSocket(io);
 

@@ -58,6 +58,21 @@ const RENTAL_PACKAGES = {
 };
 const RENTAL_EXTRA_KM_RATE = 200; // XAF per extra km
 
+// ── Ride event audit log ───────────────────────────────────────────────────────
+// Appends an immutable record to ride_events for every state transition.
+// Non-fatal: a logging failure must never block the ride flow.
+async function logRideEvent({ rideId, eventType, oldStatus, newStatus, actorId, actorRole, metadata }) {
+  try {
+    await pool.query(
+      `INSERT INTO ride_events (ride_id, event_type, old_status, new_status, actor_id, actor_role, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [rideId, eventType, oldStatus || null, newStatus, actorId || null, actorRole || 'system', JSON.stringify(metadata || {})]
+    );
+  } catch (err) {
+    logger.warn('[RideEvent] Failed to log event — non-fatal', { rideId, eventType, err: err.message });
+  }
+}
+
 // Helper: calculate fare in XAF (ride-type-aware)
 function calculateFare(distanceKm, durationMin, surgeMultiplier = 1.0, subscription = 'none', priceLocked = false, lockedFare = null, rideType = 'standard') {
   if (priceLocked && lockedFare) return lockedFare;
@@ -1050,6 +1065,17 @@ const acceptRide = async (req, res) => {
 
     await client.query('COMMIT');
 
+    // ── Audit: log 'requested' → 'accepted' state transition ────────────────
+    logRideEvent({
+      rideId:     result.rows[0]?.id,
+      eventType:  'status_change',
+      oldStatus:  'requested',
+      newStatus:  'accepted',
+      actorId:    userId,
+      actorRole:  'driver',
+      metadata:   { driver_id: driverId },
+    });
+
     // ── Fraud: collusion check (durable BullMQ job, non-blocking) ───────────
     // Previously used setImmediate — lost on process restart. BullMQ persists
     // the job in Redis and retries on ML-service failure (2 attempts, exp back-off).
@@ -1159,10 +1185,25 @@ const updateRideStatus = async (req, res) => {
     if (status === 'in_progress') extra = ', started_at = NOW()';
     if (status === 'completed')   extra = ', completed_at = NOW()';
 
+    const rideBeforeUpdate = await pool.query('SELECT status FROM rides WHERE id = $1', [id]);
+    const oldStatus = rideBeforeUpdate.rows[0]?.status || null;
+
     const result = await pool.query(
       `UPDATE rides SET status = $1 ${extra}, updated_at = NOW() WHERE id = $2 RETURNING *`,
       [status, id]
     );
+
+    // ── Audit: log status transition ──────────────────────────────────────────
+    if (result.rows[0]) {
+      logRideEvent({
+        rideId:    id,
+        eventType: 'status_change',
+        oldStatus,
+        newStatus: status,
+        actorId:   userId,
+        actorRole: 'driver',
+      });
+    }
 
     // ── Feature 28: Driver Arrived push with photo + plate ───────────────────
     if (status === 'arriving' && result.rows[0]) {
@@ -1607,6 +1648,19 @@ const cancelRide = async (req, res) => {
        WHERE id = $4 RETURNING *`,
       [cancelledBy, reason, cancellationFee, id]
     );
+
+    // ── Audit: log cancellation ────────────────────────────────────────────────
+    if (result.rows[0]) {
+      logRideEvent({
+        rideId:    id,
+        eventType: 'cancelled',
+        oldStatus: r.status,
+        newStatus: 'cancelled',
+        actorId:   req.user?.id,
+        actorRole: cancelledBy === 'system' ? 'system' : cancelledBy === 'driver' ? 'driver' : 'rider',
+        metadata:  { reason, cancellation_fee: cancellationFee },
+      });
+    }
 
     // ── Auto-charge rider wallet & credit driver if fee > 0 ─────────────────
     if (cancellationFee > 0 && cancelledBy === 'rider') {
