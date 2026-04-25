@@ -10,7 +10,7 @@
  *  - Permission list fetched after 2FA and cached in state
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { authAPI, adminMgmtAPI } from '../services/api';
+import { authAPI, adminMgmtAPI, setAuthToken, clearAuthToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -68,6 +68,7 @@ export function AuthProvider({ children }) {
     detachActivityListeners();
     const hadToken = !!tokenRef.current;
     tokenRef.current = null;
+    clearAuthToken();
     sessionStorage.removeItem(USER_STORE_KEY);
     setUser(null);
     setPermissions(new Set());
@@ -83,10 +84,13 @@ export function AuthProvider({ children }) {
   // ── Login (step 1 — returns requires_2fa flag for admin accounts) ─────────────
   const login = useCallback(async (email, password) => {
     const response = await authAPI.login(email, password);
-    const { token: newToken, user: newUser, requires_2fa } = response.data;
+    // When 2FA is required the response contains { requires_2fa: true, user_id }
+    // (no token — full JWT is issued only after TOTP validated in step 2)
+    const { token: newToken, user: newUser, requires_2fa, user_id: challengeUserId } = response.data;
 
     if (requires_2fa) {
-      return { requires_2fa: true, tempToken: newToken };
+      // Return the user_id as tempToken so LoginPage can pass it to complete2FA
+      return { requires_2fa: true, tempToken: challengeUserId };
     }
 
     if (!newUser || newUser.role !== 'admin') {
@@ -94,6 +98,7 @@ export function AuthProvider({ children }) {
     }
 
     tokenRef.current = newToken;
+    setAuthToken(newToken);
     const safeMeta = { id: newUser.id, role: newUser.role, email: newUser.email, name: newUser.name };
     sessionStorage.setItem(USER_STORE_KEY, JSON.stringify(safeMeta));
     setUser(newUser);
@@ -105,15 +110,16 @@ export function AuthProvider({ children }) {
   }, [attachActivityListeners, resetIdleTimer, fetchPermissions]);
 
   // ── Complete 2FA challenge (step 2) ──────────────────────────────────────────
-  const complete2FA = useCallback(async (tempToken, totpCode) => {
-    const response = await authAPI.validate2FA(tempToken, totpCode);
-    const { token: finalToken, user: newUser } = response.data;
+  const complete2FA = useCallback(async (userId, totpCode) => {
+    const response = await authAPI.validate2FA(userId, totpCode);
+    const { token: finalToken, user: newUser } = response.data?.data || response.data;
 
     if (!newUser || newUser.role !== 'admin') {
       throw new Error('Access denied. Admin privileges required.');
     }
 
     tokenRef.current = finalToken;
+    setAuthToken(finalToken);
     const safeMeta = { id: newUser.id, role: newUser.role, email: newUser.email, name: newUser.name };
     sessionStorage.setItem(USER_STORE_KEY, JSON.stringify(safeMeta));
     setUser(newUser);

@@ -27,6 +27,11 @@
 
 const pool   = require('../config/database');
 const logger = require('../utils/logger');
+const cache  = require('../utils/cache');
+
+const ACTIVE_RIDES_CACHE_KEY = 'admin:active_rides';
+const ACTIVE_RIDES_TTL_S     = 10;   // 10-second cache — bounds full-table scan to once per 10s
+const SKIP_ACTIVE_RIDES_CACHE = process.env.NODE_ENV === 'test';
 
 // ── Rides ──────────────────────────────────────────────────────────────────────
 
@@ -319,19 +324,28 @@ const deletePromotion = async (req, res) => {
 
 const getActiveRides = async (req, res) => {
   try {
+    // Cache for ACTIVE_RIDES_TTL_S seconds — prevents a full JOIN scan on every
+    // admin dashboard poll (typically every 5s per open browser tab).
+    if (!SKIP_ACTIVE_RIDES_CACHE) {
+      const cached = await cache.get(ACTIVE_RIDES_CACHE_KEY);
+      if (cached) return res.json({ success: true, data: cached, cached: true });
+    }
+
     const result = await pool.query(
       `SELECT r.id, r.status, r.ride_type,
               r.pickup_lat, r.pickup_lng,
               r.dropoff_lat, r.dropoff_lng,
-              rider.full_name   AS rider,
+              rider.full_name    AS rider,
               driver_u.full_name AS driver
        FROM rides r
        LEFT JOIN users rider    ON rider.id = r.rider_id
        LEFT JOIN drivers d      ON d.id = r.driver_id
        LEFT JOIN users driver_u ON driver_u.id = d.user_id
        WHERE r.status IN ('accepted','arriving','in_progress')
-       ORDER BY r.created_at DESC`
+       ORDER BY r.created_at DESC
+       LIMIT 500`
     );
+    if (!SKIP_ACTIVE_RIDES_CACHE) await cache.set(ACTIVE_RIDES_CACHE_KEY, result.rows, ACTIVE_RIDES_TTL_S);
     res.json({ success: true, data: result.rows });
   } catch (err) {
     logger.error('[AdminRideCtrl] getActiveRides error', { err: err.message });

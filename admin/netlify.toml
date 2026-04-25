@@ -11,3 +11,20 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# ── Security headers applied to every response ────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Content-Security-Policy
+    # Notes:
+    #  - 'unsafe-inline' for scripts/styles is required by MUI's runtime style injection
+    #  - Google Fonts sourced by MUI typography
+    #  - OSM / CartoCDN tiles for Leaflet map
+    #  - connect-src covers REST API + Socket.IO WebSocket to Render and moboride.com
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleapis.com; connect-src 'self' https://mobo-api-gateway.onrender.com wss://mobo-api-gateway.onrender.com https://*.moboride.com wss://*.moboride.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(self), payment=()"

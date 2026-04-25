@@ -8,12 +8,17 @@ const api = axios.create({
   },
 });
 
-// Request interceptor — attach JWT token
+// Module-level token store — set by AuthContext after login / 2FA completion.
+// Kept in memory (not localStorage) to prevent XSS token theft.
+let _authToken = null;
+export function setAuthToken(token) { _authToken = token; }
+export function clearAuthToken()    { _authToken = null;  }
+
+// Request interceptor — attach JWT token from memory store
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('mobo_admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (_authToken) {
+      config.headers.Authorization = `Bearer ${_authToken}`;
     }
     return config;
   },
@@ -25,8 +30,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('mobo_admin_token');
-      localStorage.removeItem('mobo_admin_user');
+      clearAuthToken();
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -37,8 +41,15 @@ export default api;
 
 // Auth
 export const authAPI = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
-  logout: () => api.post('/auth/logout'),
+  login:       (email, password)   => api.post('/auth/login', { email, password }),
+  logout:      ()                  => api.post('/auth/logout'),
+  // 2FA — step 2 of admin login: validate TOTP or backup code
+  validate2FA: (userId, token)     => api.post('/auth/2fa/validate', { user_id: userId, token }),
+  // 2FA management (authenticated admin)
+  get2FAStatus:  ()      => api.get('/auth/2fa/status'),
+  setup2FA:      ()      => api.post('/auth/2fa/setup'),
+  verify2FA:     (token) => api.post('/auth/2fa/verify', { token }),
+  disable2FA:    (token) => api.delete('/auth/2fa', { data: { token } }),
 };
 
 // Dashboard

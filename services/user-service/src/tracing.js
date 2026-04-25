@@ -4,7 +4,9 @@ const { getNodeAutoInstrumentations } = require('@opentelemetry/auto-instrumenta
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 
+/* istanbul ignore next */
 if (process.env.NODE_ENV !== 'test') {
   const exporter = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     ? new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT })
@@ -17,6 +19,7 @@ if (process.env.NODE_ENV !== 'test') {
       [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development',
     }),
     traceExporter: exporter,
+    textMapPropagator: new W3CTraceContextPropagator(),
     instrumentations: [getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false }, // too noisy
     })],
