@@ -8,8 +8,19 @@ process.env.STRIPE_SECRET_KEY = 'sk_live_test_mobo_key';
 
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-  connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
+  connect: jest.fn(),
 };
+// Client delegates to mockDb.query so existing mockResolvedValueOnce chains work.
+// BEGIN/COMMIT/ROLLBACK are skipped (no mock queue slot consumed) — backward compatible.
+const mockDbClient = {
+  query: (...args) => {
+    const sql = (args[0] || '').trim();
+    if (/^(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return Promise.resolve({ rows: [], rowCount: 0 });
+    return mockDb.query(...args);
+  },
+  release: jest.fn(),
+};
+mockDb.connect.mockResolvedValue(mockDbClient);
 mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);

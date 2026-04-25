@@ -18,8 +18,17 @@ process.env.STRIPE_SECRET_KEY      = 'sk_live_test_mobo_key';
 
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-  connect: jest.fn().mockResolvedValue({ query: jest.fn(), release: jest.fn() }),
+  connect: jest.fn(),
 };
+const mockDbClient = {
+  query: (...args) => {
+    const sql = (args[0] || '').trim();
+    if (/^(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return Promise.resolve({ rows: [], rowCount: 0 });
+    return mockDb.query(...args);
+  },
+  release: jest.fn(),
+};
+mockDb.connect.mockResolvedValue(mockDbClient);
 mockDb.queryRead = (...args) => mockDb.query(...args);
 
 jest.mock('../src/config/database', () => mockDb);

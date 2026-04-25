@@ -176,6 +176,24 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 1e6,
 });
 
+/* ── Socket.IO Redis adapter — required for multi-instance broadcasts (Render scales 2–6×) ── */
+if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
+  try {
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    const { Redis } = require('ioredis');
+    const redisTls = process.env.REDIS_URL.startsWith('rediss://')
+      ? { tls: { rejectUnauthorized: true } } : {};
+    const pubClient = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null, ...redisTls });
+    const subClient = pubClient.duplicate();
+    pubClient.on('error', (err) => logger.warn('[RideService] Redis pubClient error', { err: err.message }));
+    subClient.on('error', (err) => logger.warn('[RideService] Redis subClient error', { err: err.message }));
+    io.adapter(createAdapter(pubClient, subClient));
+    logger.info('[RideService] Socket.IO Redis adapter active — multi-instance broadcasts enabled');
+  } catch (err) {
+    logger.warn('[RideService] Socket.IO Redis adapter unavailable — single-instance mode only', { err: err.message });
+  }
+}
+
 // ── Socket.IO reconnection rate limiter (mirrors location-service) ───────────
 // Prevents reconnect storms on rolling deploys from overloading a fresh instance.
 const RIDE_RATE_WINDOW_MS      = 30_000;

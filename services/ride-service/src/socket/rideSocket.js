@@ -44,6 +44,130 @@ const riderSockets = new Map();
  */
 const requestTimeouts = new Map();
 
+/**
+ * Re-dispatch state tracking. Populated by notifyDriver / incoming_ride_request.
+ * Cleared when a driver accepts or ride is auto-cancelled.
+ * @type {Map<string, { attempts: number, declinedDriverIds: Set<string>, startedAt: number, riderId: string }>}
+ */
+const pendingDispatches = new Map();
+
+const MAX_DISPATCH_ATTEMPTS  = 5;
+const MAX_DISPATCH_WINDOW_MS = 3 * 60 * 1000; // 3 minutes
+
+/**
+ * Find the next nearest available driver and dispatch the ride request to them.
+ * Auto-cancels the ride after MAX_DISPATCH_ATTEMPTS or MAX_DISPATCH_WINDOW_MS.
+ *
+ * @param {import('socket.io').Namespace} ridesNs
+ * @param {string} rideId
+ * @param {string|null} justDeclinedDriverId  — driver to exclude from next search
+ */
+async function findAndDispatchNextDriver(ridesNs, rideId, justDeclinedDriverId) {
+  const state = pendingDispatches.get(rideId);
+  if (!state) return; // already matched or cancelled by another path
+
+  if (justDeclinedDriverId) state.declinedDriverIds.add(String(justDeclinedDriverId));
+  state.attempts += 1;
+
+  const elapsed = Date.now() - state.startedAt;
+  if (state.attempts > MAX_DISPATCH_ATTEMPTS || elapsed > MAX_DISPATCH_WINDOW_MS) {
+    pendingDispatches.delete(rideId);
+    await db.query(
+      `UPDATE rides SET status = 'cancelled', cancellation_reason = 'no_driver_available', updated_at = NOW() WHERE id = $1`,
+      [rideId]
+    ).catch((err) => logger.warn('[RideSocket] auto-cancel write failed', { err: err.message }));
+    const riderSocketId = riderSockets.get(String(state.riderId));
+    if (riderSocketId) {
+      ridesNs.to(riderSocketId).emit('ride_cancelled', {
+        rideId,
+        reason:  'no_driver_available',
+        message: 'No driver accepted your request. Please try again.',
+        timestamp: Date.now(),
+      });
+    }
+    logger.info(`[RideSocket] Ride ${rideId} auto-cancelled — no driver accepted after ${state.attempts - 1} attempts`);
+    return;
+  }
+
+  const declinedIds = [...state.declinedDriverIds];
+  try {
+    const { rows: rideRows } = await db.query(
+      `SELECT pickup_lat, pickup_lng FROM rides WHERE id = $1`, [rideId]
+    );
+    if (!rideRows[0]) { pendingDispatches.delete(rideId); return; }
+    const { pickup_lat, pickup_lng } = rideRows[0];
+
+    // Parameterised exclusion list — safe against injection
+    const excludeClause = declinedIds.length > 0
+      ? `AND d.user_id NOT IN (${declinedIds.map((_, i) => `$${i + 3}`).join(',')})`
+      : '';
+
+    const { rows: drivers } = await db.query(
+      `SELECT d.user_id, d.id,
+              ST_Distance(
+                ST_SetSRID(ST_MakePoint(dl.longitude, dl.latitude), 4326)::geography,
+                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+              ) AS dist_m
+       FROM drivers d
+       JOIN driver_locations dl ON dl.driver_id = d.id
+       WHERE d.status = 'online' AND d.is_approved = true ${excludeClause}
+       ORDER BY dist_m ASC
+       LIMIT 1`,
+      [pickup_lat, pickup_lng, ...declinedIds]
+    );
+
+    if (!drivers[0]) {
+      // No more candidates — trigger auto-cancel path
+      state.attempts = MAX_DISPATCH_ATTEMPTS + 1;
+      return findAndDispatchNextDriver(ridesNs, rideId, null);
+    }
+
+    const nextDriver = drivers[0];
+    const nextSocketId = driverSockets.get(String(nextDriver.user_id));
+    if (!nextSocketId) {
+      // Driver offline on socket — skip and try the next one
+      return findAndDispatchNextDriver(ridesNs, rideId, nextDriver.user_id);
+    }
+
+    const { rows: rideDetails } = await db.query(
+      `SELECT r.*, u.full_name AS rider_name, u.phone AS rider_phone, u.rating AS rider_rating
+       FROM rides r JOIN users u ON u.id = r.rider_id
+       WHERE r.id = $1`,
+      [rideId]
+    );
+    const rd = rideDetails[0];
+    if (!rd) { pendingDispatches.delete(rideId); return; }
+
+    const payload = {
+      rideId,
+      pickup:   { lat: rd.pickup_lat,  lng: rd.pickup_lng,  address: rd.pickup_address },
+      dropoff:  { lat: rd.dropoff_lat, lng: rd.dropoff_lng, address: rd.dropoff_address },
+      fare:     rd.fare_estimate,
+      distance: rd.distance_km ? `${rd.distance_km} km` : null,
+      eta:      null,
+      rider:    { name: rd.rider_name, phone: rd.rider_phone, rating: rd.rider_rating },
+      expiresIn: 15,
+      attempt:   state.attempts,
+      timestamp: Date.now(),
+    };
+
+    ridesNs.to(nextSocketId).emit('incoming_ride_request', payload);
+
+    const handle = setTimeout(() => {
+      requestTimeouts.delete(rideId);
+      ridesNs.to(nextSocketId).emit('ride_request_expired', { rideId, timestamp: Date.now() });
+      logger.info(`[RideSocket] Dispatch attempt ${state.attempts} timed out for driver ${nextDriver.user_id} — re-dispatching`);
+      findAndDispatchNextDriver(ridesNs, rideId, nextDriver.user_id);
+    }, 15000);
+    requestTimeouts.set(rideId, handle);
+
+    logger.info(`[RideSocket] Dispatched ride ${rideId} to driver ${nextDriver.user_id} (attempt ${state.attempts})`);
+  } catch (err) {
+    logger.error(`[RideSocket] findAndDispatchNextDriver error for ride ${rideId}`, { err: err.message });
+    pendingDispatches.delete(rideId);
+  }
+}
+
 /** Room name helper — keeps room keys consistent across the service. */
 const rideRoom = (rideId) => `ride:${rideId}`;
 
@@ -110,6 +234,56 @@ function initRideSocket(io) {
     // Register driver / rider socket index
     if (role === 'driver') driverSockets.set(String(userId), socket.id);
     if (role === 'rider') riderSockets.set(String(userId), socket.id);
+
+    // ── Missed-event replay: send current ride state on reconnect ─────────────
+    // If the user has an active ride, auto-join the room and emit ride_state_sync
+    // so the client can restore its UI without a full page reload.
+    if ((role === 'rider' || role === 'driver') && process.env.NODE_ENV !== 'test') {
+      setImmediate(async () => {
+        try {
+          let query, params;
+          if (role === 'rider') {
+            query = `SELECT r.id, r.status, r.pickup_lat, r.pickup_lng, r.pickup_address,
+                            r.dropoff_lat, r.dropoff_lng, r.dropoff_address,
+                            u.full_name AS driver_name, dl.latitude AS driver_lat, dl.longitude AS driver_lng
+                     FROM rides r
+                     LEFT JOIN drivers dr ON dr.id = r.driver_id
+                     LEFT JOIN users u ON u.id = dr.user_id
+                     LEFT JOIN driver_locations dl ON dl.driver_id = dr.id
+                     WHERE r.rider_id = $1 AND r.status IN ('pending','accepted','arriving','arrived','in_progress')
+                     ORDER BY r.created_at DESC LIMIT 1`;
+            params = [userId];
+          } else {
+            query = `SELECT r.id, r.status, r.pickup_lat, r.pickup_lng, r.pickup_address,
+                            r.dropoff_lat, r.dropoff_lng, r.dropoff_address
+                     FROM rides r
+                     JOIN drivers dr ON dr.id = r.driver_id
+                     WHERE dr.user_id = $1 AND r.status IN ('accepted','arriving','arrived','in_progress')
+                     ORDER BY r.created_at DESC LIMIT 1`;
+            params = [userId];
+          }
+          const { rows } = await db.query(query, params);
+          if (rows[0]) {
+            const ride = rows[0];
+            socket.join(rideRoom(ride.id));
+            trackRideRoom(ride.id, socket.id);
+            socket.emit('ride_state_sync', {
+              rideId:     ride.id,
+              status:     ride.status,
+              pickup:     { lat: ride.pickup_lat,  lng: ride.pickup_lng,  address: ride.pickup_address },
+              dropoff:    { lat: ride.dropoff_lat, lng: ride.dropoff_lng, address: ride.dropoff_address },
+              driverName: ride.driver_name || null,
+              driverLat:  ride.driver_lat  || null,
+              driverLng:  ride.driver_lng  || null,
+              timestamp:  Date.now(),
+            });
+            logger.info(`[RideSocket] ride_state_sync → ${role} ${userId} for ride ${ride.id}`);
+          }
+        } catch (err) {
+          logger.warn(`[RideSocket] ride_state_sync failed for ${role} ${userId}`, { err: err.message });
+        }
+      });
+    }
 
     /* ---------------------------------------------------------------- */
     /**
@@ -347,6 +521,15 @@ function initRideSocket(io) {
         timestamp: Date.now(),
       };
 
+      if (accepted) {
+        // Driver accepted — stop re-dispatch loop
+        pendingDispatches.delete(rideId);
+      } else {
+        // Driver declined — find the next nearest driver automatically
+        const ridesNs = rides; // namespace ref for async call
+        setImmediate(() => findAndDispatchNextDriver(ridesNs, rideId, driverId));
+      }
+
       // Broadcast response to the ride room (rider is already subscribed or will join)
       rides.to(rideRoom(rideId)).emit('driver_response', payload);
 
@@ -429,20 +612,33 @@ function notifyDriver(io, driverId, rideRequestPayload) {
     return false;
   }
 
+  const { rideId, riderId } = rideRequestPayload;
+
+  // Register dispatch state for re-dispatch loop on non-response or decline
+  if (rideId && !pendingDispatches.has(rideId)) {
+    pendingDispatches.set(rideId, {
+      attempts:         1,
+      declinedDriverIds: new Set([String(driverId)]),
+      startedAt:        Date.now(),
+      riderId:          String(riderId || ''),
+    });
+  }
+
   const payload = {
     ...rideRequestPayload,
     expiresIn: 15,
+    attempt:   pendingDispatches.get(rideId)?.attempts ?? 1,
     timestamp: Date.now(),
   };
 
   ridesNs.to(targetSocketId).emit('incoming_ride_request', payload);
 
-  // Auto-expire
-  const { rideId } = rideRequestPayload;
   if (rideId) {
     const handle = setTimeout(() => {
       requestTimeouts.delete(rideId);
       ridesNs.to(targetSocketId).emit('ride_request_expired', { rideId, timestamp: Date.now() });
+      logger.info(`[RideSocket] notifyDriver: request ${rideId} expired for driver ${driverId} — re-dispatching`);
+      findAndDispatchNextDriver(ridesNs, rideId, driverId);
     }, 15000);
     requestTimeouts.set(rideId, handle);
   }
@@ -467,4 +663,4 @@ function broadcastRideStatus(io, rideId, status, meta = {}) {
   });
 }
 
-module.exports = { initRideSocket, notifyDriver, broadcastRideStatus, driverSockets, riderSockets };
+module.exports = { initRideSocket, notifyDriver, broadcastRideStatus, driverSockets, riderSockets, pendingDispatches };

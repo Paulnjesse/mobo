@@ -114,7 +114,8 @@ services:
       --requirepass redis_dev_pass_CHANGE_ME
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
-      --save ""
+      --appendonly yes
+      --appendfsync everysec
     ports:
       - "6379:6379"   # exposed for local debugging / redis-cli
     healthcheck:

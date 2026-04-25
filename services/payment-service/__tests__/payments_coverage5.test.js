@@ -19,11 +19,17 @@ process.env.DATABASE_URL = 'postgresql://localhost/mobo_test';
 
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-  connect: jest.fn().mockResolvedValue({
-    query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
-    release: jest.fn(),
-  }),
+  connect: jest.fn(),
 };
+const mockDbClient = {
+  query: (...args) => {
+    const sql = (args[0] || '').trim();
+    if (/^(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return Promise.resolve({ rows: [], rowCount: 0 });
+    return mockDb.query(...args);
+  },
+  release: jest.fn(),
+};
+mockDb.connect.mockResolvedValue(mockDbClient);
 
 jest.mock('../src/config/database', () => mockDb);
 
@@ -53,6 +59,7 @@ const rider2Token = jwt.sign({ id: 7, role: 'rider',  phone: '+237620000007' }, 
 beforeEach(() => {
   mockDb.query.mockReset();
   mockDb.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  mockDb.connect.mockResolvedValue(mockDbClient); // reset after any mockRejectedValueOnce
   mockAxios.get.mockResolvedValue({ data: { status: 'PENDING' }, status: 200 });
   mockAxios.post.mockResolvedValue({ data: { referenceId: 'REF-TEST' }, status: 202, headers: {} });
 });
@@ -476,7 +483,8 @@ describe('POST /payments/charge — DB error paths', () => {
 
 describe('webhookMtn — error handling', () => {
   test('returns 500 when DB throws', async () => {
-    mockDb.query.mockRejectedValueOnce(new Error('DB error'));
+    // Webhook now uses db.connect() transaction — reject connect() to trigger 500
+    mockDb.connect.mockRejectedValueOnce(new Error('DB error'));
     const res = await request(app)
       .post('/payments/webhook/mtn')
       .send({ externalId: 'ref-dberr', status: 'SUCCESSFUL' });
@@ -486,7 +494,7 @@ describe('webhookMtn — error handling', () => {
 
 describe('webhookOrange — error handling', () => {
   test('returns 500 when DB throws', async () => {
-    mockDb.query.mockRejectedValueOnce(new Error('DB error'));
+    mockDb.connect.mockRejectedValueOnce(new Error('DB error'));
     const res = await request(app)
       .post('/payments/webhook/orange')
       .send({ order_id: 'ord-dberr', status: 'SUCCESS' });

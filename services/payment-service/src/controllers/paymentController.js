@@ -1046,20 +1046,33 @@ const webhookMtn = async (req, res) => {
       return res.status(400).json({ message: 'Missing referenceId or status' });
     }
 
-    const { rows } = await db.query(
-      "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1",
-      [referenceId]
-    );
+    // SELECT FOR UPDATE SKIP LOCKED ensures concurrent webhook deliveries don't double-process
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1 FOR UPDATE SKIP LOCKED",
+        [referenceId]
+      );
 
-    if (rows.length === 0) {
-      return res.sendStatus(200); // already resolved or unknown
-    }
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.sendStatus(200); // already resolved, already locked by another delivery, or unknown
+      }
 
-    if (status === 'SUCCESSFUL') {
-      const txnId = body.financialTransactionId || referenceId;
-      await resolvePendingPayment(rows[0].id, 'completed', txnId, null);
-    } else if (status === 'FAILED') {
-      await resolvePendingPayment(rows[0].id, 'failed', null, body.reason || 'MTN declined');
+      if (status === 'SUCCESSFUL') {
+        const txnId = body.financialTransactionId || referenceId;
+        await resolvePendingPayment(rows[0].id, 'completed', txnId, null);
+      } else if (status === 'FAILED') {
+        await resolvePendingPayment(rows[0].id, 'failed', null, body.reason || 'MTN declined');
+      }
+
+      await client.query('COMMIT');
+    } catch (innerErr) {
+      await client.query('ROLLBACK');
+      throw innerErr;
+    } finally {
+      client.release();
     }
 
     logger.info({ referenceId, status }, "[Webhook/MTN] callback received");
@@ -1103,19 +1116,32 @@ const webhookOrange = async (req, res) => {
       return res.status(400).json({ message: 'Missing order_id or status' });
     }
 
-    const { rows } = await db.query(
-      "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1",
-      [orderId]
-    );
+    // SELECT FOR UPDATE SKIP LOCKED prevents concurrent Orange webhook deliveries from double-processing
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1 FOR UPDATE SKIP LOCKED",
+        [orderId]
+      );
 
-    if (rows.length === 0) {
-      return res.sendStatus(200);
-    }
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.sendStatus(200);
+      }
 
-    if (status === 'SUCCESS' || status === 'SUCCESSFUL') {
-      await resolvePendingPayment(rows[0].id, 'completed', body.txnid || orderId, null);
-    } else if (status === 'FAILED' || status === 'FAIL') {
-      await resolvePendingPayment(rows[0].id, 'failed', null, body.message || 'Orange declined');
+      if (status === 'SUCCESS' || status === 'SUCCESSFUL') {
+        await resolvePendingPayment(rows[0].id, 'completed', body.txnid || orderId, null);
+      } else if (status === 'FAILED' || status === 'FAIL') {
+        await resolvePendingPayment(rows[0].id, 'failed', null, body.message || 'Orange declined');
+      }
+
+      await client.query('COMMIT');
+    } catch (innerErr) {
+      await client.query('ROLLBACK');
+      throw innerErr;
+    } finally {
+      client.release();
     }
 
     logger.info({ orderId, status }, '[Webhook/Orange] callback received');

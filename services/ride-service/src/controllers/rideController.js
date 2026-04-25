@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const axios = require('axios');
 const cache = require('../utils/cache');
 const { enqueueFraudCheck } = require('../queues/fraudQueue');
+const { checkGpsSpoofing } = require('../../../shared/fraudDetection');
 const { isEnabled } = require('../../../shared/featureFlags');
 const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/currencyUtil');
 const logger     = require('../utils/logger');
@@ -706,6 +707,30 @@ const requestRide = async (req, res) => {
         priceLockValid = true;
         serverLockedFare = lockRow.rows[0].fare;
         fareCalc = calculateFare(0, 0, 1.0, user?.subscription_plan, true, serverLockedFare, ride_type);
+      }
+    }
+
+    // ── Synchronous GPS fraud check — blocks ride creation on confirmed spoofing ──
+    // Must run BEFORE the INSERT so fraudulent rides are never persisted.
+    // Teleportation / impossible-speed verdicts from the ML service → 403.
+    if (isEnabled('fraud_detection_v1')) {
+      try {
+        const gpsResult = await checkGpsSpoofing({
+          userId:      riderId,
+          lat:         pickup_location.lat,
+          lng:         pickup_location.lng,
+          timestampMs: Date.now(),
+        });
+        if (!gpsResult.ok && gpsResult.reason === 'teleportation_detected') {
+          return res.status(403).json({
+            error:  'Ride blocked: GPS location could not be verified.',
+            code:   'GPS_FRAUD_DETECTED',
+            reason: gpsResult.reason,
+          });
+        }
+      } catch (fraudErr) {
+        // ML service unavailable — log and continue (never block on detection service outage)
+        logger.warn('[requestRide] GPS fraud check unavailable — proceeding', { err: fraudErr.message });
       }
     }
 

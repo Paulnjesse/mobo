@@ -22,16 +22,44 @@ async function processPaymentJob(job) {
     const status = payload.status === 'SUCCESSFUL' || payload.status === '60019' ? 'completed' : 'failed';
     const reference = payload.externalId || payload.order_id;
     if (!reference) return;
-    const { rows } = await db.query(
-      `SELECT id, ride_id, user_id, amount FROM payments WHERE reference = $1 AND status = 'pending'`,
-      [reference]
-    );
-    if (!rows[0]) { logger.info(`[PaymentWorker] Payment ${reference} already processed`); return; }
-    const payment = rows[0];
-    await db.query(`UPDATE payments SET status = $1, updated_at = NOW() WHERE id = $2`, [status, payment.id]);
-    if (status === 'completed') {
-      await db.query(`UPDATE rides SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`, [payment.ride_id]);
-      logger.info(`[PaymentWorker] Payment ${reference} completed`, { rideId: payment.ride_id });
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // SELECT FOR UPDATE locks the row so concurrent webhooks can't double-process
+      const { rows } = await client.query(
+        `SELECT id, ride_id, user_id, amount FROM payments
+         WHERE reference = $1 AND status = 'pending'
+         FOR UPDATE SKIP LOCKED`,
+        [reference]
+      );
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        logger.info(`[PaymentWorker] Payment ${reference} already processed`);
+        return;
+      }
+      const payment = rows[0];
+
+      await client.query(
+        `UPDATE payments SET status = $1, updated_at = NOW() WHERE id = $2`,
+        [status, payment.id]
+      );
+      if (status === 'completed') {
+        await client.query(
+          `UPDATE rides SET payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
+          [payment.ride_id]
+        );
+        logger.info(`[PaymentWorker] Payment ${reference} completed`, { rideId: payment.ride_id });
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`[PaymentWorker] Transaction rolled back for ${reference}`, { err: err.message });
+      throw err; // BullMQ will retry the job
+    } finally {
+      client.release();
     }
   }
 }

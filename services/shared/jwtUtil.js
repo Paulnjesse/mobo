@@ -21,10 +21,15 @@ const JWT_SECRET      = process.env.JWT_SECRET      || null;
 
 const USE_RS256 = Boolean(JWT_PRIVATE_KEY && JWT_PUBLIC_KEY);
 
-if (process.env.NODE_ENV === 'production' && !USE_RS256) {
+// REQUIRE_RS256=true protects staging/pre-prod environments that share production data.
+// NODE_ENV alone is insufficient — a staging env can have NODE_ENV=staging with a prod DB.
+const REQUIRE_RS256 = process.env.REQUIRE_RS256 === 'true';
+
+if ((process.env.NODE_ENV === 'production' || REQUIRE_RS256) && !USE_RS256) {
   throw new Error(
     '[FATAL] JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured in production. ' +
-    'HS256 shared-secret JWT is not permitted in production environments.'
+    'HS256 shared-secret JWT is not permitted in production environments. ' +
+    'To override for non-production use, ensure REQUIRE_RS256 is not set to "true".'
   );
 }
 if (!USE_RS256 && (!JWT_SECRET || JWT_SECRET.length < 32)) {

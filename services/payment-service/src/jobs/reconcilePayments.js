@@ -23,7 +23,7 @@ const logger  = require('../utils/logger');
 const { pollMtnStatus, pollOrangeStatus } = require('../controllers/paymentController');
 
 const PENDING_TIMEOUT_MINUTES = 30;  // Only reconcile payments pending > 30 min
-const MAX_POLL_ATTEMPTS       = 6;   // After 6 polls (~60 min) mark as failed
+const MAX_POLL_ATTEMPTS       = 144; // 144 polls × 10 min = 24 h coverage for MoMo/Orange
 const INTERVAL_MS             = 10 * 60 * 1000; // Run every 10 minutes
 
 let _timer = null;

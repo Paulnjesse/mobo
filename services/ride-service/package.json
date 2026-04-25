@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.3.42",
+    "@socket.io/redis-adapter": "^8.3.0",
     "@opentelemetry/auto-instrumentations-node": "^0.46.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.51.0",
     "@opentelemetry/resources": "^1.24.0",

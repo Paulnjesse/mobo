@@ -54,6 +54,9 @@ envVarGroups:
         sync: false           # SEC-001: PEM CA cert for PostgreSQL TLS validation (rejectUnauthorized: true)
                               # Download from Render Dashboard → PostgreSQL → Connection → CA Certificate
                               # Store as single-line with \n replacing actual newlines
+      - key: REQUIRE_RS256
+        value: "true"         # BLOCK-5: Force RS256 JWT signing even outside NODE_ENV=production
+                              # Protects staging environments that share the production database
 
 services:
   # ── PgBouncer — PostgreSQL connection pooler (private service) ────────────────
@@ -119,6 +122,9 @@ services:
     runtime: node
     rootDir: services/user-service
     buildCommand: npm install
+    # preDeployCommand runs migrations using DATABASE_URL_DIRECT (bypasses PgBouncer —
+    # DDL statements require a session connection, not transaction-mode pooling).
+    preDeployCommand: DATABASE_URL=$DATABASE_URL_DIRECT node ../../database/run_migrations.js
     startCommand: node server.js
     healthCheckPath: /health
     scaling:
@@ -164,6 +170,7 @@ services:
     runtime: node
     rootDir: services/ride-service
     buildCommand: npm install
+    preDeployCommand: DATABASE_URL=$DATABASE_URL_DIRECT node ../../database/run_migrations.js
     startCommand: node server.js
     healthCheckPath: /health
     scaling:
@@ -199,6 +206,7 @@ services:
     runtime: node
     rootDir: services/payment-service
     buildCommand: npm install
+    preDeployCommand: DATABASE_URL=$DATABASE_URL_DIRECT node ../../database/run_migrations.js
     startCommand: node server.js
     healthCheckPath: /health
     scaling:
@@ -244,6 +252,7 @@ services:
     runtime: node
     rootDir: services/location-service
     buildCommand: npm install
+    preDeployCommand: DATABASE_URL=$DATABASE_URL_DIRECT node ../../database/run_migrations.js
     startCommand: node server.js
     healthCheckPath: /health
     scaling:
@@ -275,6 +284,7 @@ services:
     runtime: node
     rootDir: api-gateway
     buildCommand: npm install
+    preDeployCommand: DATABASE_URL=$DATABASE_URL_DIRECT node ../database/run_migrations.js
     startCommand: node server.js
     healthCheckPath: /health
     # Custom domain: api.moboride.com → CNAME mobo-api-gateway.onrender.com

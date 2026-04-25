@@ -79,6 +79,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// Strip internal identity headers from ALL incoming requests before auth middleware runs.
+// Prevents external clients from forging x-user-id / x-user-role to impersonate other users.
+// The auth.js verifyToken middleware re-sets these headers after verifying the JWT.
+app.use((req, _res, next) => {
+  delete req.headers['x-user-id'];
+  delete req.headers['x-user-role'];
+  delete req.headers['x-user-phone'];
+  delete req.headers['x-user-name'];
+  next();
+});
+
 // ============================================================
 // Security & Logging
 // ============================================================
