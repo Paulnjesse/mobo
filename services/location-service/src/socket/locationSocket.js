@@ -20,7 +20,7 @@ const cache = require('../../../shared/redis');
 //
 // At 4 s: 900 updates/hr/driver  (vs 3,600 unthrottled) — 75% reduction
 // At 8 s: 450 updates/hr/driver — 87.5% reduction
-const THROTTLE_ACTIVE_MS = 4_000;  // 4 seconds — driver in a live ride
+const THROTTLE_ACTIVE_MS = 2_000;  // 2 seconds — driver in a live ride (halved for pickup accuracy)
 const THROTTLE_IDLE_MS   = 8_000;  // 8 seconds — driver searching/offline
 const _lastUpdateMs      = new Map(); // driverId → last accepted timestamp (ms)
 
@@ -276,6 +276,16 @@ function initLocationSocket(io) {
         location.to(driverLocationRoom(driverId)).emit('eta_update', { driverId, eta_minutes, timestamp: locationPayload.timestamp });
       }
 
+      // ── Geofence arrival detection ────────────────────────────────────────
+      // When driver is within 100 m of the ride pickup and the ride is still
+      // in 'accepted' status, automatically transition to 'arriving' and notify
+      // the rider — no manual "I've arrived" tap required.
+      if (isActive) {
+        checkGeofenceArrival(driverId, latitude, longitude, location).catch((err) => {
+          logger.warn(`[LocationSocket] Geofence check error for driver ${driverId}:`, err.message);
+        });
+      }
+
       // Persist to DB asynchronously — non-blocking, failures are logged only
       persistLocationToDB(driverId, locationPayload).catch((err) => {
         logger.warn(`[LocationSocket] DB persist failed for driver ${driverId}:`, err.message);
@@ -476,6 +486,68 @@ function initLocationSocket(io) {
 }
 
 /**
+ * Geofence arrival detection.
+ * When the driver is within ARRIVAL_RADIUS_M metres of the ride pickup and the
+ * ride is still in 'accepted' status, auto-transition to 'arriving' and emit
+ * a `driver_arrived` socket event to the rider's tracking room.
+ *
+ * @param {string} driverId
+ * @param {number} driverLat
+ * @param {number} driverLng
+ * @param {import('socket.io').Namespace} locationNs  Socket.IO /location namespace
+ */
+/* istanbul ignore next */
+async function checkGeofenceArrival(driverId, driverLat, driverLng, locationNs) {
+  const ARRIVAL_RADIUS_M = 100; // metres — auto-trigger "arriving" within 100 m of pickup
+
+  if (!db || typeof db.query !== 'function') return;
+
+  // Find an active ride for this driver that is still in 'accepted' state
+  const rideRow = await db.query(
+    `SELECT r.id, r.rider_id,
+            ST_Y(r.pickup_location::geometry) AS pickup_lat,
+            ST_X(r.pickup_location::geometry) AS pickup_lng
+     FROM   rides r
+     JOIN   drivers d ON d.id = r.driver_id
+     WHERE  d.user_id = $1
+       AND  r.status  = 'accepted'
+     LIMIT  1`,
+    [driverId]
+  );
+
+  const ride = rideRow.rows[0];
+  if (!ride) return; // no accepted ride to check
+
+  const pickupLat = parseFloat(ride.pickup_lat);
+  const pickupLng = parseFloat(ride.pickup_lng);
+  if (isNaN(pickupLat) || isNaN(pickupLng)) return;
+
+  const distM = haversineKm(driverLat, driverLng, pickupLat, pickupLng) * 1000;
+  if (distM > ARRIVAL_RADIUS_M) return; // not close enough yet
+
+  // Transition ride to 'arriving'
+  const updated = await db.query(
+    `UPDATE rides
+     SET status = 'arriving', driver_arrived_at = NOW(), updated_at = NOW()
+     WHERE id = $1 AND status = 'accepted'
+     RETURNING id, rider_id`,
+    [ride.id]
+  );
+  if (!updated.rows[0]) return; // already updated by another process or manual tap
+
+  logger.info(`[LocationSocket] Geofence arrival: driver ${driverId} within ${Math.round(distM)}m of pickup → ride ${ride.id} set to 'arriving'`);
+
+  // Emit to the driver's location room so all subscribers (rider + admin) are notified
+  locationNs.to(driverLocationRoom(driverId)).emit('driver_arrived', {
+    rideId:    ride.id,
+    driverId,
+    riderId:   ride.rider_id,
+    distanceM: Math.round(distM),
+    timestamp: Date.now(),
+  });
+}
+
+/**
  * Persist driver location to the database.
  * Delegates to the existing REST route DB logic if available, or uses
  * a direct pg query if a pool is accessible via require.
@@ -484,7 +556,7 @@ function initLocationSocket(io) {
  * write fails.
  *
  * @param {string} driverId
- * @param {{ latitude: number, longitude: number, heading: number|null, speed: number|null, timestamp: number }} locationPayload
+ * @param {{ latitude: number, longitude: number, heading: number|null, speed: number|null, accuracy: number|null, timestamp: number }} locationPayload
  * @returns {Promise<void>}
  */
 /* istanbul ignore next */
@@ -493,13 +565,14 @@ async function persistLocationToDB(driverId, locationPayload) {
     if (!db || typeof db.query !== 'function') return;
 
     await db.query(
-      `INSERT INTO driver_locations (driver_id, latitude, longitude, heading, speed, updated_at)
-       VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0))
+      `INSERT INTO driver_locations (driver_id, latitude, longitude, heading, speed, accuracy_m, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7 / 1000.0))
        ON CONFLICT (driver_id) DO UPDATE
          SET latitude   = EXCLUDED.latitude,
              longitude  = EXCLUDED.longitude,
              heading    = EXCLUDED.heading,
              speed      = EXCLUDED.speed,
+             accuracy_m = EXCLUDED.accuracy_m,
              updated_at = EXCLUDED.updated_at`,
       [
         driverId,
@@ -507,6 +580,7 @@ async function persistLocationToDB(driverId, locationPayload) {
         locationPayload.longitude,
         locationPayload.heading,
         locationPayload.speed,
+        locationPayload.accuracy,
         locationPayload.timestamp,
       ]
     );

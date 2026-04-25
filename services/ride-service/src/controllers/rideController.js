@@ -1570,7 +1570,7 @@ const updateRideStatus = async (req, res) => {
 
       // ── Push notification: ride completed ────────────────────────────────
       try {
-        const { notifyRideCompleted } = require('../services/pushNotifications');
+        const { notifyRideCompleted, _send: sendPush } = require('../services/pushNotifications');
         const riderTokenRow = await pool.query(
           'SELECT push_token FROM users WHERE id = $1',
           [ride.rider_id]
@@ -1584,6 +1584,25 @@ const updateRideStatus = async (req, res) => {
             points_earned: earnedPoints,
             user_id:      ride.rider_id,
           });
+
+          // ── Auto-payment prompt for digital (non-cash, unpaid) rides ──────
+          // Cash rides: paid in person, no prompt needed.
+          // Digital rides with pending payment: nudge rider to pay immediately.
+          // A follow-up notification fires after 5 minutes if still unpaid
+          // (handled by the earningsSettler job watching earnings_pending).
+          if (!isCash && !isPaid) {
+            sendPush(
+              riderToken,
+              'Please pay for your ride',
+              `Your ride fare is ${finalFare.toLocaleString()} XAF. Tap to complete payment now.`,
+              {
+                type:       'payment_prompt',
+                ride_id:    ride.id,
+                amount_xaf: finalFare,
+                user_id:    ride.rider_id,
+              }
+            ).catch(() => {});
+          }
         }
       } catch (pnErr) {
         logger.warn('[CompletedPushNotification]', pnErr.message);

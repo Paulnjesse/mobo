@@ -78,6 +78,7 @@ const FILES = [
   'migration_043.sql',  // ride_waypoints + incidents + revoked_tokens (CF-003, CF-005, CF-004)
   'migration_044.sql',  // ad_platform_config (AdMob + AdSense) + app_splash_config (animated splash)
   'migration_045.sql',  // wallet_credit_packs + wallet_pack_purchases + loyalty_bonus_log + spend tracking
+  'migration_046.sql',  // driver_locations.accuracy_m column for GPS accuracy storage
 ];
 
 function buildMigrationSsl() {

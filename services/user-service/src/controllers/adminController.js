@@ -36,6 +36,8 @@
 
 const db     = require('../config/database');
 const logger = require('../utils/logger');
+const smsService  = require('../services/sms');
+const { sendPushNotification } = require('../services/pushNotifications');
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
@@ -370,11 +372,50 @@ const approveDriver = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `UPDATE drivers SET is_approved = true WHERE id = $1 RETURNING id`,
+      `UPDATE drivers SET is_approved = true WHERE id = $1
+       RETURNING id, user_id`,
       [id]
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Driver not found' });
+
+    const { user_id: userId } = result.rows[0];
     logger.info('[AdminCtrl] Driver approved', { driverId: id, adminId: req.user?.id });
+
+    // Notify driver via SMS + push notification (fire-and-forget — non-blocking)
+    ;(async () => {
+      try {
+        const userRow = await db.query(
+          `SELECT phone, push_token, full_name FROM users WHERE id = $1`,
+          [userId]
+        );
+        const user = userRow.rows[0];
+        if (!user) return;
+
+        const approvalMsg = `Congratulations ${user.full_name || 'Driver'}! Your MOBO driver account has been approved. Open the app to go online and start accepting rides.`;
+
+        // SMS notification
+        if (user.phone) {
+          smsService.sendSms(user.phone, approvalMsg).catch((err) =>
+            logger.warn('[AdminCtrl] Approval SMS failed', { err: err.message, userId })
+          );
+        }
+
+        // Push notification
+        if (user.push_token) {
+          sendPushNotification(
+            user.push_token,
+            'Account Approved!',
+            'Your MOBO driver account is approved. Tap to go online.',
+            { type: 'driver_approved', driver_id: id }
+          ).catch((err) =>
+            logger.warn('[AdminCtrl] Approval push failed', { err: err.message, userId })
+          );
+        }
+      } catch (notifyErr) {
+        logger.warn('[AdminCtrl] Approval notification error', { err: notifyErr.message });
+      }
+    })();
+
     res.json({ success: true, message: 'Driver approved' });
   } catch (err) {
     logger.error('[AdminCtrl] approveDriver error', { err: err.message });
