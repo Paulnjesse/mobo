@@ -11,6 +11,12 @@
 process.env.NODE_ENV   = 'test';
 process.env.JWT_SECRET = 'test_secret_minimum_32_chars_long_abc';
 
+// Mock isTokenRevoked so verifyToken never hits Redis in unit tests
+jest.mock('../../services/shared/jwtUtil', () => {
+  const actual = jest.requireActual('../../services/shared/jwtUtil');
+  return { ...actual, isTokenRevoked: jest.fn().mockResolvedValue(false) };
+});
+
 // jwtUtil uses HS256 in test (no RS256 keys)
 const { signToken } = require('../../services/shared/jwtUtil');
 
@@ -68,12 +74,12 @@ describe('verifyToken', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('passes with valid JWT and injects x-user-id header', () => {
+  test('passes with valid JWT and injects x-user-id header', async () => {
     const token = signToken({ id: 'user-1', role: 'rider', phone: '+237612345678', full_name: 'Jean' });
     const req = makeReq({ headers: { authorization: `Bearer ${token}` } });
     const res = makeRes();
     const next = jest.fn();
-    verifyToken(req, res, next);
+    await verifyToken(req, res, next);
     expect(next).toHaveBeenCalled();
     expect(req.headers['x-user-id']).toBe('user-1');
     expect(req.headers['x-user-role']).toBe('rider');
@@ -99,22 +105,22 @@ describe('verifyToken', () => {
     expect(res._body.message).toContain('Invalid');
   });
 
-  test('401 on device binding mismatch', () => {
+  test('401 on device binding mismatch', async () => {
     const token = signToken({ id: 'user-1', role: 'rider', device_id: 'device-abc' });
     const req = makeReq({ headers: { authorization: `Bearer ${token}`, 'x-device-id': 'device-xyz' } });
     const res = makeRes();
     const next = jest.fn();
-    verifyToken(req, res, next);
+    await verifyToken(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res._body.code).toBe('DEVICE_BINDING_FAILED');
   });
 
-  test('passes when device_id matches', () => {
+  test('passes when device_id matches', async () => {
     const token = signToken({ id: 'user-1', role: 'rider', device_id: 'device-abc' });
     const req = makeReq({ headers: { authorization: `Bearer ${token}`, 'x-device-id': 'device-abc' } });
     const res = makeRes();
     const next = jest.fn();
-    verifyToken(req, res, next);
+    await verifyToken(req, res, next);
     expect(next).toHaveBeenCalled();
   });
 });

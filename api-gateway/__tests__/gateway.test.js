@@ -1,6 +1,13 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-for-jest-minimum-32-chars-long';
 
+// Mock jwtUtil so isTokenRevoked never hits Redis in tests
+// Path from api-gateway/__tests__/ → ../../services/shared/jwtUtil
+jest.mock('../../services/shared/jwtUtil', () => {
+  const actual = jest.requireActual('../../services/shared/jwtUtil');
+  return { ...actual, isTokenRevoked: jest.fn().mockResolvedValue(false) };
+});
+
 // Prevent the recursive logger.child bug in api-gateway/src/utils/logger.js
 // (line 34: `logger.child = (meta) => logger.child(meta)` creates infinite recursion)
 jest.mock('../src/utils/logger', () => {

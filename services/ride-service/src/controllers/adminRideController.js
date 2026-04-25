@@ -432,6 +432,87 @@ const getPaymentMethodBreakdown = async (req, res) => {
   }
 };
 
+// ── Bulk Ride Reassignment (CF-006) ──────────────────────────────────────────
+
+/**
+ * POST /admin/bulk/rides/reassign
+ * Reassign up to 50 rides to a single driver. Only reassigns rides in
+ * requested/accepted/arriving state; skips completed/cancelled.
+ */
+const bulkReassignRides = async (req, res) => {
+  const { ride_ids, driver_id, reason = 'bulk_admin_reassignment' } = req.body;
+  const adminId = req.user?.id;
+
+  if (!Array.isArray(ride_ids) || ride_ids.length === 0) {
+    return res.status(400).json({ error: 'ride_ids must be a non-empty array' });
+  }
+  if (ride_ids.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 rides per bulk reassignment' });
+  }
+  if (!driver_id) {
+    return res.status(400).json({ error: 'driver_id is required' });
+  }
+
+  try {
+    const driverRes = await pool.query(
+      `SELECT id FROM drivers WHERE user_id = $1 AND is_approved = true AND status = 'online'`,
+      [driver_id]
+    );
+    if (!driverRes.rows[0]) {
+      return res.status(404).json({ error: 'Driver not found, not approved, or not online' });
+    }
+    const driverId = driverRes.rows[0].id;
+
+    const { rows: updated } = await pool.query(
+      `UPDATE rides
+       SET driver_id = $1, updated_at = NOW()
+       WHERE id = ANY($2::uuid[])
+         AND status IN ('requested','accepted','arriving')
+       RETURNING id, status`,
+      [driverId, ride_ids]
+    );
+
+    const updatedIds = new Set(updated.map(r => r.id));
+    const skippedIds = ride_ids.filter(id => !updatedIds.has(id));
+
+    logger.info('[BulkReassign] Rides reassigned', {
+      admin: adminId, driver_id, reassigned: updated.length, skipped: skippedIds.length, reason,
+    });
+
+    res.json({
+      success:  true,
+      reassigned: updated.map(r => r.id),
+      skipped:    skippedIds,
+      skipped_reason: 'ride_not_in_reassignable_state',
+      summary: { total: ride_ids.length, reassigned: updated.length, skipped: skippedIds.length },
+    });
+  } catch (err) {
+    logger.error('[BulkReassign] Error', { err: err.message });
+    res.status(500).json({ error: 'Bulk reassignment failed' });
+  }
+};
+
+/**
+ * GET /admin/rides/:id/waypoints
+ * Return the recorded GPS trail for trip replay.
+ */
+const getRideWaypoints = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `SELECT id, lat, lng, bearing, speed_kmh, accuracy_m, recorded_at
+       FROM   ride_waypoints
+       WHERE  ride_id = $1
+       ORDER  BY recorded_at ASC`,
+      [id]
+    );
+    res.json({ success: true, ride_id: id, waypoints: rows, count: rows.length });
+  } catch (err) {
+    logger.error('[AdminRideCtrl] getRideWaypoints error', { err: err.message });
+    res.status(500).json({ error: 'Failed to fetch waypoints' });
+  }
+};
+
 module.exports = {
   // Rides
   listRides, getRideStats, getRideById,
@@ -443,4 +524,6 @@ module.exports = {
   getActiveRides,
   // Payments
   listPayments, getPaymentStats, getPaymentRevenue, getPaymentMethodBreakdown,
+  // Bulk + trip replay
+  bulkReassignRides, getRideWaypoints,
 };

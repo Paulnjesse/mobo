@@ -129,14 +129,42 @@ async function incrementAttempts(payment, newAttempts) {
 
 /**
  * Run one full reconciliation cycle.
+ *
+ * Uses a PostgreSQL advisory lock (pg_try_advisory_lock) so only ONE instance
+ * runs the cycle even when Render scales to multiple replicas.  The lock is
+ * session-scoped: it releases automatically when the DB connection is returned
+ * to the pool, so a crashed instance never starves subsequent cycles.
+ *
+ * Advisory lock key: hashtext('mobo_reconciliation') — stable across restarts.
  */
 async function runReconciliation() {
   logger.info('[Reconcile] Starting reconciliation cycle');
+
+  // Try to acquire advisory lock — returns immediately if already held
+  let lockClient = null;
+  try {
+    lockClient = await db.connect();
+    const { rows } = await lockClient.query(
+      `SELECT pg_try_advisory_lock(hashtext('mobo_reconciliation')) AS acquired`
+    );
+    if (!rows[0]?.acquired) {
+      logger.info('[Reconcile] Another instance is running — skipping this cycle');
+      lockClient.release();
+      return;
+    }
+  } catch (lockErr) {
+    // If we can't acquire the lock (e.g. DB unavailable), skip gracefully
+    logger.warn('[Reconcile] Advisory lock acquisition failed — skipping', { err: lockErr.message });
+    if (lockClient) lockClient.release();
+    return;
+  }
+
   let payments;
   try {
     payments = await fetchStalePendingPayments();
   } catch (err) {
     logger.error('[Reconcile] Failed to fetch stale payments', { err: err.message });
+    lockClient.release(); // releases the advisory lock
     return;
   }
 
@@ -154,6 +182,7 @@ async function runReconciliation() {
   }
 
   logger.info('[Reconcile] Cycle complete');
+  lockClient.release(); // releases advisory lock — next instance can now proceed
 }
 
 /**

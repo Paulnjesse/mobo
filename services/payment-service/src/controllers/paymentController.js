@@ -1984,4 +1984,74 @@ module.exports = {
   getSubscriptionStatus,
   driverCashout,
   getDriverCashoutHistory,
+  bulkRefund,
 };
+
+// ── Bulk Refund (CF-006) ──────────────────────────────────────────────────────
+/**
+ * POST /payments/admin/bulk/refund
+ * Issue refunds for up to 100 payments in a single audited operation.
+ * Each refund is attempted individually; partial failure returns a summary.
+ * Requires: finance:write admin permission.
+ */
+async function bulkRefund(req, res) {
+  const { payment_ids, reason = 'bulk_admin_refund' } = req.body;
+
+  if (!Array.isArray(payment_ids) || payment_ids.length === 0) {
+    return res.status(400).json({ error: 'payment_ids must be a non-empty array' });
+  }
+  if (payment_ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 payments per bulk refund' });
+  }
+
+  const results = { succeeded: [], failed: [], skipped: [] };
+
+  for (const paymentId of payment_ids) {
+    try {
+      const { rows } = await db.query(
+        `SELECT id, ride_id, user_id, amount, method, status, metadata
+         FROM payments WHERE id = $1`,
+        [paymentId]
+      );
+      const payment = rows[0];
+      if (!payment) { results.skipped.push({ id: paymentId, reason: 'not_found' }); continue; }
+      if (payment.status === 'refunded') { results.skipped.push({ id: paymentId, reason: 'already_refunded' }); continue; }
+      if (payment.status !== 'completed') { results.skipped.push({ id: paymentId, reason: `status_is_${payment.status}` }); continue; }
+
+      // Mark as refunded atomically
+      const { rowCount } = await db.query(
+        `UPDATE payments
+         SET status = 'refunded',
+             metadata = metadata || $1::jsonb,
+             updated_at = NOW()
+         WHERE id = $2 AND status = 'completed'`,
+        [JSON.stringify({ refund_reason: reason, refunded_by: req.user?.id, refunded_at: new Date().toISOString() }), paymentId]
+      );
+
+      if (rowCount === 0) {
+        results.skipped.push({ id: paymentId, reason: 'concurrent_update' });
+      } else {
+        results.succeeded.push(paymentId);
+        logger.info('[BulkRefund] Refunded payment', { paymentId, admin: req.user?.id });
+      }
+    } catch (err) {
+      logger.error('[BulkRefund] Error on payment', { paymentId, err: err.message });
+      results.failed.push({ id: paymentId, reason: err.message });
+    }
+  }
+
+  const statusCode = results.failed.length === payment_ids.length ? 500
+    : results.succeeded.length === 0 ? 422
+    : 207; // Multi-Status: partial success
+
+  res.status(statusCode).json({
+    success: results.failed.length === 0 && results.skipped.length === 0,
+    ...results,
+    summary: {
+      total:     payment_ids.length,
+      succeeded: results.succeeded.length,
+      failed:    results.failed.length,
+      skipped:   results.skipped.length,
+    },
+  });
+}

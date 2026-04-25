@@ -2,7 +2,8 @@
 const logger = require('../utils/logger');
 
 const { verifyJwt } = require('../../../shared/jwtUtil');
-const db = require('../config/database');
+const db    = require('../config/database');
+const cache = require('../utils/cache');
 
 // ── Africa network optimisation — in-ride location throttle ──────────────────
 // GPS fires at 1 Hz; broadcasting at 1 Hz to riders during a live ride costs
@@ -44,15 +45,46 @@ const riderSockets = new Map();
  */
 const requestTimeouts = new Map();
 
-/**
- * Re-dispatch state tracking. Populated by notifyDriver / incoming_ride_request.
- * Cleared when a driver accepts or ride is auto-cancelled.
- * @type {Map<string, { attempts: number, declinedDriverIds: Set<string>, startedAt: number, riderId: string }>}
- */
-const pendingDispatches = new Map();
-
 const MAX_DISPATCH_ATTEMPTS  = 5;
 const MAX_DISPATCH_WINDOW_MS = 3 * 60 * 1000; // 3 minutes
+const DISPATCH_TTL_S         = 360;            // Redis TTL — covers window + 1-min buffer
+
+/** Redis key for dispatch state. */
+const dispatchKey = (rideId) => `dispatch:${rideId}`;
+
+/**
+ * Dispatch state is stored in Redis so it survives pod restarts and is visible
+ * across all ride-service instances on Render's multi-instance deployment.
+ * Falls back to an in-memory Map when Redis is unavailable.
+ *
+ * Shape: { attempts, declinedDriverIds: string[], startedAt, riderId }
+ */
+const _dispatchMemFallback = new Map(); // in-memory fallback when Redis is down
+
+async function _getDispatch(rideId) {
+  const cached = await cache.get(dispatchKey(rideId));
+  if (cached) return { ...cached, declinedDriverIds: new Set(cached.declinedDriverIds || []) };
+  // Redis miss — check in-memory fallback
+  return _dispatchMemFallback.get(rideId) || null;
+}
+
+async function _setDispatch(rideId, state) {
+  const serializable = { ...state, declinedDriverIds: [...state.declinedDriverIds] };
+  await cache.set(dispatchKey(rideId), serializable, DISPATCH_TTL_S);
+  _dispatchMemFallback.set(rideId, state); // keep fallback in sync
+}
+
+async function _deleteDispatch(rideId) {
+  await cache.del(dispatchKey(rideId));
+  _dispatchMemFallback.delete(rideId);
+}
+
+/**
+ * pendingDispatches — exported for backward-compatibility with tests.
+ * Reflects the in-memory fallback; Redis is the authoritative store in production.
+ * @type {Map<string, { attempts: number, declinedDriverIds: Set<string>, startedAt: number, riderId: string }>}
+ */
+const pendingDispatches = _dispatchMemFallback;
 
 /**
  * Find the next nearest available driver and dispatch the ride request to them.
@@ -63,15 +95,16 @@ const MAX_DISPATCH_WINDOW_MS = 3 * 60 * 1000; // 3 minutes
  * @param {string|null} justDeclinedDriverId  — driver to exclude from next search
  */
 async function findAndDispatchNextDriver(ridesNs, rideId, justDeclinedDriverId) {
-  const state = pendingDispatches.get(rideId);
+  const state = await _getDispatch(rideId);
   if (!state) return; // already matched or cancelled by another path
 
   if (justDeclinedDriverId) state.declinedDriverIds.add(String(justDeclinedDriverId));
   state.attempts += 1;
+  await _setDispatch(rideId, state);
 
   const elapsed = Date.now() - state.startedAt;
   if (state.attempts > MAX_DISPATCH_ATTEMPTS || elapsed > MAX_DISPATCH_WINDOW_MS) {
-    pendingDispatches.delete(rideId);
+    await _deleteDispatch(rideId);
     await db.query(
       `UPDATE rides SET status = 'cancelled', cancellation_reason = 'no_driver_available', updated_at = NOW() WHERE id = $1`,
       [rideId]
@@ -164,7 +197,7 @@ async function findAndDispatchNextDriver(ridesNs, rideId, justDeclinedDriverId) 
     logger.info(`[RideSocket] Dispatched ride ${rideId} to driver ${nextDriver.user_id} (attempt ${state.attempts})`);
   } catch (err) {
     logger.error(`[RideSocket] findAndDispatchNextDriver error for ride ${rideId}`, { err: err.message });
-    pendingDispatches.delete(rideId);
+    await _deleteDispatch(rideId);
   }
 }
 
@@ -523,7 +556,7 @@ function initRideSocket(io) {
 
       if (accepted) {
         // Driver accepted — stop re-dispatch loop
-        pendingDispatches.delete(rideId);
+        setImmediate(() => _deleteDispatch(rideId));
       } else {
         // Driver declined — find the next nearest driver automatically
         const ridesNs = rides; // namespace ref for async call
@@ -614,20 +647,26 @@ function notifyDriver(io, driverId, rideRequestPayload) {
 
   const { rideId, riderId } = rideRequestPayload;
 
-  // Register dispatch state for re-dispatch loop on non-response or decline
-  if (rideId && !pendingDispatches.has(rideId)) {
-    pendingDispatches.set(rideId, {
-      attempts:         1,
-      declinedDriverIds: new Set([String(driverId)]),
-      startedAt:        Date.now(),
-      riderId:          String(riderId || ''),
-    });
+  // Register dispatch state for re-dispatch loop on non-response or decline.
+  // _getDispatch is async; fire-and-forget init so notifyDriver stays synchronous
+  // for callers — state will be written before the 15s timeout fires.
+  if (rideId) {
+    _getDispatch(rideId).then((existing) => {
+      if (!existing) {
+        _setDispatch(rideId, {
+          attempts:          1,
+          declinedDriverIds: new Set([String(driverId)]),
+          startedAt:         Date.now(),
+          riderId:           String(riderId || ''),
+        });
+      }
+    }).catch((err) => logger.warn('[RideSocket] notifyDriver: dispatch state init failed', { err: err.message }));
   }
 
   const payload = {
     ...rideRequestPayload,
     expiresIn: 15,
-    attempt:   pendingDispatches.get(rideId)?.attempts ?? 1,
+    attempt:   1,
     timestamp: Date.now(),
   };
 

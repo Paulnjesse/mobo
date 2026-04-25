@@ -77,7 +77,7 @@ const updateLocation = async (req, res) => {
        accuracy !== undefined ? parseFloat(accuracy) : null]
     );
 
-    // If driver, update their real-time current_location
+    // If driver, update their real-time current_location and record trip waypoints
     if (req.user.role === 'driver') {
       const driverResult = await db.query(
         `UPDATE drivers
@@ -89,6 +89,37 @@ const updateLocation = async (req, res) => {
 
       if (driverResult.rows.length === 0) {
         return res.status(404).json({ success: false, message: 'Driver profile not found' });
+      }
+
+      // ── Trip waypoint recording (CF-005) ──────────────────────────────────
+      // Write a waypoint for every location update while the driver has an
+      // active in_progress ride.  These records power trip replay, dispute
+      // resolution, and fare auditing.  Failures are non-fatal — a missing
+      // waypoint is better than blocking the driver's location update.
+      const driverId = driverResult.rows[0]?.id;
+      if (driverId) {
+        db.query(
+          `INSERT INTO ride_waypoints (ride_id, lat, lng, bearing, speed_kmh, accuracy_m)
+           SELECT r.id,
+                  $1, $2,
+                  $3::smallint,
+                  ($4 * 3.6)::smallint,   -- m/s → km/h
+                  $5::smallint
+           FROM   rides r
+           WHERE  r.driver_id = $6
+             AND  r.status    = 'in_progress'
+           LIMIT  1`,
+          [
+            latitude,
+            longitude,
+            heading  != null ? Math.round(parseFloat(heading))  : null,
+            speed    != null ? parseFloat(speed)                : null,
+            accuracy != null ? Math.round(parseFloat(accuracy)) : null,
+            driverId,
+          ]
+        ).catch((err) =>
+          logger.warn('[UpdateLocation] Waypoint insert failed (non-fatal)', { err: err.message })
+        );
       }
     }
 

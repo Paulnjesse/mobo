@@ -34,6 +34,7 @@ const {
   getSubscriptionStatus,
   driverCashout,
   getDriverCashoutHistory,
+  bulkRefund,
 } = require('../controllers/paymentController');
 
 // ── Public webhook endpoints (no auth — called by payment providers) ───────────
@@ -77,5 +78,10 @@ router.post('/stripe/confirm',        idempotency, confirmStripePayment);
 // Driver cashout (payout to mobile money / bank)
 router.post('/driver/cashout',         cashoutLimiter, idempotency, validateCashout, driverCashout);
 router.get('/driver/cashout-history',  getDriverCashoutHistory);
+
+// ── Admin bulk operations (CF-006) ────────────────────────────────────────────
+// Require admin role — authenticated admins only
+const { requireAdmin } = require('../middleware/auth');
+router.post('/admin/bulk/refund', requireAdmin, bulkRefund);
 
 module.exports = router;

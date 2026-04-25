@@ -75,6 +75,7 @@ const FILES = [
   'migration_040.sql',  // ride_events audit log, finance:read RBAC, quarterly partitions
   'migration_041.sql',  // Atomic partition rename, stripe_payment_intent_id, fare_splits
   'migration_042.sql',  // Performance indexes for hot query paths (CONCURRENTLY)
+  'migration_043.sql',  // ride_waypoints + incidents + revoked_tokens (CF-003, CF-005, CF-004)
 ];
 
 function buildMigrationSsl() {

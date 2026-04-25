@@ -1,11 +1,12 @@
-const { verifyJwt } = require('../../../services/shared/jwtUtil');
+const { verifyJwt, isTokenRevoked } = require('../../../services/shared/jwtUtil');
 
 /**
  * Gateway-level JWT verification (RS256 in production, HS256 in dev/test).
- * Verifies the token, enforces device binding, and injects user info into
- * request headers so downstream services can trust them without re-verifying.
+ * Verifies the token, checks the revocation blocklist, enforces device binding,
+ * and injects user info into request headers so downstream services can trust
+ * them without re-verifying.
  */
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,6 +20,20 @@ const verifyToken = (req, res, next) => {
 
   try {
     const decoded = verifyJwt(token);
+
+    // ── Revocation check: O(1) Redis lookup for the token's jti ─────────────
+    // If the admin logged out, was force-logged-out, or their token was
+    // compromised and revoked, this check blocks the request immediately.
+    if (decoded.jti) {
+      const revoked = await isTokenRevoked(decoded.jti);
+      if (revoked) {
+        return res.status(401).json({
+          success: false,
+          code: 'TOKEN_REVOKED',
+          message: 'Session has been revoked. Please log in again.',
+        });
+      }
+    }
 
     // Device binding: if the token carries a device_id claim, the request
     // MUST present the matching X-Device-ID header. Mismatch indicates the

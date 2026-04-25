@@ -40,4 +40,8 @@ router.get('/payments/revenue', canReadFinance, ctrl.getPaymentRevenue);
 router.get('/payments/methods', canReadFinance, ctrl.getPaymentMethodBreakdown);
 router.get('/payments',         canReadFinance, ctrl.listPayments);
 
+// ── Bulk operations + trip replay (CF-006, CF-005) ────────────────────────────
+router.post('/bulk/rides/reassign',    requirePermission('rides:manage'), ctrl.bulkReassignRides);
+router.get('/rides/:id/waypoints',     ctrl.getRideWaypoints);
+
 module.exports = router;

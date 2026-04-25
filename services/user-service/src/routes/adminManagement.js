@@ -33,4 +33,8 @@ router.delete('/staff/:id',   canManageStaff, ctrl.archiveAdminStaff);
 router.patch('/users/:id/archive',   requirePermission('users:archive'),   ctrl.archiveUser);
 router.patch('/drivers/:id/archive', requirePermission('drivers:archive'), ctrl.archiveDriver);
 
+// ── Bulk Operations (CF-006) ──────────────────────────────────────────────────
+router.post('/drivers/bulk/deactivate', requirePermission('drivers:archive'), ctrl.bulkDeactivateDrivers);
+router.post('/users/bulk/ban',          requirePermission('users:archive'),   ctrl.bulkBanUsers);
+
 module.exports = router;

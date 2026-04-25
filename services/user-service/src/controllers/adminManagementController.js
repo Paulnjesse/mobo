@@ -479,3 +479,108 @@ exports.archiveDriver = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to archive driver' });
   }
 };
+
+// ── Bulk Operations (CF-006) ──────────────────────────────────────────────────
+
+/**
+ * POST /admin/admin-mgmt/drivers/bulk/deactivate
+ * Deactivate up to 200 drivers in a single audited transaction.
+ * Skips drivers with an active ride — returns a warnings list.
+ * Requires: drivers:archive permission.
+ */
+exports.bulkDeactivateDrivers = async (req, res) => {
+  const { driver_ids, reason = 'bulk_admin_action' } = req.body;
+
+  if (!Array.isArray(driver_ids) || driver_ids.length === 0) {
+    return res.status(400).json({ success: false, message: 'driver_ids must be a non-empty array' });
+  }
+  if (driver_ids.length > 200) {
+    return res.status(400).json({ success: false, message: 'Maximum 200 drivers per bulk operation' });
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Find drivers with active rides — skip them
+    const activeRideRes = await client.query(
+      `SELECT DISTINCT d.id
+       FROM drivers d
+       JOIN rides r ON r.driver_id = d.id
+       WHERE d.id = ANY($1::uuid[])
+         AND r.status IN ('accepted','arriving','arrived','in_progress')`,
+      [driver_ids]
+    );
+    const activeRideDriverIds = new Set(activeRideRes.rows.map(r => r.id));
+    const eligibleIds = driver_ids.filter(id => !activeRideDriverIds.has(id));
+
+    let deactivated = 0;
+    if (eligibleIds.length > 0) {
+      const { rowCount } = await client.query(
+        `UPDATE drivers
+         SET is_approved = false, status = 'offline', updated_at = NOW()
+         WHERE id = ANY($1::uuid[])`,
+        [eligibleIds]
+      );
+      deactivated = rowCount;
+    }
+
+    await client.query('COMMIT');
+
+    logger.info('[BulkDeactivate] Drivers deactivated', {
+      requested: driver_ids.length, deactivated, skipped: activeRideDriverIds.size,
+      admin: req.user?.id, reason,
+    });
+
+    res.json({
+      success: true,
+      deactivated,
+      skipped: [...activeRideDriverIds],
+      skipped_reason: 'driver_has_active_ride',
+      warnings: activeRideDriverIds.size > 0
+        ? [`${activeRideDriverIds.size} driver(s) skipped — they have active rides`]
+        : [],
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error('[BulkDeactivate] Error', { err: err.message });
+    res.status(500).json({ success: false, message: 'Bulk deactivation failed' });
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * POST /admin/admin-mgmt/users/bulk/ban
+ * Ban up to 200 users.  Duration in days (0 = permanent).
+ * Requires: users:archive permission.
+ */
+exports.bulkBanUsers = async (req, res) => {
+  const { user_ids, reason = 'bulk_admin_action', duration_days = 0 } = req.body;
+
+  if (!Array.isArray(user_ids) || user_ids.length === 0) {
+    return res.status(400).json({ success: false, message: 'user_ids must be a non-empty array' });
+  }
+  if (user_ids.length > 200) {
+    return res.status(400).json({ success: false, message: 'Maximum 200 users per bulk operation' });
+  }
+
+  try {
+    const banExpiresAt = duration_days > 0
+      ? `NOW() + INTERVAL '${parseInt(duration_days)} days'`
+      : 'NULL';
+
+    const { rowCount } = await db.query(
+      `UPDATE users
+       SET is_active = false, updated_at = NOW()
+       WHERE id = ANY($1::uuid[]) AND role NOT IN ('admin','super_admin')`,
+      [user_ids]
+    );
+
+    logger.info('[BulkBan] Users banned', { count: rowCount, admin: req.user?.id, reason, duration_days });
+    res.json({ success: true, banned: rowCount });
+  } catch (err) {
+    logger.error('[BulkBan] Error', { err: err.message });
+    res.status(500).json({ success: false, message: 'Bulk ban failed' });
+  }
+};

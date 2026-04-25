@@ -15,7 +15,10 @@
  *  10. startReconciliationJob is a no-op in test env
  */
 
-jest.mock('../src/config/database');
+jest.mock('../src/config/database', () => ({
+  query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+  connect: jest.fn(),
+}));
 jest.mock('@sentry/node', () => ({
   captureException: jest.fn(),
   captureMessage:   jest.fn(),
@@ -61,8 +64,29 @@ function makePayment(overrides = {}) {
   };
 }
 
+// Advisory-lock client: always grants the lock, routes non-advisory queries
+// through db.query, and swallows release() silently.
+const mockLockClient = {
+  query: jest.fn((sql) => {
+    if (/pg_try_advisory_lock/i.test(sql)) {
+      return Promise.resolve({ rows: [{ acquired: true }] });
+    }
+    return db.query(sql);
+  }),
+  release: jest.fn(),
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
+  // Provide the lock client on every test — runReconciliation calls db.connect() first
+  db.connect.mockResolvedValue(mockLockClient);
+  mockLockClient.query.mockImplementation((sql) => {
+    if (/pg_try_advisory_lock/i.test(sql)) {
+      return Promise.resolve({ rows: [{ acquired: true }] });
+    }
+    return db.query(sql);
+  });
+  mockLockClient.release.mockClear();
 });
 
 // ─── runReconciliation — no stale payments ────────────────────────────────────

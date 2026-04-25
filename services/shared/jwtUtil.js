@@ -12,8 +12,15 @@
  *
  * In production, JWT_PRIVATE_KEY + JWT_PUBLIC_KEY MUST be set.
  * JWT_SECRET alone is rejected in NODE_ENV=production.
+ *
+ * Token revocation:
+ *   Every signed token includes a `jti` (JWT ID) UUID claim.
+ *   To revoke a token, call revokeToken(jti, ttlSeconds) which writes
+ *   the jti to Redis. The gateway's auth middleware checks this blocklist
+ *   on every request via isTokenRevoked(jti).
  */
-const jwt = require('jsonwebtoken');
+const jwt    = require('jsonwebtoken');
+const crypto = require('crypto'); // randomUUID() available since Node 14.17 — no extra dep needed
 
 const JWT_PRIVATE_KEY = process.env.JWT_PRIVATE_KEY || null;
 const JWT_PUBLIC_KEY  = process.env.JWT_PUBLIC_KEY  || null;
@@ -42,16 +49,19 @@ if (!USE_RS256 && (!JWT_SECRET || JWT_SECRET.length < 32)) {
 /**
  * Sign a JWT payload.
  * Uses RS256 when keys are configured, HS256 otherwise (test/dev only).
+ * Always injects a `jti` (JWT ID) UUID for revocation support unless
+ * the caller has already provided one.
  *
  * @param {object} payload
  * @param {object} options  — jsonwebtoken sign options (expiresIn, etc.)
  * @returns {string}
  */
 function signToken(payload, options = {}) {
+  const payloadWithJti = { jti: crypto.randomUUID(), ...payload }; // caller's jti takes precedence if set
   if (USE_RS256) {
-    return jwt.sign(payload, JWT_PRIVATE_KEY, { ...options, algorithm: 'RS256' });
+    return jwt.sign(payloadWithJti, JWT_PRIVATE_KEY, { ...options, algorithm: 'RS256' });
   }
-  return jwt.sign(payload, JWT_SECRET, options); // HS256 default
+  return jwt.sign(payloadWithJti, JWT_SECRET, options); // HS256 default
 }
 
 /**
@@ -82,4 +92,66 @@ function decodeIgnoreExpiry(token) {
   return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'], ignoreExpiration: true });
 }
 
-module.exports = { signToken, verifyJwt, decodeIgnoreExpiry, USE_RS256 };
+// ── Token Revocation ─────────────────────────────────────────────────────────
+// Redis is the primary blocklist store (O(1) check per request).
+// The revoked_tokens DB table (migration_043) is the durable fallback.
+// Lazy-load Redis so services that don't use revocation don't pay the cost.
+
+let _redis = null;
+function _getRedis() {
+  if (_redis) return _redis;
+  try { _redis = require('./redis'); } catch (_) { _redis = null; }
+  return _redis;
+}
+
+const REVOCATION_KEY = (jti) => `revoked_token:${jti}`;
+
+/**
+ * Revoke a token by its jti.
+ * Writes to Redis with a TTL equal to the token's remaining lifetime.
+ *
+ * @param {string} jti         — token's JWT ID claim
+ * @param {number} ttlSeconds  — seconds until the token would have expired
+ * @returns {Promise<void>}
+ */
+async function revokeToken(jti, ttlSeconds) {
+  const r = _getRedis();
+  if (r) {
+    await r.set(REVOCATION_KEY(jti), { revoked: true }, Math.max(ttlSeconds, 1));
+  }
+  // Also persist to DB for durability (best-effort — non-fatal if DB is slow)
+  try {
+    const { Client } = require('pg');
+    const dbUrl = process.env.DATABASE_URL;
+    if (dbUrl) {
+      const client = new Client({ connectionString: dbUrl, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false });
+      await client.connect();
+      await client.query(
+        `INSERT INTO revoked_tokens (jti, revoked_at, expires_at)
+         VALUES ($1, NOW(), NOW() + ($2 * INTERVAL '1 second'))
+         ON CONFLICT (jti) DO NOTHING`,
+        [jti, ttlSeconds]
+      );
+      await client.end();
+    }
+  } catch (_) { /* non-fatal — Redis is the primary check */ }
+}
+
+/**
+ * Check whether a token's jti has been revoked.
+ * Returns true if revoked (request should be rejected with 401).
+ *
+ * @param {string} jti
+ * @returns {Promise<boolean>}
+ */
+async function isTokenRevoked(jti) {
+  if (!jti) return false;
+  const r = _getRedis();
+  if (r) {
+    const val = await r.get(REVOCATION_KEY(jti));
+    return val !== null;
+  }
+  return false; // Redis unavailable — fail-open (better UX than blocking all requests)
+}
+
+module.exports = { signToken, verifyJwt, decodeIgnoreExpiry, revokeToken, isTokenRevoked, USE_RS256 };

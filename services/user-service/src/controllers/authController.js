@@ -9,7 +9,7 @@ const emailService = require('../services/email');
 const { encrypt, hashForLookup } = require('../../../shared/fieldEncryption');
 const redis = require('../../../shared/redis');
 
-const { signToken, decodeIgnoreExpiry } = require('../../../shared/jwtUtil');
+const { signToken, decodeIgnoreExpiry, revokeToken } = require('../../../shared/jwtUtil');
 const audit = require('../../../shared/auditLog');
 const logger = require('../utils/logger');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -891,9 +891,33 @@ const resendOtp = async (req, res) => {
 
 /**
  * POST /auth/logout
- * JWT is stateless; client drops the token.
+ * Revokes the current JWT by adding its jti to the Redis blocklist.
+ * The token's remaining TTL is used so the blocklist entry auto-expires.
  */
 const logout = async (req, res) => {
+  try {
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    if (token) {
+      // Decode without verifying (already verified by upstream auth middleware).
+      // Extract jti and exp to calculate remaining TTL for the Redis entry.
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        try {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+          const jti = payload.jti;
+          const exp = payload.exp;
+          if (jti && exp) {
+            const ttlSeconds = Math.max(exp - Math.floor(Date.now() / 1000), 1);
+            await revokeToken(jti, ttlSeconds);
+          }
+        } catch (_) { /* malformed token — ignore, client is logging out anyway */ }
+      }
+    }
+  } catch (err) {
+    // Non-fatal — client still gets a successful logout response
+    const logger = require('../utils/logger');
+    logger.warn('[Logout] Token revocation failed (non-fatal)', { err: err.message });
+  }
   res.json({ success: true, message: 'Logged out successfully. See you soon on MOBO!' });
 };
 
