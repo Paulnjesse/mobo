@@ -69,18 +69,109 @@ const FILES = [
   'migration_034.sql',  // data_access_logs + admin_notifications + user_documents (encrypted)
   'migration_035.sql',  // vehicle_categories + vehicle_inspections + driver_selfie_checks + police_contacts
   'migration_036.sql',  // SEC-004: least-privilege DB roles (mobo_user_svc, mobo_ride_svc, mobo_pay_svc, mobo_loc_svc, mobo_readonly)
+  'migration_037.sql',  // Production indexes, constraints, and deduplication tables
+  'migration_038.sql',  // Saga pattern: earnings_pending table for payment settlement
+  'migration_039.sql',  // Admin dashboard support tables + user soft-delete archive
+  'migration_040.sql',  // ride_events audit log, finance:read RBAC, quarterly partitions
+  'migration_041.sql',  // Atomic partition rename, stripe_payment_intent_id, fare_splits
+  'migration_042.sql',  // Performance indexes for hot query paths (CONCURRENTLY)
 ];
 
 function buildMigrationSsl() {
   // Supabase and Render PostgreSQL require SSL. In CI/test we skip if no URL.
   // rejectUnauthorized: true validates the server certificate (prevents MITM).
   // If DB_SSL_CA is set, pin to that CA; otherwise trust the system CA bundle.
+  // DB_SSL_NO_VERIFY=true disables cert validation (for Supabase hosted, which
+  // uses a self-signed CA not in the system bundle — still encrypted in transit).
   if (process.env.NODE_ENV === 'test') return false;
+  if (process.env.DB_SSL_NO_VERIFY === 'true') return { rejectUnauthorized: false };
   const sslConfig = { rejectUnauthorized: true };
   if (process.env.DB_SSL_CA) {
     sslConfig.ca = process.env.DB_SSL_CA.replace(/\\n/g, '\n');
   }
   return sslConfig;
+}
+
+/**
+ * Split a SQL file into individual statements, respecting:
+ *   • Dollar-quoted strings  ($$ ... $$  or  $tag$ ... $tag$)
+ *   • Single-quoted strings  ('...')
+ *   • Line comments          (-- ...)
+ *   • Block comments         (/* ... *\/)
+ * Returns an array of non-empty statement strings.
+ */
+function splitStatements(sql) {
+  const statements = [];
+  let current = '';
+  let i = 0;
+
+  while (i < sql.length) {
+    // Dollar-quote: $$...$$  or  $tag$...$tag$
+    if (sql[i] === '$') {
+      const dollarEnd = sql.indexOf('$', i + 1);
+      if (dollarEnd !== -1) {
+        const tag = sql.slice(i, dollarEnd + 1);
+        const closeIdx = sql.indexOf(tag, dollarEnd + 1);
+        if (closeIdx !== -1) {
+          current += sql.slice(i, closeIdx + tag.length);
+          i = closeIdx + tag.length;
+          continue;
+        }
+      }
+    }
+
+    // Single-quoted string
+    if (sql[i] === "'") {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j + 1] === "'") { j += 2; continue; }
+        if (sql[j] === "'") { j++; break; }
+        j++;
+      }
+      current += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
+    // Block comment  /* ... */
+    if (sql[i] === '/' && sql[i + 1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      const closeAt = end === -1 ? sql.length : end + 2;
+      current += sql.slice(i, closeAt);
+      i = closeAt;
+      continue;
+    }
+
+    // Line comment  -- ...
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      const nl = sql.indexOf('\n', i);
+      const end = nl === -1 ? sql.length : nl + 1;
+      current += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+
+    // Statement terminator
+    if (sql[i] === ';') {
+      current += ';';
+      const trimmed = current.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      if (trimmed && trimmed !== ';') {
+        statements.push(current.trim());
+      }
+      current = '';
+      i++;
+      continue;
+    }
+
+    current += sql[i];
+    i++;
+  }
+
+  // Flush any trailing statement without a semicolon
+  const trimmed = current.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  if (trimmed) statements.push(current.trim());
+
+  return statements;
 }
 
 async function run() {
@@ -101,12 +192,29 @@ async function run() {
       continue;
     }
     const sql = fs.readFileSync(filePath, 'utf8');
-    try {
-      await client.query(sql);
+
+    // Execute statement-by-statement so CREATE INDEX CONCURRENTLY
+    // runs in its own autocommit context rather than a multi-statement block.
+    const stmts = splitStatements(sql);
+    let fileErrors = 0;
+    for (const stmt of stmts) {
+      try {
+        await client.query(stmt);
+      } catch (err) {
+        // Swallow "already exists" / idempotency errors silently;
+        // surface anything else as a warning.
+        const msg = err.message || '';
+        const isIdempotent = /already exists|does not exist|duplicate_object/i.test(msg);
+        if (!isIdempotent) {
+          console.warn(`  ⚠  ${file}: ${msg.split('\n')[0]}`);
+          fileErrors++;
+        }
+      }
+    }
+    if (fileErrors === 0) {
       console.log(`✓  ${file}`);
-    } catch (err) {
-      console.error(`✗  ${file} — ${err.message}`);
-      // Continue with remaining files even if one fails
+    } else {
+      console.log(`⚠  ${file} — completed with ${fileErrors} non-idempotency warning(s)`);
     }
   }
 

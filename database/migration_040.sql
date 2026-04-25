@@ -69,8 +69,12 @@ END $$;
 --   • Query time for date-range reports (partition pruning)
 
 -- rides_partitioned — range on created_at, quarterly
+-- NOTE: INCLUDING ALL is omitted because unique constraints copied from the
+-- parent table would not include the partition key (created_at), which
+-- PostgreSQL requires.  We copy column definitions, defaults, and generated
+-- expressions only; indexes/constraints are created per-partition as needed.
 CREATE TABLE IF NOT EXISTS rides_partitioned (
-  LIKE rides INCLUDING ALL
+  LIKE rides INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING COMMENTS
 ) PARTITION BY RANGE (created_at);
 
 -- Create quarterly partitions covering 2024 Q1 → 2026 Q4
@@ -110,7 +114,7 @@ CREATE TABLE IF NOT EXISTS rides_partitioned_default
 
 -- payments_partitioned — same quarterly pattern
 CREATE TABLE IF NOT EXISTS payments_partitioned (
-  LIKE payments INCLUDING ALL
+  LIKE payments INCLUDING DEFAULTS INCLUDING GENERATED INCLUDING COMMENTS
 ) PARTITION BY RANGE (created_at);
 
 DO $$
