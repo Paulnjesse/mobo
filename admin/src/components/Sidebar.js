@@ -38,7 +38,6 @@ import {
   Campaign as CampaignIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
   ManageAccounts as ManageAccountsIcon,
-  Shield as ShieldIcon,
   AccountBalanceWallet as WalletIcon,
   DirectionsBus as BusIcon,
   Smartphone as SmartphoneIcon,
