@@ -600,6 +600,65 @@ const deletePaymentMethod = async (req, res) => {
   }
 };
 
+// ── Loyalty Bonus: 2% wallet credit per 20,000 XAF spend milestone ───────────
+// Called fire-and-forget after every successful ride payment.
+// Safe to fail — bonus loss is logged but never blocks the payment response.
+async function checkAndAwardLoyaltyBonus(userId, spendAmountXAF, rideId) {
+  if (process.env.NODE_ENV === 'test') return; // skip in tests
+  const THRESHOLD = 20000;
+  const BONUS_RATE = 0.02;
+  const BONUS_XAF = Math.round(THRESHOLD * BONUS_RATE); // 400 XAF
+
+  try {
+    // Fetch current totals
+    const { rows } = await db.query(
+      `SELECT total_spend_xaf, next_loyalty_threshold_xaf FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (!rows.length) return;
+
+    const prev      = rows[0];
+    const prevSpend = Number(prev.total_spend_xaf) || 0;
+    const newSpend  = prevSpend + spendAmountXAF;
+
+    const prevCrossings = Math.floor(prevSpend / THRESHOLD);
+    const newCrossings  = Math.floor(newSpend  / THRESHOLD);
+    const crossings     = newCrossings - prevCrossings;
+
+    if (crossings > 0) {
+      const totalBonus = crossings * BONUS_XAF;
+      await db.query(
+        `UPDATE users
+         SET total_spend_xaf            = $2,
+             wallet_balance             = wallet_balance + $3,
+             next_loyalty_threshold_xaf = $4
+         WHERE id = $1`,
+        [userId, newSpend, totalBonus, (newCrossings + 1) * THRESHOLD]
+      );
+      // Log each milestone crossed
+      for (let i = 0; i < crossings; i++) {
+        const milestone = (prevCrossings + i + 1) * THRESHOLD;
+        await db.query(
+          `INSERT INTO loyalty_bonus_log
+             (user_id, threshold_xaf, cumulative_spend_xaf, bonus_xaf, ride_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [userId, THRESHOLD, milestone, BONUS_XAF, rideId || null]
+        );
+      }
+      logger.info(
+        `[Loyalty] User ${userId} crossed ${crossings}×20k XAF milestone — +${totalBonus} XAF bonus`
+      );
+    } else {
+      await db.query(
+        `UPDATE users SET total_spend_xaf = $2 WHERE id = $1`,
+        [userId, newSpend]
+      );
+    }
+  } catch (err) {
+    logger.warn('[Loyalty] checkAndAwardLoyaltyBonus failed (non-fatal):', err.message);
+  }
+}
+
 /**
  * POST /payments/charge
  * Initiate a ride payment.
@@ -885,6 +944,9 @@ const chargeRide = async (req, res) => {
         ip_address:    req.ip,
         user_agent:    req.get('user-agent'),
       });
+
+      // Award 2% loyalty bonus for every 20,000 XAF spend milestone (fire-and-forget)
+      checkAndAwardLoyaltyBonus(userId, amountXAF, ride_id).catch(() => {});
     }
 
     if (!paymentResult.success) {

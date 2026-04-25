@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const ctrl            = require('../controllers/rideController');
 const { validateRequestRide, validateRateRide, validateSendMessage, validateCancelRide, validateAddTip, validateDispute, validatePoolRequest } = require('../middleware/validators');
 const { rideRequestLimiter, rateLimiter, messageLimiter, disputeLimiter, sosLimiter } = require('../middleware/perUserRateLimiter');
@@ -136,11 +136,18 @@ router.delete('/airport/checkout',      authenticate, airportCtrl.airportCheckOu
 router.get('/airport/queue/:zone_id',   authenticate, airportCtrl.getAirportQueue);
 router.get('/airport/my-position',      authenticate, airportCtrl.getMyQueuePosition);
 
-// ── Commuter passes ───────────────────────────────────────────────────────────
+// ── Commuter passes (rider) ───────────────────────────────────────────────────
 router.get('/commuter-passes/tiers',    authenticate, commuterPassCtrl.getPassTiers);
 router.get('/commuter-passes',          authenticate, commuterPassCtrl.getMyPasses);
 router.post('/commuter-passes',         authenticate, commuterPassCtrl.createPass);
 router.delete('/commuter-passes/:id',   authenticate, commuterPassCtrl.cancelPass);
+
+// ── Commuter passes (admin) ───────────────────────────────────────────────────
+router.get('/admin/commuter-passes',              authenticate, requireAdmin, commuterPassCtrl.adminListPasses);
+router.post('/admin/commuter-passes',             authenticate, requireAdmin, commuterPassCtrl.adminCreatePass);
+router.put('/admin/commuter-passes/:id',          authenticate, requireAdmin, commuterPassCtrl.adminUpdatePass);
+router.patch('/admin/commuter-passes/:id/toggle', authenticate, requireAdmin, commuterPassCtrl.adminTogglePass);
+router.delete('/admin/commuter-passes/:id',       authenticate, requireAdmin, commuterPassCtrl.adminDeletePass);
 
 // ── Support chat ──────────────────────────────────────────────────────────────
 router.post('/support/tickets',                         authenticate, supportCtrl.createTicket);

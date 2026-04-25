@@ -39,6 +39,9 @@ import {
   AdminPanelSettings as AdminPanelSettingsIcon,
   ManageAccounts as ManageAccountsIcon,
   Shield as ShieldIcon,
+  AccountBalanceWallet as WalletIcon,
+  DirectionsBus as BusIcon,
+  Smartphone as SmartphoneIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -63,10 +66,13 @@ const BASE_NAV_ITEMS = [
   { label: 'Deliveries',     path: '/deliveries-mgmt', icon: <DeliveryDiningIcon /> },
   { label: 'Multi-City',    path: '/multi-city',      icon: <LocationCityIcon /> },
   { label: 'Fare Mgmt',    path: '/fare-management', icon: <FareIcon /> },
-  { label: 'Ad Banners',   path: '/ads',             icon: <CampaignIcon /> },
-  { label: 'Food Delivery', path: '/food',           icon: <RestaurantIcon /> },
-  { label: 'Notifications', path: '/notifications', icon: <NotificationsIcon /> },
-  { label: 'Settings',     path: '/settings',      icon: <SettingsIcon /> },
+  { label: 'Ad Banners',    path: '/ads',              icon: <CampaignIcon /> },
+  { label: 'Ad Platform',  path: '/ad-platform',      icon: <SmartphoneIcon /> },
+  { label: 'Wallet Packs', path: '/wallet-packs',     icon: <WalletIcon /> },
+  { label: 'Commuter Passes', path: '/commuter-passes', icon: <BusIcon /> },
+  { label: 'Food Delivery', path: '/food',            icon: <RestaurantIcon /> },
+  { label: 'Notifications', path: '/notifications',  icon: <NotificationsIcon /> },
+  { label: 'Settings',     path: '/settings',         icon: <SettingsIcon /> },
 ];
 
 // Items only shown to users with admin:manage_staff permission

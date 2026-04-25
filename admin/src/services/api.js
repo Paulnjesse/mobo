@@ -194,3 +194,31 @@ export const adminDataAPI = {
   getSelfieChecks:        (params) => api.get('/users/admin/selfie-checks', { params }),
   reviewSelfieCheck:      (id, data) => api.patch(`/users/admin/selfie-checks/${id}/review`, data),
 };
+
+// Ad Platform (AdMob + AdSense + Animated Splash)
+export const adPlatformAPI = {
+  listAll:      ()               => api.get('/rides/ads/platform/all'),
+  upsert:       (platform, data) => api.put(`/rides/ads/platform/${platform}`, data),
+  updateSplash: (data)           => api.put('/rides/ads/platform/splash/config', data),
+  getConfig:    (platform)       => api.get(`/rides/ads/platform/config/${platform}`),
+  getSplash:    ()               => api.get('/rides/ads/platform/splash'),
+};
+
+// Wallet Credit Packs
+export const walletPacksAPI = {
+  listAll:       ()        => api.get('/payments/admin/wallet-packs'),
+  create:        (data)    => api.post('/payments/admin/wallet-packs', data),
+  update:        (id, data)=> api.put(`/payments/admin/wallet-packs/${id}`, data),
+  toggle:        (id)      => api.patch(`/payments/admin/wallet-packs/${id}/toggle`),
+  remove:        (id)      => api.delete(`/payments/admin/wallet-packs/${id}`),
+  listPurchases: (params)  => api.get('/payments/admin/wallet-packs/purchases', { params }),
+};
+
+// Commuter Passes
+export const commuterPassAPI = {
+  listAll:  ()        => api.get('/rides/admin/commuter-passes'),
+  create:   (data)    => api.post('/rides/admin/commuter-passes', data),
+  update:   (id, data)=> api.put(`/rides/admin/commuter-passes/${id}`, data),
+  toggle:   (id)      => api.patch(`/rides/admin/commuter-passes/${id}/toggle`),
+  remove:   (id)      => api.delete(`/rides/admin/commuter-passes/${id}`),
+};

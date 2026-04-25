@@ -152,6 +152,134 @@ async function consumePassRide(passId) {
   );
 }
 
+// ── Admin: list all passes ────────────────────────────────────────────────────
+const adminListPasses = async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT cp.*, u.full_name AS user_name, u.phone AS user_phone
+       FROM commuter_passes cp
+       LEFT JOIN users u ON u.id = cp.user_id
+       ORDER BY cp.created_at DESC`
+    );
+    res.json({ passes: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Admin: create a pass for any user ────────────────────────────────────────
+const adminCreatePass = async (req, res) => {
+  try {
+    const {
+      user_id, route_name,
+      origin_address, origin_lat, origin_lng,
+      destination_address, destination_lat, destination_lng,
+      match_radius_m, discount_percent, rides_total,
+      price_paid, valid_days,
+    } = req.body;
+
+    if (!route_name || !origin_address || !destination_address || !price_paid) {
+      return res.status(400).json({ error: 'route_name, origin_address, destination_address, price_paid are required' });
+    }
+
+    const days = parseInt(valid_days) || 30;
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + days);
+
+    const { rows } = await pool.query(
+      `INSERT INTO commuter_passes
+         (user_id, route_name, origin_address, origin_lat, origin_lng,
+          destination_address, destination_lat, destination_lng,
+          match_radius_m, discount_percent, rides_total, rides_used, price_paid, valid_until)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$12,$13)
+       RETURNING *`,
+      [
+        user_id || null, route_name,
+        origin_address, origin_lat || null, origin_lng || null,
+        destination_address, destination_lat || null, destination_lng || null,
+        match_radius_m || 500, discount_percent || 20, rides_total || 40,
+        price_paid, validUntil.toISOString().split('T')[0],
+      ]
+    );
+    res.status(201).json({ pass: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Admin: update a pass ──────────────────────────────────────────────────────
+const adminUpdatePass = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      route_name, origin_address, origin_lat, origin_lng,
+      destination_address, destination_lat, destination_lng,
+      match_radius_m, discount_percent, rides_total, price_paid, valid_days,
+    } = req.body;
+
+    let validUntil = null;
+    if (valid_days) {
+      const d = new Date();
+      d.setDate(d.getDate() + parseInt(valid_days));
+      validUntil = d.toISOString().split('T')[0];
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE commuter_passes SET
+         route_name          = COALESCE($2, route_name),
+         origin_address      = COALESCE($3, origin_address),
+         origin_lat          = COALESCE($4, origin_lat),
+         origin_lng          = COALESCE($5, origin_lng),
+         destination_address = COALESCE($6, destination_address),
+         destination_lat     = COALESCE($7, destination_lat),
+         destination_lng     = COALESCE($8, destination_lng),
+         match_radius_m      = COALESCE($9, match_radius_m),
+         discount_percent    = COALESCE($10, discount_percent),
+         rides_total         = COALESCE($11, rides_total),
+         price_paid          = COALESCE($12, price_paid),
+         valid_until         = COALESCE($13, valid_until),
+         updated_at          = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, route_name || null, origin_address || null,
+       origin_lat || null, origin_lng || null,
+       destination_address || null, destination_lat || null, destination_lng || null,
+       match_radius_m || null, discount_percent || null, rides_total || null,
+       price_paid || null, validUntil]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Pass not found' });
+    res.json({ pass: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Admin: toggle pass active ─────────────────────────────────────────────────
+const adminTogglePass = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `UPDATE commuter_passes SET is_active = NOT is_active, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Pass not found' });
+    res.json({ pass: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ── Admin: delete a pass ──────────────────────────────────────────────────────
+const adminDeletePass = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query(`DELETE FROM commuter_passes WHERE id = $1`, [id]);
+    res.json({ message: 'Pass deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   getPassTiers,
   getMyPasses,
@@ -159,4 +287,10 @@ module.exports = {
   cancelPass,
   findMatchingPass,
   consumePassRide,
+  // Admin
+  adminListPasses,
+  adminCreatePass,
+  adminUpdatePass,
+  adminTogglePass,
+  adminDeletePass,
 };

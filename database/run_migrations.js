@@ -76,6 +76,8 @@ const FILES = [
   'migration_041.sql',  // Atomic partition rename, stripe_payment_intent_id, fare_splits
   'migration_042.sql',  // Performance indexes for hot query paths (CONCURRENTLY)
   'migration_043.sql',  // ride_waypoints + incidents + revoked_tokens (CF-003, CF-005, CF-004)
+  'migration_044.sql',  // ad_platform_config (AdMob + AdSense) + app_splash_config (animated splash)
+  'migration_045.sql',  // wallet_credit_packs + wallet_pack_purchases + loyalty_bonus_log + spend tracking
 ];
 
 function buildMigrationSsl() {

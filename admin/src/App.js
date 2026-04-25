@@ -31,6 +31,9 @@ import AdminManagement from './pages/AdminManagement';
 import RoleManagement from './pages/RoleManagement';
 import AuditLog from './pages/AuditLog';
 import VehicleInspection from './pages/VehicleInspection';
+import AdPlatformSettings from './pages/AdPlatformSettings';
+import WalletPacks from './pages/WalletPacks';
+import CommuterPassMgmt from './pages/CommuterPassMgmt';
 import { CopyProtectionProvider } from './components/CopyProtection';
 
 const theme = createTheme({
@@ -199,6 +202,9 @@ function App() {
               <Route path="/roles"             element={<RoleManagement />} />
               <Route path="/audit-log"         element={<AuditLog />} />
               <Route path="/vehicle-inspection" element={<VehicleInspection />} />
+              <Route path="/ad-platform"       element={<AdPlatformSettings />} />
+              <Route path="/wallet-packs"      element={<WalletPacks />} />
+              <Route path="/commuter-passes"   element={<CommuterPassMgmt />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

@@ -15,6 +15,7 @@ const {
   cashoutLimiter,
   subscribeLimiter,
 } = require('../middleware/perUserRateLimiter');
+const walletPackCtrl = require('../controllers/walletPackController');
 const {
   addPaymentMethod,
   listPaymentMethods,
@@ -83,5 +84,19 @@ router.get('/driver/cashout-history',  getDriverCashoutHistory);
 // Require admin role — authenticated admins only
 const { requireAdmin } = require('../middleware/auth');
 router.post('/admin/bulk/refund', requireAdmin, bulkRefund);
+
+// ── Wallet Credit Packs ───────────────────────────────────────────────────────
+// Public (authenticated rider / driver)
+router.get('/wallet-packs',                walletPackCtrl.listPacks);
+router.post('/wallet-packs/:id/buy',       walletPackCtrl.purchasePack);
+router.get('/wallet-packs/purchases',      walletPackCtrl.myPurchases);
+
+// Admin only
+router.get('/admin/wallet-packs',              requireAdmin, walletPackCtrl.adminListPacks);
+router.post('/admin/wallet-packs',             requireAdmin, walletPackCtrl.createPack);
+router.put('/admin/wallet-packs/:id',          requireAdmin, walletPackCtrl.updatePack);
+router.patch('/admin/wallet-packs/:id/toggle', requireAdmin, walletPackCtrl.togglePack);
+router.delete('/admin/wallet-packs/:id',       requireAdmin, walletPackCtrl.deletePack);
+router.get('/admin/wallet-packs/purchases',    requireAdmin, walletPackCtrl.adminListPurchases);
 
 module.exports = router;
