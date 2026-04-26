@@ -35,7 +35,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "nodemailer": "^6.9.7",
-    "opossum": "^8.1.0",
+    "opossum": "^9.0.0",
     "pg": "^8.20.0",
     "prom-client": "^15.1.0",
     "socket.io": "^4.6.0",
