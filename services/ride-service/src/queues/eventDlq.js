@@ -24,6 +24,13 @@ const MAX_RETRIES    = 5;
 const BACKOFF_BASE_S = 10;            // 10 s, 20 s, 40 s, 80 s, 160 s
 const DRAIN_MS       = 30_000;
 
+/**
+ * Current event schema version.
+ * Increment this when the structure of enqueued event payloads changes.
+ * Version-aware handlers can inspect item.schemaVersion before processing.
+ */
+const CURRENT_SCHEMA_VERSION = 1;
+
 // ── Enqueue ───────────────────────────────────────────────────────────────────
 
 /**
@@ -42,7 +49,7 @@ async function enqueueEventRetry(eventType, payload, attempt = 1, handlerKey = n
   }
 
   const retryAfterMs = Date.now() + BACKOFF_BASE_S * Math.pow(2, attempt - 1) * 1000;
-  const entry = JSON.stringify({ eventType, payload, attempt, handlerKey, enqueuedAt: Date.now() });
+  const entry = JSON.stringify({ eventType, payload, attempt, handlerKey, enqueuedAt: Date.now(), schemaVersion: CURRENT_SCHEMA_VERSION });
 
   try {
     await cache.zadd(EVENT_DLQ_KEY, retryAfterMs, entry);
@@ -127,6 +134,13 @@ async function drainEventDlq() {
 
       const handler = item.handlerKey ? _handlers.get(item.handlerKey) : _handlers.get(item.eventType);
 
+      // Schema version check — warn on unknown versions but still attempt processing
+      if (item.schemaVersion && item.schemaVersion > CURRENT_SCHEMA_VERSION) {
+        logger.warn('[EventDLQ] Unknown schema version — attempting with current handler', {
+          eventType: item.eventType, schemaVersion: item.schemaVersion, currentVersion: CURRENT_SCHEMA_VERSION,
+        });
+      }
+
       if (!handler) {
         logger.warn('[EventDLQ] No handler registered — discarding', { eventType: item.eventType, handlerKey: item.handlerKey });
         await _persistDeadLetter(item.eventType, item.payload, 'no_handler');
@@ -186,10 +200,33 @@ function stopEventDlqWorker() {
   }
 }
 
+/**
+ * Register a handler that is gated behind a feature flag.
+ * If the flag is disabled the event is silently skipped (not re-enqueued).
+ * This allows canary deployments and safe handler rollouts.
+ *
+ * @param {string}   key       Handler key
+ * @param {Function} handler   async (payload) => void
+ * @param {string}   flagName  Unleash feature flag name
+ */
+function registerHandlerWithFlag(key, handler, flagName) {
+  registerHandler(key, async (payload) => {
+    let flags = null;
+    try { flags = require('../../../shared/featureFlags'); } catch { /* featureFlags optional */ }
+    if (flagName && flags && typeof flags.isEnabled === 'function' && !flags.isEnabled(flagName)) {
+      logger.info('[EventDLQ] Handler skipped — feature flag disabled', { handlerKey: key, flagName });
+      return;
+    }
+    return handler(payload);
+  });
+}
+
 module.exports = {
   enqueueEventRetry,
   registerHandler,
+  registerHandlerWithFlag,
   drainEventDlq,
   startEventDlqWorker,
   stopEventDlqWorker,
+  CURRENT_SCHEMA_VERSION,
 };

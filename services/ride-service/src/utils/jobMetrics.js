@@ -28,9 +28,13 @@ try {
 // Graceful no-op registry when prom-client isn't available (e.g. unit tests)
 const registry = promClient ? new promClient.Registry() : null;
 
-let lastRunGauge   = null;
-let lagGauge       = null;
-let pendingGauge   = null;
+let lastRunGauge      = null;
+let lagGauge          = null;
+let pendingGauge      = null;
+let queryDurationGauge = null;
+let slowQueryCounter  = null;
+
+const SLOW_QUERY_THRESHOLD_S = 5; // queries longer than 5 s are "slow"
 
 if (registry) {
   lastRunGauge = new promClient.Gauge({
@@ -50,6 +54,20 @@ if (registry) {
   pendingGauge = new promClient.Gauge({
     name:       'job_pending_items_total',
     help:       'Number of unprocessed items found during the last polling-job run',
+    labelNames: ['job'],
+    registers:  [registry],
+  });
+
+  queryDurationGauge = new promClient.Gauge({
+    name:       'job_last_query_duration_seconds',
+    help:       'Duration (seconds) of the most recent DB poll query executed by a job',
+    labelNames: ['job'],
+    registers:  [registry],
+  });
+
+  slowQueryCounter = new promClient.Counter({
+    name:       'job_slow_queries_total',
+    help:       `Total DB queries that took longer than ${SLOW_QUERY_THRESHOLD_S} s inside a polling job`,
     labelNames: ['job'],
     registers:  [registry],
   });
@@ -106,4 +124,26 @@ function jobMetricsRegistry() {
   return registry;
 }
 
-module.exports = { recordJobRun, recordJobPending, jobMetricsRegistry };
+/**
+ * Wrap a DB query call and automatically record its duration.
+ * Usage:
+ *   const rows = await recordQuery('escalation_job', () => db.query(...));
+ *
+ * @param {string}   jobName  e.g. 'escalation_job'
+ * @param {Function} fn       Async function that executes the query
+ * @returns {*} Whatever fn returns
+ */
+async function recordQuery(jobName, fn) {
+  const startMs = Date.now();
+  try {
+    return await fn();
+  } finally {
+    const durationS = (Date.now() - startMs) / 1000;
+    if (queryDurationGauge) queryDurationGauge.labels(jobName).set(durationS);
+    if (slowQueryCounter && durationS >= SLOW_QUERY_THRESHOLD_S) {
+      slowQueryCounter.labels(jobName).inc();
+    }
+  }
+}
+
+module.exports = { recordJobRun, recordJobPending, recordQuery, jobMetricsRegistry };

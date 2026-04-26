@@ -11,7 +11,7 @@
 const db     = require('../config/database');
 const logger = require('../utils/logger');
 const { withLock } = require('../utils/distributedLock');
-const { recordJobRun, recordJobPending } = require('../utils/jobMetrics');
+const { recordJobRun, recordJobPending, recordQuery } = require('../utils/jobMetrics');
 
 const POLL_MS         = 60 * 1000;   // every 60 s
 const LOCK_TTL_MS     = 55_000;      // lock expires before next tick
@@ -20,13 +20,13 @@ const STUCK_TIMEOUT   = 15;          // minutes before a ride is considered stuc
 async function cancelStuckRides() {
   await withLock('stuck_ride_job', LOCK_TTL_MS, async () => {
     // Find rides stuck in accepted/arriving for > STUCK_TIMEOUT minutes
-    const stuck = await db.query(
+    const stuck = await recordQuery('stuck_ride_job', () => db.query(
       `SELECT id, driver_id, rider_id, status
        FROM rides
        WHERE status IN ('accepted', 'arriving')
          AND updated_at < NOW() - INTERVAL '${STUCK_TIMEOUT} minutes'
        LIMIT 50`
-    );
+    ));
 
     recordJobPending('stuck_ride_job', stuck.rows.length);
     recordJobRun('stuck_ride_job');

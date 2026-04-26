@@ -121,4 +121,31 @@ async function zrem(key, member) {
   } catch { /* silent */ }
 }
 
-module.exports = { get, set, del, delPattern, zadd, zrangebyscore, zrem };
+/**
+ * Atomically increment a counter and set TTL on first write.
+ * Returns the new count. Falls back to get/set when Redis is unavailable.
+ * @param {string} key
+ * @param {number} ttlSeconds  TTL applied only on the first increment (key creation)
+ * @returns {Promise<number>}
+ */
+async function incr(key, ttlSeconds = 3600) {
+  try {
+    /* istanbul ignore next */
+    if (redis) {
+      const newVal = await redis.incr(key);
+      if (newVal === 1) await redis.expire(key, ttlSeconds); // set TTL on first write
+      return newVal;
+    }
+    // Memory fallback (non-atomic but sufficient for rate limiting approximation)
+    const current = memCache.has(key) && Date.now() < (memExpiry.get(key) || 0)
+      ? (memCache.get(key) || 0) : 0;
+    const next = current + 1;
+    memCache.set(key, next);
+    if (next === 1) memExpiry.set(key, Date.now() + ttlSeconds * 1000);
+    return next;
+  } catch {
+    return 0;
+  }
+}
+
+module.exports = { get, set, del, delPattern, zadd, zrangebyscore, zrem, incr };

@@ -184,6 +184,9 @@ const updateSurgeZone = async (req, res) => {
       params
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Surge zone not found' });
+    // Invalidate all surge cache entries so the new multiplier takes effect in real-time
+    await cache.delPattern('surge:*');
+    logger.info('[AdminRideCtrl] Surge zone updated — cache invalidated', { id });
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     logger.error('[AdminRideCtrl] updateSurgeZone error', { err: err.message });
@@ -200,6 +203,9 @@ const toggleSurgeZone = async (req, res) => {
       [id]
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Surge zone not found' });
+    // Invalidate surge cache so dispatch picks up the on/off change immediately
+    await cache.delPattern('surge:*');
+    logger.info('[AdminRideCtrl] Surge zone toggled — cache invalidated', { id, is_active: result.rows[0].is_active });
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     logger.error('[AdminRideCtrl] toggleSurgeZone error', { err: err.message });
@@ -673,6 +679,96 @@ const exportReport = async (req, res) => {
   }
 };
 
+// ── Dead-Letter Manual Replay ─────────────────────────────────────────────────
+
+/**
+ * POST /admin/events/replay-from-dead-letter
+ * Bulk-replay failed events from the dead_letter_events table back through
+ * their registered handler (via eventDlq.enqueueEventRetry).
+ *
+ * Body params:
+ *   event_ids   number[]  Specific IDs to replay (optional)
+ *   event_type  string    Replay all unresolved events of this type (optional)
+ *   limit       number    Max events to replay per call (default 50, max 200)
+ *   dry_run     boolean   If true, show what would be replayed without executing
+ */
+const replayFromDeadLetter = async (req, res) => {
+  const { event_ids, event_type, dry_run = false } = req.body;
+  const limit   = Math.min(parseInt(req.body.limit, 10) || 50, 200);
+  const adminId = req.user?.id;
+
+  if (!event_ids?.length && !event_type) {
+    return res.status(400).json({
+      error: 'Provide either event_ids (array) or event_type to select events for replay',
+    });
+  }
+
+  try {
+    const params     = [];
+    const conditions = ['resolved = false'];
+
+    if (Array.isArray(event_ids) && event_ids.length > 0) {
+      params.push(event_ids.map(Number));
+      conditions.push(`id = ANY($${params.length}::bigint[])`);
+    }
+    if (event_type) {
+      params.push(event_type);
+      conditions.push(`event_type = $${params.length}`);
+    }
+    params.push(limit);
+
+    const { rows: events } = await pool.query(
+      `SELECT id, event_type, payload, failure_reason, schema_version
+       FROM dead_letter_events
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at ASC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    if (dry_run) {
+      return res.json({
+        success: true, dry_run: true,
+        would_replay: events.length,
+        events: events.map(e => ({ id: e.id, event_type: e.event_type, failure_reason: e.failure_reason })),
+      });
+    }
+
+    const { enqueueEventRetry } = require('../queues/eventDlq');
+    const results = [];
+
+    for (const event of events) {
+      try {
+        await enqueueEventRetry(event.event_type, event.payload, 1, event.event_type);
+        await pool.query(
+          `UPDATE dead_letter_events
+           SET resolved = true, resolved_by = $1, resolved_at = NOW(), resolution_notes = 'admin_replay'
+           WHERE id = $2`,
+          [adminId, event.id]
+        );
+        results.push({ id: event.id, event_type: event.event_type, status: 'enqueued' });
+      } catch (err) {
+        logger.warn('[DeadLetterReplay] Failed to replay event', { id: event.id, err: err.message });
+        results.push({ id: event.id, event_type: event.event_type, status: 'failed', error: err.message });
+      }
+    }
+
+    const enqueued = results.filter(r => r.status === 'enqueued').length;
+    const failed   = results.filter(r => r.status === 'failed').length;
+
+    logger.info('[DeadLetterReplay] Admin replay completed', { adminId, enqueued, failed });
+
+    res.json({
+      success: true,
+      summary: { total: results.length, enqueued, failed },
+      results,
+    });
+  } catch (err) {
+    logger.error('[DeadLetterReplay] Error', { err: err.message });
+    res.status(500).json({ error: 'Dead-letter replay failed' });
+  }
+};
+
 // ── Event Replay ───────────────────────────────────────────────────────────────
 
 /**
@@ -763,6 +859,6 @@ module.exports = {
   bulkReassignRides, getRideWaypoints,
   // Dispatch + alerts + reports
   manualDispatch, acknowledgeAlert, exportReport,
-  // Event replay
-  replayEvents,
+  // Event replay + dead-letter
+  replayEvents, replayFromDeadLetter,
 };

@@ -17,7 +17,14 @@
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const { withLock } = require('../utils/distributedLock');
-const { recordJobRun, recordJobPending } = require('../utils/jobMetrics');
+const { recordJobRun, recordJobPending, recordQuery } = require('../utils/jobMetrics');
+const cache = require('../utils/cache');
+
+// SMS rate limiting: max 3 alert SMS per user per hour
+// Prevents spamming trusted contacts if the same rider has multiple unanswered check-ins.
+const SMS_RATE_LIMIT   = 3;
+const SMS_RATE_TTL_S   = 3600; // 1 hour window
+const smsRateKey = (userId) => `sms:rate:esc:${userId}`;
 
 const POLL_INTERVAL_MS   = 30 * 1000;  // poll every 30 s
 const ESCALATION_TIMEOUT = 60;         // seconds before auto-escalation
@@ -47,7 +54,7 @@ async function _doEscalation() {
     // ── Atomic: mark rows as escalated and return them in one statement ──────
     // UPDATE...FROM...RETURNING prevents two concurrent runs from touching
     // the same row — PostgreSQL row-level locking handles it automatically.
-    const result = await db.query(`
+    const result = await recordQuery('escalation_job', () => db.query(`
       UPDATE ride_checkins rc
       SET    escalated    = true,
              escalated_at = NOW()
@@ -66,7 +73,7 @@ async function _doEscalation() {
         rc.address,
         r.rider_id,
         r.driver_id
-    `, [ESCALATION_TIMEOUT]);
+    `, [ESCALATION_TIMEOUT]));
 
     recordJobPending('escalation_job', result.rows.length);
     recordJobRun('escalation_job');
@@ -108,22 +115,42 @@ async function _doEscalation() {
         );
 
         if (contactsResult.rows.length > 0) {
-          const client = getTwilioClient();
-          const from   = process.env.TWILIO_FROM_NUMBER;
-          const body   = `🚨 MOBO SAFETY ALERT: Your contact may need help. Their ride has an unresolved safety check-in near ${checkin.address || 'unknown location'}. Please contact them immediately or call 117.`;
+          const riderId = checkin.rider_id || checkin.user_id;
 
-          if (client && from) {
-            for (const contact of contactsResult.rows) {
-              client.messages
-                .create({ body, from, to: contact.phone })
-                .catch((err) =>
-                  logger.warn('[EscalationJob] SMS failed', { phone: contact.phone, err: err.message })
-                );
-            }
-          } else {
-            logger.info('[EscalationJob] Twilio not configured — skipping SMS', {
-              contacts: contactsResult.rows.length, checkinId: checkin.id,
+          // ── SMS rate limiter: max SMS_RATE_LIMIT per rider per hour ──────────
+          const smsCount = await cache.incr(smsRateKey(riderId), SMS_RATE_TTL_S);
+          if (smsCount > SMS_RATE_LIMIT) {
+            // Rate limit exceeded — log to notifications instead of sending SMS
+            logger.warn('[EscalationJob] SMS rate limit exceeded — logging to notifications instead', {
+              riderId, smsCount, limit: SMS_RATE_LIMIT, checkinId: checkin.id,
             });
+            await db.query(
+              `INSERT INTO notifications (user_id, type, title, body, data, is_read)
+               SELECT id, 'sos_sms_throttled',
+                      '⚠️ SMS Throttled',
+                      'Safety escalation SMS not sent — rate limit reached for this rider',
+                      $2::jsonb, false
+               FROM users WHERE role = 'admin' AND is_active = true`,
+              [checkin.ride_id, JSON.stringify({ ride_id: checkin.ride_id, checkin_id: checkin.id, rider_id: riderId })]
+            );
+          } else {
+            const client = getTwilioClient();
+            const from   = process.env.TWILIO_FROM_NUMBER;
+            const body   = `🚨 MOBO SAFETY ALERT: Your contact may need help. Their ride has an unresolved safety check-in near ${checkin.address || 'unknown location'}. Please contact them immediately or call 117.`;
+
+            if (client && from) {
+              for (const contact of contactsResult.rows) {
+                client.messages
+                  .create({ body, from, to: contact.phone })
+                  .catch((err) =>
+                    logger.warn('[EscalationJob] SMS failed', { phone: contact.phone, err: err.message })
+                  );
+              }
+            } else {
+              logger.info('[EscalationJob] Twilio not configured — skipping SMS', {
+                contacts: contactsResult.rows.length, checkinId: checkin.id,
+              });
+            }
           }
         }
 

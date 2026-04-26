@@ -34,6 +34,44 @@ async function withProviderBreaker(name, fn) {
   });
 }
 
+// ── Webhook circuit breaker ───────────────────────────────────────────────────
+// Tracks consecutive webhook DB-processing failures per provider.
+// After THRESHOLD consecutive errors the breaker OPENS for RESET_MS.
+// When open: enqueue to eventDlq (Redis-backed) and return 200 so the
+// provider stops retrying — we will self-heal via the DLQ drain worker.
+/* istanbul ignore next */
+const _webhookBreakers = new Map(); // providerName → { failures, lastFailure }
+const WEBHOOK_CB_THRESHOLD = 10;
+const WEBHOOK_CB_RESET_MS  = 30_000;
+
+/* istanbul ignore next */
+function isWebhookBreakerOpen(provider) {
+  const state = _webhookBreakers.get(provider);
+  if (!state) return false;
+  if (state.failures >= WEBHOOK_CB_THRESHOLD) {
+    if (Date.now() - state.lastFailure > WEBHOOK_CB_RESET_MS) {
+      // Auto-reset after cool-down
+      _webhookBreakers.delete(provider);
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+/* istanbul ignore next */
+function recordWebhookSuccess(provider) {
+  _webhookBreakers.delete(provider); // reset on any success
+}
+
+/* istanbul ignore next */
+function recordWebhookFailure(provider) {
+  const state = _webhookBreakers.get(provider) || { failures: 0, lastFailure: 0 };
+  state.failures += 1;
+  state.lastFailure = Date.now();
+  _webhookBreakers.set(provider, state);
+}
+
 // ── Payment audit log helper (PCI DSS Requirement 10.2) ──────────────────────
 async function writePaymentAudit(fields) {
   try {
@@ -1100,6 +1138,20 @@ const checkPaymentStatus = async (req, res) => {
  * POST /payments/webhook/mtn  (public — no auth middleware)
  */
 const webhookMtn = async (req, res) => {
+  // Circuit breaker: if DB processing has failed 10+ consecutive times,
+  // enqueue the raw payload to eventDlq and return 200 to stop MTN retries.
+  /* istanbul ignore next */
+  if (isWebhookBreakerOpen('mtn')) {
+    logger.error('[Webhook/MTN] Circuit breaker OPEN — enqueueing to event DLQ', { body: req.body });
+    try {
+      const { enqueueEventRetry } = require('../../../ride-service/src/queues/eventDlq');
+      await enqueueEventRetry('payment_webhook_mtn', req.body, 1, 'payment_event');
+    } catch (dlqErr) {
+      logger.error('[Webhook/MTN] DLQ enqueue also failed', { err: dlqErr.message });
+    }
+    return res.sendStatus(200); // tell MTN we got it; we'll self-heal via DLQ
+  }
+
   try {
     // Verify webhook secret token to prevent spoofing
     const webhookSecret = process.env.MTN_WEBHOOK_SECRET;
@@ -1159,9 +1211,11 @@ const webhookMtn = async (req, res) => {
       client.release();
     }
 
+    recordWebhookSuccess('mtn');
     logger.info({ referenceId, status }, "[Webhook/MTN] callback received");
     res.sendStatus(200);
   } catch (err) {
+    recordWebhookFailure('mtn');
     logger.error({ err }, '[Webhook/MTN Error]');
     res.sendStatus(500);
   }
@@ -1989,6 +2043,18 @@ const getDriverCashoutHistory = async (req, res) => {
  * Security: https://developer.flutterwave.com/docs/integration-guides/webhooks/
  */
 const webhookFlutterwave = async (req, res) => {
+  /* istanbul ignore next */
+  if (isWebhookBreakerOpen('flutterwave')) {
+    logger.error('[Webhook/Flutterwave] Circuit breaker OPEN — enqueueing to event DLQ', { body: req.body });
+    try {
+      const { enqueueEventRetry } = require('../../../ride-service/src/queues/eventDlq');
+      await enqueueEventRetry('payment_webhook_flutterwave', req.body, 1, 'payment_event');
+    } catch (dlqErr) {
+      logger.error('[Webhook/Flutterwave] DLQ enqueue also failed', { err: dlqErr.message });
+    }
+    return res.sendStatus(200);
+  }
+
   try {
     // ── Signature verification ────────────────────────────────────────────────
     // FLW_SECRET_HASH is the canonical Flutterwave env var name; fall back to
@@ -2068,9 +2134,11 @@ const webhookFlutterwave = async (req, res) => {
       client.release();
     }
 
+    recordWebhookSuccess('flutterwave');
     logger.info({ txRef, status, event }, '[Webhook/Flutterwave] callback processed');
     res.sendStatus(200);
   } catch (err) {
+    recordWebhookFailure('flutterwave');
     logger.error({ err }, '[Webhook/Flutterwave Error]');
     res.sendStatus(500);
   }

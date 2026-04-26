@@ -56,4 +56,7 @@ router.get('/reports/export', requirePermission('finance:read'), ctrl.exportRepo
 // ── Event replay (audit log query) ────────────────────────────────────────────
 router.get('/events/replay', requirePermission('audit:read'), ctrl.replayEvents);
 
+// ── Dead-letter manual replay ─────────────────────────────────────────────────
+router.post('/events/replay-from-dead-letter', requirePermission('audit:write'), ctrl.replayFromDeadLetter);
+
 module.exports = router;
