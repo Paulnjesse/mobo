@@ -38,6 +38,7 @@ const db     = require('../config/database');
 const logger = require('../utils/logger');
 const smsService  = require('../services/sms');
 const { sendPushNotification } = require('../services/pushNotifications');
+const checkr = require('../services/checkr');
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
@@ -372,20 +373,26 @@ const approveDriver = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `UPDATE drivers SET is_approved = true WHERE id = $1
-       RETURNING id, user_id`,
+      `UPDATE drivers
+       SET is_approved = true,
+           bgc_status  = CASE
+             WHEN bgc_status NOT IN ('passed','failed') THEN 'manually_approved'
+             ELSE bgc_status
+           END
+       WHERE id = $1
+       RETURNING id, user_id, bgc_status`,
       [id]
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Driver not found' });
 
-    const { user_id: userId } = result.rows[0];
-    logger.info('[AdminCtrl] Driver approved', { driverId: id, adminId: req.user?.id });
+    const { user_id: userId, bgc_status } = result.rows[0];
+    logger.info('[AdminCtrl] Driver approved', { driverId: id, adminId: req.user?.id, bgc_status });
 
     // Notify driver via SMS + push notification (fire-and-forget — non-blocking)
     ;(async () => {
       try {
         const userRow = await db.query(
-          `SELECT phone, push_token, full_name FROM users WHERE id = $1`,
+          `SELECT phone, push_token, full_name, email FROM users WHERE id = $1`,
           [userId]
         );
         const user = userRow.rows[0];
@@ -393,14 +400,11 @@ const approveDriver = async (req, res) => {
 
         const approvalMsg = `Congratulations ${user.full_name || 'Driver'}! Your MOBO driver account has been approved. Open the app to go online and start accepting rides.`;
 
-        // SMS notification
         if (user.phone) {
           smsService.sendSms(user.phone, approvalMsg).catch((err) =>
             logger.warn('[AdminCtrl] Approval SMS failed', { err: err.message, userId })
           );
         }
-
-        // Push notification
         if (user.push_token) {
           sendPushNotification(
             user.push_token,
@@ -411,15 +415,180 @@ const approveDriver = async (req, res) => {
             logger.warn('[AdminCtrl] Approval push failed', { err: err.message, userId })
           );
         }
+
+        // Auto-trigger Checkr BGC if not yet started (runs in background, non-blocking)
+        const driverRow = await db.query(
+          `SELECT bgc_status FROM drivers WHERE id = $1`, [id]
+        );
+        if (driverRow.rows[0]?.bgc_status === 'not_started' || driverRow.rows[0]?.bgc_status === 'manually_approved') {
+          triggerCheckrBgc(id, user).catch(() => {});
+        }
       } catch (notifyErr) {
         logger.warn('[AdminCtrl] Approval notification error', { err: notifyErr.message });
       }
     })();
 
-    res.json({ success: true, message: 'Driver approved' });
+    res.json({ success: true, message: 'Driver approved', bgc_status });
   } catch (err) {
     logger.error('[AdminCtrl] approveDriver error', { err: err.message });
     res.status(500).json({ success: false, message: 'Failed to approve driver' });
+  }
+};
+
+/**
+ * Trigger Checkr BGC for a driver — internal helper (also called from
+ * POST /admin/drivers/:id/bgc endpoint for manual re-trigger).
+ */
+async function triggerCheckrBgc(driverId, user) {
+  if (!user) {
+    const driverRow = await db.query(
+      `SELECT u.full_name, u.email, u.phone, d.user_id
+       FROM drivers d JOIN users u ON u.id = d.user_id
+       WHERE d.id = $1`, [driverId]
+    );
+    user = driverRow.rows[0];
+  }
+  if (!user) return;
+
+  const nameParts = (user.full_name || '').split(' ');
+  const bgcResult = await checkr.initiateBackgroundCheck({
+    firstName: nameParts[0] || '',
+    lastName:  nameParts.slice(1).join(' ') || nameParts[0] || '',
+    email:     user.email,
+    phone:     user.phone,
+  });
+
+  if (bgcResult.success) {
+    await db.query(
+      `UPDATE drivers
+       SET bgc_status = 'submitted',
+           bgc_invitation_url = $2,
+           bgc_submitted_at   = NOW()
+       WHERE id = $1`,
+      [driverId, bgcResult.invitationUrl || null]
+    );
+    logger.info('[AdminCtrl] Checkr BGC initiated', {
+      driverId, mock: bgcResult.mock, invitationUrl: bgcResult.invitationUrl,
+    });
+    // Notify driver to complete the BGC form
+    if (user.push_token && bgcResult.invitationUrl) {
+      sendPushNotification(
+        user.push_token,
+        'Complete your background check',
+        'Please complete your Checkr background check to activate your account.',
+        { type: 'bgc_invitation', url: bgcResult.invitationUrl }
+      ).catch(() => {});
+    }
+  } else {
+    logger.warn('[AdminCtrl] Checkr BGC initiation failed', { driverId, error: bgcResult.error });
+  }
+}
+
+/** POST /admin/drivers/:id/bgc — manually (re-)trigger BGC */
+const triggerDriverBgc = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const driverRow = await db.query(
+      `SELECT d.id, d.bgc_status, u.full_name, u.email, u.phone, u.push_token
+       FROM drivers d JOIN users u ON u.id = d.user_id WHERE d.id = $1`, [id]
+    );
+    if (!driverRow.rows[0]) return res.status(404).json({ success: false, message: 'Driver not found' });
+
+    await triggerCheckrBgc(id, driverRow.rows[0]);
+    const updated = await db.query(`SELECT bgc_status, bgc_invitation_url, bgc_submitted_at FROM drivers WHERE id = $1`, [id]);
+    res.json({ success: true, ...updated.rows[0] });
+  } catch (err) {
+    logger.error('[AdminCtrl] triggerDriverBgc error', { err: err.message });
+    res.status(500).json({ success: false, message: 'Failed to trigger BGC' });
+  }
+};
+
+/** GET /admin/drivers/:id/bgc — get BGC status */
+const getDriverBgcStatus = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      `SELECT bgc_status, bgc_report_id, bgc_invitation_url, bgc_submitted_at, bgc_completed_at
+       FROM drivers WHERE id = $1`, [id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Driver not found' });
+    res.json({ success: true, ...result.rows[0] });
+  } catch (err) {
+    logger.error('[AdminCtrl] getDriverBgcStatus error', { err: err.message });
+    res.status(500).json({ success: false, message: 'Failed to load BGC status' });
+  }
+};
+
+/** POST /webhooks/checkr — Checkr webhook handler */
+const handleCheckrWebhook = async (req, res) => {
+  try {
+    const rawBody  = req.rawBody || JSON.stringify(req.body); // raw body for sig verification
+    const sig      = req.headers['x-checkr-signature'];
+    if (!checkr.verifyWebhookSignature(rawBody, sig)) {
+      logger.warn('[CheckrWebhook] Invalid signature');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    const { type, data } = req.body;
+    logger.info('[CheckrWebhook] Event received', { type });
+
+    if (type === 'report.completed' || type === 'report.pre_adverse_action') {
+      const report   = data?.object;
+      const reportId = report?.id;
+      const status   = checkr.mapCheckrResultToStatus(report?.result, report?.adjudication);
+
+      const driverRow = await db.query(
+        `SELECT id FROM drivers WHERE bgc_report_id = $1`, [reportId]
+      );
+
+      // Also try matching by candidate ID if report ID not stored yet
+      let driverId = driverRow.rows[0]?.id;
+      if (!driverId && report?.candidate_id) {
+        const byCandidate = await db.query(
+          `SELECT d.id FROM drivers d
+           JOIN users u ON u.id = d.user_id
+           WHERE u.email = (SELECT email FROM checkr_candidates WHERE candidate_id = $1 LIMIT 1)
+           LIMIT 1`,
+          [report.candidate_id]
+        );
+        driverId = byCandidate.rows[0]?.id;
+      }
+
+      if (driverId) {
+        await db.query(
+          `UPDATE drivers
+           SET bgc_status       = $2,
+               bgc_report_id    = $3,
+               bgc_completed_at = NOW()
+           WHERE id = $1`,
+          [driverId, status, reportId]
+        );
+        logger.info('[CheckrWebhook] Driver BGC updated', { driverId, status, reportId });
+
+        // Notify driver of BGC result
+        const notifRow = await db.query(
+          `SELECT u.push_token, u.phone, u.full_name FROM drivers d JOIN users u ON u.id = d.user_id WHERE d.id = $1`,
+          [driverId]
+        );
+        const u = notifRow.rows[0];
+        if (u?.push_token) {
+          const passed = status === 'passed';
+          sendPushNotification(
+            u.push_token,
+            passed ? 'Background check passed!' : 'Background check update',
+            passed
+              ? 'Your background check passed. Your account is now fully verified.'
+              : 'Your background check requires further review. Our team will contact you.',
+            { type: 'bgc_result', status }
+          ).catch(() => {});
+        }
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    logger.error('[CheckrWebhook] Error processing event', { err: err.message });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 };
 
@@ -588,6 +757,8 @@ module.exports = {
   listUsers, getUserStats, getUserById, suspendUser, unsuspendUser, archiveUser,
   // Drivers
   listDrivers, getDriverStats, getDriverById, approveDriver, suspendDriver, unsuspendDriver,
+  // BGC
+  triggerDriverBgc, getDriverBgcStatus, handleCheckrWebhook,
   // Map
   getOnlineDrivers,
   // Notifications

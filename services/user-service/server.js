@@ -42,6 +42,7 @@ const adminMgmtRoutes      = require('./src/routes/adminManagement');
 const adminDataRoutes      = require('./src/routes/adminData');
 const adminRoutes          = require('./src/routes/admin');
 const adminIncidentRoutes  = require('./src/routes/adminIncidents');
+const insuranceRoutes      = require('./src/routes/insurance');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -147,6 +148,13 @@ app.use('/admin',            adminRoutes);
 app.use('/admin/admin-mgmt', adminMgmtRoutes);
 app.use('/admin/admin-data', adminDataRoutes);
 app.use('/admin/incidents',  adminIncidentRoutes);
+app.use('/insurance',        insuranceRoutes);
+// Checkr BGC webhook — raw body preserved for HMAC verification
+app.post('/webhooks/checkr', express.raw({ type: 'application/json' }), (req, res, next) => {
+  req.rawBody = req.body;
+  req.body    = JSON.parse(req.rawBody || '{}');
+  next();
+}, require('./src/controllers/adminController').handleCheckrWebhook);
 
 // Prometheus metrics — restricted to internal scraper IPs only
 const promClient = require('prom-client');

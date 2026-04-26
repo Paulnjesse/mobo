@@ -41,6 +41,7 @@ import {
   AccountBalanceWallet as WalletIcon,
   DirectionsBus as BusIcon,
   Smartphone as SmartphoneIcon,
+  Policy as PolicyIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -69,6 +70,7 @@ const BASE_NAV_ITEMS = [
   { label: 'Ad Platform',  path: '/ad-platform',      icon: <SmartphoneIcon /> },
   { label: 'Wallet Packs', path: '/wallet-packs',     icon: <WalletIcon /> },
   { label: 'Commuter Passes', path: '/commuter-passes', icon: <BusIcon /> },
+  { label: 'Insurance Claims', path: '/insurance-claims', icon: <PolicyIcon /> },
   { label: 'Food Delivery', path: '/food',            icon: <RestaurantIcon /> },
   { label: 'Notifications', path: '/notifications',  icon: <NotificationsIcon /> },
   { label: 'Settings',     path: '/settings',         icon: <SettingsIcon /> },

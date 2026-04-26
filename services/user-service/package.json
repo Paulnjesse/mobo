@@ -17,6 +17,7 @@
     "@opentelemetry/sdk-node": "^0.51.0",
     "@opentelemetry/semantic-conventions": "^1.24.0",
     "@sentry/node": "^7.99.0",
+    "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "compression": "1.8.1",
     "cors": "^2.8.5",

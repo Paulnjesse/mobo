@@ -80,6 +80,7 @@ const FILES = [
   'migration_045.sql',  // wallet_credit_packs + wallet_pack_purchases + loyalty_bonus_log + spend tracking
   'migration_046.sql',  // driver_locations.accuracy_m column for GPS accuracy storage
   'migration_047.sql',  // Performance indexes: rides(status,created_at), users(phone), payments(user_id,created_at)
+  'migration_048.sql',  // BGC columns (drivers), messages attachments, insurance_claims table
 ];
 
 function buildMigrationSsl() {

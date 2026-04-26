@@ -34,6 +34,7 @@ import VehicleInspection from './pages/VehicleInspection';
 import AdPlatformSettings from './pages/AdPlatformSettings';
 import WalletPacks from './pages/WalletPacks';
 import CommuterPassMgmt from './pages/CommuterPassMgmt';
+import InsuranceClaims from './pages/InsuranceClaims';
 import { CopyProtectionProvider } from './components/CopyProtection';
 
 const theme = createTheme({
@@ -205,6 +206,7 @@ function App() {
               <Route path="/ad-platform"       element={<AdPlatformSettings />} />
               <Route path="/wallet-packs"      element={<WalletPacks />} />
               <Route path="/commuter-passes"   element={<CommuterPassMgmt />} />
+              <Route path="/insurance-claims"  element={<InsuranceClaims />} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"             element={<Navigate to="/" replace />} />
             </Route>

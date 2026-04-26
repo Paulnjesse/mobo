@@ -214,6 +214,24 @@ export const walletPacksAPI = {
   listPurchases: (params)  => api.get('/payments/admin/wallet-packs/purchases', { params }),
 };
 
+// Insurance Claims
+export const insuranceAPI = {
+  // Admin
+  listAll:  (params) => api.get('/insurance/admin/all', { params }),
+  getStats: ()       => api.get('/insurance/admin/stats'),
+  update:   (id, data) => api.patch(`/insurance/admin/${id}`, data),
+  // Rider / Driver
+  file:     (data)   => api.post('/insurance', data),
+  getMine:  ()       => api.get('/insurance'),
+  getById:  (id)     => api.get(`/insurance/${id}`),
+};
+
+// Background Check (Checkr)
+export const bgcAPI = {
+  trigger:   (driverId)         => api.post(`/admin/drivers/${driverId}/bgc`),
+  getStatus: (driverId)         => api.get(`/admin/drivers/${driverId}/bgc`),
+};
+
 // Commuter Passes
 export const commuterPassAPI = {
   listAll:  ()        => api.get('/rides/admin/commuter-passes'),

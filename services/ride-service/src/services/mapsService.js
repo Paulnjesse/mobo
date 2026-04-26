@@ -21,7 +21,31 @@ const logger = require('../utils/logger');
 // via process.env without requiring jest.resetModules().
 const MAPS_TIMEOUT_MS   = 3_000;   // fail fast — don't block ride acceptance
 const CACHE_TTL_SECONDS = 60;      // re-use result for 60 s between location updates
-const FALLBACK_SPEED_KMH = 25;     // conservative urban speed for African cities
+
+/**
+ * City-aware fallback speeds (km/h) for African markets — used when Google
+ * Maps API is unavailable.  Values reflect observed average urban traffic.
+ * Coordinates are bounding boxes [minLat, minLng, maxLat, maxLng].
+ */
+const CITY_SPEED_PROFILES = [
+  { name: 'Lagos',    bbox: [6.35, 3.10, 6.70, 3.55],  speed: 12 }, // notorious gridlock
+  { name: 'Douala',   bbox: [3.85, 9.60, 4.15, 9.85],  speed: 18 },
+  { name: 'Nairobi',  bbox: [-1.40, 36.65, -1.10, 37.05], speed: 15 },
+  { name: 'Yaoundé',  bbox: [3.78, 11.40, 3.95, 11.60], speed: 20 },
+  { name: 'Abidjan',  bbox: [5.20, -4.10, 5.45, -3.85], speed: 17 },
+  { name: 'Dakar',    bbox: [14.65, -17.55, 14.80, -17.35], speed: 16 },
+  { name: 'Accra',    bbox: [5.50, -0.35, 5.70, -0.05], speed: 14 },
+  { name: 'Kinshasa', bbox: [-4.55, 15.15, -4.20, 15.45], speed: 13 },
+];
+const DEFAULT_SPEED_KMH = 20; // conservative default for unknown African city
+
+function getCitySpeed(lat, lng) {
+  for (const c of CITY_SPEED_PROFILES) {
+    const [minLat, minLng, maxLat, maxLng] = c.bbox;
+    if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) return c.speed;
+  }
+  return DEFAULT_SPEED_KMH;
+}
 
 /**
  * Haversine distance in km between two {lat, lng} points.
@@ -46,8 +70,9 @@ function haversineKm(origin, dest) {
  * @returns {number} ETA in minutes (min 1, rounded up)
  */
 function fallbackEtaMinutes(origin, dest) {
-  const distKm   = haversineKm(origin, dest) * 1.2; // 20% detour factor
-  const minutes  = (distKm / FALLBACK_SPEED_KMH) * 60;
+  const distKm  = haversineKm(origin, dest) * 1.2; // 20% detour factor for road curvature
+  const speed   = getCitySpeed(origin.lat, origin.lng);
+  const minutes = (distKm / speed) * 60;
   return Math.max(1, Math.ceil(minutes));
 }
 
@@ -70,8 +95,9 @@ async function getEtaMinutes(origin, dest) {
 
   // If no Maps key configured, use haversine fallback immediately
   if (!apiKey || apiKey.startsWith('AIzaxxxxxx')) {
+    const distKm    = haversineKm(origin, dest);
     const eta_minutes = fallbackEtaMinutes(origin, dest);
-    return { eta_minutes, source: 'haversine' };
+    return { eta_minutes, distance_km: Math.round(distKm * 10) / 10, source: 'haversine' };
   }
 
   try {
@@ -83,18 +109,22 @@ async function getEtaMinutes(origin, dest) {
         destinations:   `${dest.lat},${dest.lng}`,
         mode:           'driving',
         units:          'metric',
-        departure_time: 'now',     // enables traffic-aware ETA
+        departure_time: 'now',            // enables real-time traffic data
+        traffic_model:  'best_guess',     // best estimate based on historical + live traffic
+        avoid:          'ferries',        // avoid ferries (Africa-specific)
         key:            apiKey,
       },
     });
 
     const element = data?.rows?.[0]?.elements?.[0];
     if (element?.status === 'OK') {
-      // Prefer duration_in_traffic when available (departure_time=now)
+      // Prefer duration_in_traffic (real-time traffic) over static duration
       const durationSecs = element.duration_in_traffic?.value
                         ?? element.duration?.value;
+      const distanceM    = element.distance?.value || 0;
       const eta_minutes  = Math.max(1, Math.ceil(durationSecs / 60));
-      const result = { eta_minutes, source: 'google' };
+      const distance_km  = Math.round(distanceM / 100) / 10; // one decimal
+      const result = { eta_minutes, distance_km, distance_text: element.distance?.text || '', source: 'google' };
       await cache.set(cacheKey, result, CACHE_TTL_SECONDS);
       return result;
     }
@@ -110,8 +140,9 @@ async function getEtaMinutes(origin, dest) {
   }
 
   // Haversine fallback when API fails
+  const distKm      = haversineKm(origin, dest);
   const eta_minutes = fallbackEtaMinutes(origin, dest);
-  return { eta_minutes, source: 'haversine' };
+  return { eta_minutes, distance_km: Math.round(distKm * 10) / 10, source: 'haversine' };
 }
 
 module.exports = { getEtaMinutes, fallbackEtaMinutes, haversineKm };

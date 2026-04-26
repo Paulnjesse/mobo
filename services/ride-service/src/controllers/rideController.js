@@ -8,6 +8,7 @@ const { isEnabled } = require('../../../shared/featureFlags');
 const { fareWithLocalCurrency, getCurrencyCode } = require('../../../shared/currencyUtil');
 const logger     = require('../utils/logger');
 const { getEtaMinutes } = require('../services/mapsService');
+const { maskRidePhones } = require('../../../shared/phoneProxy');
 
 // ============================================================
 // EXISTING: requestRide, getFare, acceptRide, updateRideStatus,
@@ -18,6 +19,43 @@ const { getEtaMinutes } = require('../services/mapsService');
 
 // ── Surge price cap — aligns with Bolt (3.5×) and protects riders ────────────
 const MAX_SURGE_MULTIPLIER = 3.5;
+
+/**
+ * Recalculate and persist a driver's composite performance score (0–100).
+ *
+ * Formula (same weights as Uber/Bolt driver quality metrics):
+ *   score = (rating/5 × 40) + (acceptance_rate/100 × 30)
+ *         + (completion_rate/100 × 20) − (cancellation_rate/100 × 10)
+ *
+ * Called non-blocking after: ride completion, rating submission, cancellation.
+ */
+async function updateCompositeScore(driverId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(d.rating, 5.0)          AS rating,
+              COALESCE(d.acceptance_rate, 100)  AS acceptance_rate,
+              COALESCE(d.completion_rate, 100)  AS completion_rate,
+              COALESCE(d.cancellation_rate, 0)  AS cancellation_rate
+       FROM   drivers d WHERE d.id = $1`,
+      [driverId]
+    );
+    if (!rows[0]) return;
+    const { rating, acceptance_rate, completion_rate, cancellation_rate } = rows[0];
+    const raw = (
+      (Number(rating)           / 5   * 40) +
+      (Number(acceptance_rate)  / 100 * 30) +
+      (Number(completion_rate)  / 100 * 20) -
+      (Number(cancellation_rate)/ 100 * 10)
+    );
+    const score = Math.max(0, Math.min(100, Math.round(raw * 10) / 10));
+    await pool.query(
+      `UPDATE drivers SET performance_score = $1 WHERE id = $2`,
+      [score, driverId]
+    );
+  } catch (err) {
+    logger.warn('[CompositeScore] update failed', { driverId, err: err.message });
+  }
+}
 
 // ── Per-ride-type fare multipliers (XAF base rates) ───────────────────────────
 const RIDE_TYPE_RATES = {
@@ -1560,6 +1598,9 @@ const updateRideStatus = async (req, res) => {
         logger.warn('[Bonus] progress update error', { err: bonusErr.message });
       }
 
+      // ── Composite score: recalculate driver score on completion ──────────
+      updateCompositeScore(ride.driver_id).catch(() => {});
+
       // ── Commuter pass: consume one ride ──────────────────────────────────
       try {
         if (ride.commuter_pass_id) {
@@ -1892,9 +1933,10 @@ const getRide = async (req, res) => {
       }
     }
 
-    // Strip the internal driver_user_id field before sending
+    // Strip internal field + mask counterparty phone numbers for privacy
     const { driver_user_id, ...rideData } = ride;
-    res.json({ ride: rideData });
+    const maskedRide = maskRidePhones(rideData, requestingUserId, userRole);
+    res.json({ ride: maskedRide });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2008,6 +2050,11 @@ const rateRide = async (req, res) => {
       }
     }
 
+    // Recalculate driver composite performance score after any rating
+    if (r.driver_id) {
+      updateCompositeScore(r.driver_id).catch(() => {});
+    }
+
     // If rider gave 5 stars → add preferred driver prompt
     if (rating === 5 && r.rider_id === raterId) {
       res.json({ success: true, suggest_preferred: true, driver_id: r.driver_id });
@@ -2016,6 +2063,71 @@ const rateRide = async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * POST /rides/:id/messages/attachment
+ * Upload a file and insert it as a message with attachment metadata.
+ * Multer has already written the file to disk before this handler runs.
+ */
+const sendMessageAttachment = async (req, res) => {
+  try {
+    const { id: rideId } = req.params;
+    const senderId = String(req.user?.id);
+    const { receiver_id } = req.body;
+
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    // Auth: must be a party to the ride
+    const access = await pool.query(
+      `SELECT 1 FROM rides r
+       LEFT JOIN drivers d ON d.id = r.driver_id
+       WHERE r.id = $1 AND (r.rider_id = $2 OR d.user_id = $2)`,
+      [rideId, senderId]
+    );
+    if (!access.rows[0]) return res.status(403).json({ error: 'Not authorised' });
+
+    const { getAttachmentType, buildFileUrl } = require('../middleware/uploadMiddleware');
+    const attachmentUrl  = buildFileUrl(req, req.file.path);
+    const attachmentType = getAttachmentType(req.file.mimetype);
+    const attachmentName = req.file.originalname;
+
+    const result = await pool.query(
+      `INSERT INTO messages
+         (ride_id, sender_id, receiver_id, content, attachment_url, attachment_type, attachment_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [rideId, senderId, receiver_id || null, attachmentName, attachmentUrl, attachmentType, attachmentName]
+    );
+
+    // Push notification to receiver (non-blocking)
+    if (receiver_id) {
+      setImmediate(async () => {
+        try {
+          const { notifyNewMessage } = require('../services/pushNotifications');
+          const [senderRow, receiverRow] = await Promise.all([
+            pool.query('SELECT full_name, role FROM users WHERE id = $1', [senderId]),
+            pool.query('SELECT push_token FROM users WHERE id = $1', [receiver_id]),
+          ]);
+          const token = receiverRow.rows[0]?.push_token;
+          if (token) {
+            await notifyNewMessage(token, {
+              ride_id:     rideId,
+              sender_name: senderRow.rows[0]?.full_name || 'Someone',
+              sender_role: senderRow.rows[0]?.role || 'user',
+              text:        `📎 ${attachmentName}`,
+              user_id:     receiver_id,
+            });
+          }
+        } catch (_) {}
+      });
+    }
+
+    res.status(201).json({ success: true, message: result.rows[0] });
+  } catch (err) {
+    logger.error('[SendMessageAttachment]', err.message);
+    res.status(500).json({ error: 'Failed to send attachment' });
   }
 };
 
@@ -2659,7 +2771,7 @@ const getQuickReplies = (req, res) => {
 module.exports = {
   requestRide, getFare, acceptRide, updateRideStatus, cancelRide, getRide, listRides,
   rateRide, addTip, roundUpFare, getSurgePricing, applyPromoCode, getActivePromos,
-  getMessages, sendMessage, getQuickReplies,
+  getMessages, sendMessage, sendMessageAttachment, getQuickReplies,
   updateRideStops, lockPrice,
   triggerCheckin, respondToCheckin, getCheckins,
   reportLostItem, getLostAndFound, updateLostAndFoundStatus,

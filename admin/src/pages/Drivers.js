@@ -36,6 +36,8 @@ const MOCK_DRIVERS = Array.from({ length: 35 }, (_, i) => ({
   total_earnings: Math.floor(Math.random() * 1000000),
   acceptance_rate: (80 + Math.random() * 20).toFixed(1),
   cancellation_rate: (Math.random() * 10).toFixed(1),
+  completion_rate: (88 + Math.random() * 12).toFixed(1),
+  performance_score: (45 + Math.random() * 55).toFixed(1),
   vehicle: {
     make: ['Toyota', 'Honda', 'Kia', 'Hyundai', 'Nissan'][i % 5],
     model: ['Corolla', 'Civic', 'Rio', 'Accent', 'Sentra'][i % 5],
@@ -227,6 +229,16 @@ export default function Drivers() {
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 600 }}>{row.rating}</Typography>
       </Box>
     )},
+    { field: 'performance_score', headerName: 'Score', renderCell: row => {
+      const score = parseFloat(row.performance_score) || 0;
+      const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF6B35' : '#E31837';
+      const bg    = score >= 75 ? 'rgba(76,175,80,0.1)' : score >= 50 ? 'rgba(255,107,53,0.1)' : 'rgba(227,24,55,0.1)';
+      return (
+        <Tooltip title={`Composite score: rating×40 + acceptance×30 + completion×20 − cancellation×10`} arrow>
+          <Chip label={`${score.toFixed(0)}/100`} size="small" sx={{ bgcolor: bg, color, fontWeight: 700, fontSize: '0.7rem', height: 22 }} />
+        </Tooltip>
+      );
+    }},
     { field: 'total_rides', headerName: 'Rides', align: 'right' },
     { field: 'is_online', headerName: 'Online', renderCell: row => (
       <Chip label={row.is_online ? 'Online' : 'Offline'} size="small" sx={{ bgcolor: row.is_online ? 'rgba(76,175,80,0.1)' : 'rgba(0,0,0,0.06)', color: row.is_online ? '#4CAF50' : '#999', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
@@ -455,6 +467,7 @@ export default function Drivers() {
                   ['License Expiry', selectedDriver.license_expiry?.substring(0,10)],
                   ['Rating', `${selectedDriver.rating} / 5`], ['Total Rides', selectedDriver.total_rides],
                   ['Acceptance Rate', `${selectedDriver.acceptance_rate}%`],
+                  ['Completion Rate', `${selectedDriver.completion_rate || '—'}%`],
                   ['Total Earnings', `${Number(selectedDriver.total_earnings || 0).toLocaleString()} XAF`],
                 ].map(([l, v]) => (
                   <Grid item xs={6} key={l}>
@@ -463,6 +476,27 @@ export default function Drivers() {
                   </Grid>
                 ))}
               </Grid>
+              {selectedDriver.performance_score !== undefined && (
+                <>
+                  <Divider sx={{ my: 1.5 }} />
+                  <Typography variant="subtitle2" sx={{ mb: 1, color: '#666', fontWeight: 700, textTransform: 'uppercase', fontSize: '0.7rem' }}>Composite Performance Score</Typography>
+                  {(() => {
+                    const score = parseFloat(selectedDriver.performance_score) || 0;
+                    const color = score >= 75 ? '#4CAF50' : score >= 50 ? '#FF6B35' : '#E31837';
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(0,0,0,0.07)', borderRadius: 4, overflow: 'hidden' }}>
+                          <Box sx={{ width: `${score}%`, height: '100%', bgcolor: color, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                        </Box>
+                        <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, color, minWidth: 52 }}>{score.toFixed(1)}/100</Typography>
+                      </Box>
+                    );
+                  })()}
+                  <Typography sx={{ fontSize: '0.7rem', color: 'rgba(0,0,0,0.4)', mt: 0.8 }}>
+                    Formula: rating×40% + acceptance×30% + completion×20% − cancellation×10%
+                  </Typography>
+                </>
+              )}
               {selectedDriver.vehicle && (
                 <>
                   <Divider sx={{ my: 1.5 }} />

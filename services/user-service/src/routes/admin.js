@@ -39,6 +39,8 @@ router.get('/drivers/stats',             canReadDrivers,  ctrl.getDriverStats);
 router.get('/drivers',                   canReadDrivers,  ctrl.listDrivers);
 router.get('/drivers/:id',               canReadDrivers,  ctrl.getDriverById);
 router.patch('/drivers/:id/approve',     canWriteDrivers, ctrl.approveDriver);
+router.post('/drivers/:id/bgc',          canWriteDrivers, ctrl.triggerDriverBgc);
+router.get('/drivers/:id/bgc',           canReadDrivers,  ctrl.getDriverBgcStatus);
 router.patch('/drivers/:id/suspend',     canWriteDrivers, ctrl.suspendDriver);
 router.patch('/drivers/:id/unsuspend',   canWriteDrivers, ctrl.unsuspendDriver);
 

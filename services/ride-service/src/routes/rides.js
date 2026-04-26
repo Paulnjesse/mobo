@@ -213,6 +213,11 @@ router.get('/quick-replies', authenticate, ctrl.getQuickReplies);
 // Messages
 router.get('/:id/messages', authenticate, ctrl.getMessages);
 router.post('/:id/messages', authenticate, messageLimiter, validateSendMessage, ctrl.sendMessage);
+// Chat file attachment upload (image / pdf / audio — max 10 MB)
+router.post('/:id/messages/attachment', authenticate, (() => {
+  const { upload } = require('../middleware/uploadMiddleware');
+  return upload.single('file');
+})(), ctrl.sendMessageAttachment);
 
 // SOS
 router.post('/:id/sos', authenticate, sosLimiter, sosCtrl.triggerSOS);

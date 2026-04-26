@@ -18,6 +18,10 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const MAX_OTP_REQUESTS_PER_HOUR = 3;
 // OTP attempt tracking: lock after 5 wrong attempts
 const MAX_OTP_ATTEMPTS = 5;
+// Per-phone Redis lockout TTL after too many failures (30 minutes)
+const OTP_PHONE_LOCKOUT_TTL = 1800; // seconds
+const OTP_PHONE_FAIL_KEY    = (phone) => `otp_fail:${phone}`;
+const OTP_PHONE_LOCK_KEY    = (phone) => `otp_lock:${phone}`;
 
 // Apple JWKS cache — keys rotate rarely; refresh every hour
 const appleJwksCache = { keys: null, fetchedAt: 0 };
@@ -751,6 +755,26 @@ const verify = async (req, res) => {
       return res.status(400).json({ success: false, message: 'phone and otp_code are required' });
     }
 
+    // ── Per-phone Redis lockout ────────────────────────────────────────────────
+    // Independently of the account-level suspension, lock the phone number in
+    // Redis after MAX_OTP_ATTEMPTS failures.  This protects pre-signup phones
+    // (no account yet) and cross-device brute-force attempts.
+    try {
+      const locked = await redis.get(OTP_PHONE_LOCK_KEY(phone));
+      if (locked) {
+        const ttl = await redis.ttl(OTP_PHONE_LOCK_KEY(phone));
+        const minutesLeft = Math.ceil((ttl || OTP_PHONE_LOCKOUT_TTL) / 60);
+        return res.status(429).json({
+          success: false,
+          message: `Too many failed OTP attempts. This number is locked for ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''}.`,
+          retry_after_seconds: ttl || OTP_PHONE_LOCKOUT_TTL,
+        });
+      }
+    } catch (redisErr) {
+      logger.warn('[AuthController] Phone lockout Redis check failed:', redisErr.message);
+      // fail-open: continue if Redis is unavailable
+    }
+
     const result = await db.query(
       `SELECT id, otp_code, otp_expiry, is_verified, is_suspended, language, full_name, email,
               phone, otp_attempts, role, registration_step
@@ -778,6 +802,21 @@ const verify = async (req, res) => {
     if (!user.otp_code || !safeCompareOtp(otp_code, user.otp_code)) {
       const attempts = await incrementOtpAttempts(user.id);
       const remaining = Math.max(0, MAX_OTP_ATTEMPTS - attempts);
+
+      // Increment per-phone Redis failure counter and lock phone after limit
+      try {
+        const failKey  = OTP_PHONE_FAIL_KEY(phone);
+        const newCount = await redis.incr(failKey);
+        if (newCount === 1) await redis.expire(failKey, OTP_PHONE_LOCKOUT_TTL);
+        if (newCount >= MAX_OTP_ATTEMPTS) {
+          await redis.set(OTP_PHONE_LOCK_KEY(phone), '1', OTP_PHONE_LOCKOUT_TTL);
+          await redis.del(failKey);
+          logger.warn('[AuthController] Phone locked after failed OTPs', { phone: phone.slice(0, 6) + '***' });
+        }
+      } catch (redisErr) {
+        logger.warn('[AuthController] Phone fail counter Redis error:', redisErr.message);
+      }
+
       return res.status(400).json({
         success: false,
         message: `Invalid OTP code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
@@ -795,6 +834,12 @@ const verify = async (req, res) => {
     );
 
     await resetOtpAttempts(user.id);
+
+    // Clear per-phone lockout counters on successful verification
+    try {
+      await redis.del(OTP_PHONE_FAIL_KEY(phone));
+      await redis.del(OTP_PHONE_LOCK_KEY(phone));
+    } catch (_) {}
 
     // Send welcome email if available
     if (user.email) {
