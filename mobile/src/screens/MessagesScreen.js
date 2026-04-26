@@ -22,7 +22,7 @@ const QUICK_REPLIES = [
 const SOCKET_URL =
   process.env.EXPO_PUBLIC_SOCKET_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl?.replace('/api', '') ||
-  'https://mobo-api-gateway.onrender.com';
+  'http://localhost:3000';
 
 export default function MessagesScreen({ navigation, route }) {
   const { rideId, otherName, otherRole } = route?.params || {};

@@ -123,7 +123,7 @@ export default function RiderRegisterScreen({ navigation }) {
       newErrors.full_name = 'Enter your full name';
     }
     if (!form.password || form.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors['password'] = 'Min. 6 characters required';
     }
     if (form.password !== form.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';

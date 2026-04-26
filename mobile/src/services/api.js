@@ -7,10 +7,10 @@ import {
   clearAllSecureData,
 } from '../utils/secureStorage';
 
-// Base URL driven by EAS build profile env — never hardcoded
+// Base URL driven by EAS build profile env — set via EXPO_PUBLIC_API_URL or app.config.js extra
 const BASE_URL =
   Constants.expoConfig?.extra?.apiUrl ??
-  'https://mobo-api-gateway.onrender.com/api/v1';
+  'http://localhost:3000/api/v1';
 
 // ── Retry configuration (Africa 3G: 2–5% packet loss, 200–400ms RTT) ─────────
 const MAX_RETRIES      = 2;           // total extra attempts after initial failure

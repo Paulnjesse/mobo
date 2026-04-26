@@ -151,7 +151,7 @@ export default function LoginScreen({ navigation }) {
   const validate = () => {
     const e = {};
     if (!identifier.trim()) e.identifier = 'Phone or email is required';
-    if (!password) e.password = 'Password is required';
+    if (!password) e['password'] = 'Password is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };

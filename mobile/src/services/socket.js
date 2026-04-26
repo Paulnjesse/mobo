@@ -23,14 +23,14 @@ import Constants from 'expo-constants';
 import { getAccessToken } from '../utils/secureStorage';
 
 // ---------------------------------------------------------------------------
-// Service URLs driven by EAS build profile — never hardcoded
+// Service URLs driven by EAS build profile — set via EXPO_PUBLIC_* or app.config.js extra
 // ---------------------------------------------------------------------------
 const RIDE_SOCKET_URL =
   Constants.expoConfig?.extra?.rideSocketUrl ??
-  'https://mobo-ride-service.onrender.com';
+  'http://localhost:3002';
 const LOCATION_SOCKET_URL =
   Constants.expoConfig?.extra?.locationSocketUrl ??
-  'https://mobo-location-service.onrender.com';
+  'http://localhost:3004';
 
 // ---------------------------------------------------------------------------
 // Socket instances (created lazily on first connectSockets() call)

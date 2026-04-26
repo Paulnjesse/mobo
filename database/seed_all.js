@@ -45,7 +45,7 @@ async function run() {
   console.log('\n👤 Inserting users...');
 
   const bcrypt = require('crypto');
-  // password = "Password123" hashed with bcrypt — use pre-computed hash
+  // bcrypt hash of the seed account passphrase — pre-computed, not a real credential
   const passwordHash = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'; // "password"
 
   const users = await client.query(`

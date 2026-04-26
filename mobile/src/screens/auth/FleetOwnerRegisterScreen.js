@@ -114,7 +114,7 @@ export default function FleetOwnerRegisterScreen({ navigation }) {
     if (s === 1) {
       if (!form.phone || form.phone.length < 8) newErrors.phone = 'Enter a valid phone number';
       if (!form.full_name || form.full_name.trim().length < 2) newErrors.full_name = 'Enter your full name';
-      if (!form.password || form.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+      if (!form.password || form.password.length < 6) newErrors['password'] = 'Min. 6 characters required';
       if (form.password !== form.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
       if (!form.company_name || form.company_name.trim().length < 2) newErrors.company_name = 'Fleet / company name is required';
     }
