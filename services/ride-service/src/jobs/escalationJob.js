@@ -17,6 +17,7 @@
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const { withLock } = require('../utils/distributedLock');
+const { recordJobRun, recordJobPending } = require('../utils/jobMetrics');
 
 const POLL_INTERVAL_MS   = 30 * 1000;  // poll every 30 s
 const ESCALATION_TIMEOUT = 60;         // seconds before auto-escalation
@@ -66,6 +67,9 @@ async function _doEscalation() {
         r.rider_id,
         r.driver_id
     `, [ESCALATION_TIMEOUT]);
+
+    recordJobPending('escalation_job', result.rows.length);
+    recordJobRun('escalation_job');
 
     if (result.rows.length === 0) return;
 

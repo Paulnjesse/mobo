@@ -8,7 +8,7 @@
 const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
-  testDir: './tests/e2e',
+  testDir: '.',   // relative to this config file — resolves to tests/e2e/
   fullyParallel: false,          // ride/payment tests share DB state — run serially
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

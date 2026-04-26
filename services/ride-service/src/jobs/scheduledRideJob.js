@@ -17,6 +17,7 @@ const db = require('../config/database');
 const { notifyRiderDriverArrived } = require('../services/pushNotifications');
 const { withLock } = require('../utils/distributedLock');
 const logger = require('../utils/logger');
+const { recordJobRun, recordJobPending } = require('../utils/jobMetrics');
 
 const POLL_MS    = 60 * 1000; // every 60 s
 // Lock TTL: 55 s — expires before the next tick so one slow instance never
@@ -60,6 +61,9 @@ async function runScheduledRideJob(io) {
          AND r.scheduled_at > NOW()
          AND r.scheduled_at < NOW() + INTERVAL '25 hours'`
     );
+
+    recordJobPending('scheduled_ride_job', rides.length);
+    recordJobRun('scheduled_ride_job');
 
     for (const ride of rides) {
       const departMs = new Date(ride.scheduled_at).getTime() - now.getTime();

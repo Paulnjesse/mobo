@@ -673,6 +673,81 @@ const exportReport = async (req, res) => {
   }
 };
 
+// ── Event Replay ───────────────────────────────────────────────────────────────
+
+/**
+ * GET /admin/events/replay
+ * Query the ride_events audit log for a time window.
+ *
+ * Query params:
+ *   from         ISO 8601 timestamp (required)
+ *   to           ISO 8601 timestamp (required)
+ *   ride_id      Filter by specific ride (optional)
+ *   event_type   Filter by event type, e.g. status_change (optional)
+ *   actor_role   Filter by actor role, e.g. driver|rider|admin|system (optional)
+ *   limit        Max results 1–1000 (default 200)
+ *   offset       Pagination offset (default 0)
+ */
+const replayEvents = async (req, res) => {
+  const { from, to, ride_id, event_type, actor_role } = req.query;
+  const limit  = Math.min(Math.max(parseInt(req.query.limit,  10) || 200, 1), 1000);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+  if (!from || !to) {
+    return res.status(400).json({ error: 'from and to query params are required (ISO 8601)' });
+  }
+
+  try {
+    const params = [from, to];
+    const conditions = ['created_at >= $1', 'created_at <= $2'];
+
+    if (ride_id)    { params.push(ride_id);    conditions.push(`ride_id = $${params.length}`); }
+    if (event_type) { params.push(event_type); conditions.push(`event_type = $${params.length}`); }
+    if (actor_role) { params.push(actor_role); conditions.push(`actor_role = $${params.length}`); }
+
+    params.push(limit, offset);
+    const limitIdx  = params.length - 1;
+    const offsetIdx = params.length;
+
+    const result = await pool.query(
+      `SELECT id, ride_id, event_type,
+              old_status, new_status,
+              actor_id, actor_role,
+              metadata,
+              created_at
+       FROM ride_events
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at ASC
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      params
+    );
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM ride_events
+       WHERE ${conditions.slice(0, conditions.length).join(' AND ')}`,
+      params.slice(0, params.length - 2)
+    );
+
+    logger.info('[EventReplay] Query executed', {
+      from, to, ride_id, event_type, actor_role, count: result.rows.length,
+      requestedBy: req.user?.id,
+    });
+
+    res.json({
+      success: true,
+      events:  result.rows,
+      count:   result.rows.length,
+      total:   parseInt(countResult.rows[0]?.total || 0, 10),
+      limit,
+      offset,
+      query:   { from, to, ride_id, event_type, actor_role },
+    });
+  } catch (err) {
+    logger.error('[EventReplay] Error', { err: err.message });
+    res.status(500).json({ error: 'Event replay query failed' });
+  }
+};
+
 module.exports = {
   // Rides
   listRides, getRideStats, getRideById,
@@ -688,4 +763,6 @@ module.exports = {
   bulkReassignRides, getRideWaypoints,
   // Dispatch + alerts + reports
   manualDispatch, acknowledgeAlert, exportReport,
+  // Event replay
+  replayEvents,
 };

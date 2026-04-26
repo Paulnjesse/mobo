@@ -53,4 +53,7 @@ router.patch('/alerts/:id/acknowledge', ctrl.acknowledgeAlert);
 // ── Report export ─────────────────────────────────────────────────────────────
 router.get('/reports/export', requirePermission('finance:read'), ctrl.exportReport);
 
+// ── Event replay (audit log query) ────────────────────────────────────────────
+router.get('/events/replay', requirePermission('audit:read'), ctrl.replayEvents);
+
 module.exports = router;

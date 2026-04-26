@@ -44,6 +44,8 @@ const { startDeliverySchedulerJob }   = require('./src/jobs/deliverySchedulerJob
 const { startMessagePurgeJob }        = require('./src/jobs/messagePurgeJob');
 const { startStuckRideJob }           = require('./src/jobs/stuckRideJob');
 const { startFraudWorker }            = require('./src/queues/fraudWorker');
+const { startEventDlqWorker }         = require('./src/queues/eventDlq');
+const { jobMetricsRegistry }          = require('./src/utils/jobMetrics');
 const requestId = require('./src/middleware/requestId');
 
 const app = express();
@@ -99,6 +101,8 @@ app.use('/admin', adminRideRoutes);
 const promClient = require('prom-client');
 const promRegister = new promClient.Registry();
 promClient.collectDefaultMetrics({ register: promRegister });
+// Job-lag gauges (consumer lag proxy for polling jobs)
+const _jobReg = jobMetricsRegistry();
 
 // HTTP request latency histogram (p50 / p95 / p99 SLO tracking)
 const { createLatencyHistogram, httpLatencyMiddleware } = require('../shared/latencyMiddleware');
@@ -130,7 +134,9 @@ app.get('/metrics', async (req, res) => {
   }
   try {
     res.set('Content-Type', promRegister.contentType);
-    res.end(await promRegister.metrics());
+    const parts = [await promRegister.metrics()];
+    if (_jobReg) parts.push(await _jobReg.metrics());
+    res.end(parts.join('\n'));
   } catch (e) {
     res.status(500).end(e.message);
   }
@@ -243,6 +249,7 @@ if (process.env.NODE_ENV !== 'test') {
     startMessagePurgeJob();          // Nightly GDPR-compliant message TTL purge
     startFraudWorker();              // BullMQ worker: processes collusion + fare fraud jobs from Redis queue
     startStuckRideJob();             // Auto-cancel rides stuck in accepted/arriving > 15 min
+    startEventDlqWorker();           // General-purpose event DLQ — retries failed ride/payment events
   });
   const _shutdown = (signal) => {
     logger.info(`${process.env.SERVICE_NAME} ${signal} — graceful shutdown started`);
