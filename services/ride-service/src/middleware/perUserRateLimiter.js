@@ -15,6 +15,6 @@ const rideRequestLimiter = perUserLimiter(60 * 1000, 5, 'Too many ride requests 
 const rateLimiter        = perUserLimiter(60 * 60 * 1000, 10, 'Too many ratings in one hour');
 const messageLimiter     = perUserLimiter(60 * 1000, 30, 'Too many messages — slow down');
 const disputeLimiter     = perUserLimiter(24 * 60 * 60 * 1000, 3, 'Dispute limit reached for today');
-const sosLimiter         = perUserLimiter(60 * 1000, 3, 'Too many SOS triggers');
+const sosLimiter         = perUserLimiter(60 * 1000, 5, 'Too many SOS triggers');  // 5/min — covers rapid retap on shaky network
 
 module.exports = { rideRequestLimiter, rateLimiter, messageLimiter, disputeLimiter, sosLimiter };

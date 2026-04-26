@@ -69,8 +69,8 @@ app.use(helmet({
   permittedCrossDomainPolicies: false,
 }));
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
-// 2mb limit: profile photos are base64-encoded (adds ~33% overhead over raw JPEG)
-app.use(express.json({ limit: '2mb' }));
+// 512kb limit — base64-encoded profile photos should be sent via pre-signed upload URLs, not JSON body
+app.use(express.json({ limit: '512kb' }));
 app.use(express.urlencoded({ extended: true }));
 const logger = require('./src/utils/logger');
 app.use(morgan('combined', {

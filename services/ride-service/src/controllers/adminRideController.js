@@ -527,6 +527,152 @@ const getRideWaypoints = async (req, res) => {
   }
 };
 
+/**
+ * POST /admin/rides/:id/dispatch
+ * Force-assign a specific online driver to a specific ride.
+ * Used by dispatchers when automated scoring fails to match.
+ */
+const manualDispatch = async (req, res) => {
+  const { id: rideId }  = req.params;
+  const { driver_user_id, reason = 'manual_dispatch' } = req.body;
+  const adminId = req.user?.id;
+
+  if (!driver_user_id) {
+    return res.status(400).json({ error: 'driver_user_id is required' });
+  }
+
+  try {
+    // Validate ride is in a dispatchable state
+    const rideRes = await pool.query(
+      `SELECT id, status, rider_id FROM rides WHERE id = $1`,
+      [rideId]
+    );
+    if (!rideRes.rows[0]) return res.status(404).json({ error: 'Ride not found' });
+    const ride = rideRes.rows[0];
+    if (!['requested', 'no_drivers_available'].includes(ride.status)) {
+      return res.status(409).json({
+        error: `Cannot dispatch ride in '${ride.status}' state. Only 'requested' or 'no_drivers_available' rides can be manually dispatched.`,
+        code: 'INVALID_DISPATCH_STATE',
+      });
+    }
+
+    // Validate driver exists and is approved
+    const driverRes = await pool.query(
+      `SELECT d.id FROM drivers d WHERE d.user_id = $1 AND d.is_approved = true`,
+      [driver_user_id]
+    );
+    if (!driverRes.rows[0]) {
+      return res.status(404).json({ error: 'Driver not found or not approved' });
+    }
+    const driverId = driverRes.rows[0].id;
+
+    // Assign driver + transition to accepted
+    await pool.query(
+      `UPDATE rides SET driver_id = $1, status = 'accepted', updated_at = NOW() WHERE id = $2`,
+      [driverId, rideId]
+    );
+
+    // Log the manual dispatch event
+    await pool.query(
+      `INSERT INTO ride_events (ride_id, event_type, old_status, new_status, actor_id, actor_role, metadata)
+       VALUES ($1, 'manual_dispatch', $2, 'accepted', $3, 'admin', $4)`,
+      [rideId, ride.status, adminId, JSON.stringify({ driver_user_id, reason })]
+    );
+
+    logger.info('[ManualDispatch] Ride dispatched', { rideId, driver_user_id, adminId, reason });
+    res.json({ success: true, ride_id: rideId, driver_id: driverId, new_status: 'accepted' });
+  } catch (err) {
+    logger.error('[ManualDispatch] Error', { err: err.message });
+    res.status(500).json({ error: 'Manual dispatch failed' });
+  }
+};
+
+/**
+ * PATCH /admin/alerts/:id/acknowledge
+ * Mark an admin alert as acknowledged by the current admin.
+ */
+const acknowledgeAlert = async (req, res) => {
+  const { id } = req.params;
+  const adminId = req.user?.id;
+  const { notes = '' } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE admin_alerts
+       SET acknowledged = true, acknowledged_by = $1, acknowledged_at = NOW(), notes = $2, updated_at = NOW()
+       WHERE id = $3 AND acknowledged = false
+       RETURNING id, alert_type, severity, acknowledged_at`,
+      [adminId, notes, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Alert not found or already acknowledged' });
+    }
+    res.json({ success: true, alert: result.rows[0] });
+  } catch (err) {
+    logger.error('[AcknowledgeAlert] Error', { err: err.message });
+    res.status(500).json({ error: 'Failed to acknowledge alert' });
+  }
+};
+
+/**
+ * GET /admin/reports/export
+ * Export ride or payment data as JSON for a date range.
+ * Query params: type (rides|payments), from (ISO date), to (ISO date), format (json)
+ */
+const exportReport = async (req, res) => {
+  const { type = 'rides', from, to } = req.query;
+  const adminId = req.user?.id;
+
+  if (!from || !to) {
+    return res.status(400).json({ error: 'from and to date parameters are required (ISO 8601)' });
+  }
+  if (!['rides', 'payments'].includes(type)) {
+    return res.status(400).json({ error: 'type must be rides or payments' });
+  }
+
+  try {
+    let rows;
+    if (type === 'rides') {
+      const result = await pool.query(
+        `SELECT r.id, r.status, r.ride_type, r.pickup_address, r.dropoff_address,
+                r.estimated_fare, r.final_fare, r.surge_multiplier,
+                r.created_at, r.completed_at,
+                u.full_name AS rider_name, du.full_name AS driver_name
+         FROM rides r
+         LEFT JOIN users u  ON u.id = r.rider_id
+         LEFT JOIN drivers d ON d.id = r.driver_id
+         LEFT JOIN users du ON du.id = d.user_id
+         WHERE r.created_at BETWEEN $1 AND $2
+         ORDER BY r.created_at DESC
+         LIMIT 10000`,
+        [from, to]
+      );
+      rows = result.rows;
+    } else {
+      const result = await pool.query(
+        `SELECT p.id, p.ride_id, p.amount, p.currency, p.method, p.status,
+                p.created_at, p.updated_at, u.full_name AS user_name
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.user_id
+         WHERE p.created_at BETWEEN $1 AND $2
+         ORDER BY p.created_at DESC
+         LIMIT 10000`,
+        [from, to]
+      );
+      rows = result.rows;
+    }
+
+    logger.info('[ExportReport] Report exported', { type, from, to, adminId, count: rows.length });
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="mobo_${type}_${from}_${to}.json"`);
+    res.json({ type, from, to, count: rows.length, data: rows });
+  } catch (err) {
+    logger.error('[ExportReport] Error', { err: err.message });
+    res.status(500).json({ error: 'Report export failed' });
+  }
+};
+
 module.exports = {
   // Rides
   listRides, getRideStats, getRideById,
@@ -540,4 +686,6 @@ module.exports = {
   listPayments, getPaymentStats, getPaymentRevenue, getPaymentMethodBreakdown,
   // Bulk + trip replay
   bulkReassignRides, getRideWaypoints,
+  // Dispatch + alerts + reports
+  manualDispatch, acknowledgeAlert, exportReport,
 };

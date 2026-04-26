@@ -98,18 +98,28 @@ const RENTAL_PACKAGES = {
 };
 const RENTAL_EXTRA_KM_RATE = 200; // XAF per extra km
 
+// ── State machine: valid predecessor status for each target status ──────────────
+// Prevents invalid transitions like requested→completed or in_progress→arriving.
+const VALID_TRANSITIONS = {
+  arriving:    ['accepted'],
+  in_progress: ['arriving'],
+  completed:   ['in_progress'],
+};
+
 // ── Ride event audit log ───────────────────────────────────────────────────────
 // Appends an immutable record to ride_events for every state transition.
-// Non-fatal: a logging failure must never block the ride flow.
+// Retries once on transient failure — a logging failure must never block the ride flow.
 async function logRideEvent({ rideId, eventType, oldStatus, newStatus, actorId, actorRole, metadata }) {
+  const params = [rideId, eventType, oldStatus || null, newStatus, actorId || null, actorRole || 'system', JSON.stringify(metadata || {})];
+  const sql = `INSERT INTO ride_events (ride_id, event_type, old_status, new_status, actor_id, actor_role, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`;
   try {
-    await pool.query(
-      `INSERT INTO ride_events (ride_id, event_type, old_status, new_status, actor_id, actor_role, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [rideId, eventType, oldStatus || null, newStatus, actorId || null, actorRole || 'system', JSON.stringify(metadata || {})]
-    );
+    await pool.query(sql, params);
   } catch (err) {
-    logger.warn('[RideEvent] Failed to log event — non-fatal', { rideId, eventType, err: err.message });
+    logger.warn('[RideEvent] First attempt failed — retrying once', { rideId, eventType, err: err.message });
+    try { await pool.query(sql, params); } catch (err2) {
+      logger.warn('[RideEvent] Retry also failed — event dropped', { rideId, eventType, err: err2.message });
+    }
   }
 }
 
@@ -544,6 +554,16 @@ const getConciergeBookings = async (req, res) => {
 const requestRide = async (req, res) => {
   try {
     const riderId = String(req.user?.id);
+
+    // ── Idempotency key — prevent duplicate ride creation on retries ─────────
+    const idempotencyKey = req.headers['x-idempotency-key'];
+    if (idempotencyKey) {
+      const cacheHit = await cache.get(`ride_idem:${riderId}:${idempotencyKey}`);
+      if (cacheHit) {
+        return res.status(201).json(cacheHit);
+      }
+    }
+
     const {
       pickup_address, pickup_location, dropoff_address, dropoff_location,
       ride_type = 'standard', payment_method = 'cash', scheduled_at,
@@ -887,6 +907,25 @@ const requestRide = async (req, res) => {
           return { ...d, score };
         }).sort((a, b) => b.score - a.score).slice(0, 5); // notify top 5 drivers
 
+        // ── No drivers nearby: update status + log event + notify rider ────────
+        if (scored.length === 0) {
+          logger.warn('[requestRide] No nearby drivers found', { ride_id: createdRide.id });
+          await pool.query(
+            `UPDATE rides SET status = 'no_drivers_available', updated_at = NOW() WHERE id = $1`,
+            [createdRide.id]
+          );
+          await logRideEvent({
+            rideId:    createdRide.id,
+            eventType: 'no_drivers_available',
+            oldStatus: 'requested',
+            newStatus: 'no_drivers_available',
+            actorId:   createdRide.rider_id,
+            actorRole: 'system',
+            metadata:  { reason: 'No available drivers within 5 km' },
+          });
+          return;
+        }
+
         // Fire all driver push notifications in parallel — sequential await
         // added ~80 ms latency per driver (5 drivers = ~400 ms wasted).
         await Promise.allSettled(
@@ -906,7 +945,11 @@ const requestRide = async (req, res) => {
       }
     });
 
-    res.status(201).json({ ride: result.rows[0], fare: fareCalc, surge_active: surgeMultiplier > 1.0, surge_capped: surgeCapped });
+    const rideResponse = { ride: result.rows[0], fare: fareCalc, surge_active: surgeMultiplier > 1.0, surge_capped: surgeCapped };
+    if (idempotencyKey) {
+      await cache.set(`ride_idem:${riderId}:${idempotencyKey}`, rideResponse, 86400); // 24h TTL
+    }
+    res.status(201).json(rideResponse);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1245,20 +1288,51 @@ const acceptRide = async (req, res) => {
 const updateRideStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, actual_distance_km } = req.body;
     const userId = String(req.user?.id);
     const validStatuses = ['arriving','in_progress','completed'];
     if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
     // Verify the caller is the driver assigned to this ride
     const ownerCheck = await pool.query(
-      `SELECT r.id FROM rides r
+      `SELECT r.id, r.status AS current_status, r.estimated_distance_km
+       FROM rides r
        JOIN drivers d ON d.id = r.driver_id
        WHERE r.id = $1 AND d.user_id = $2 AND r.status NOT IN ('completed','cancelled')`,
       [id, userId]
     );
     if (!ownerCheck.rows[0]) {
       return res.status(403).json({ error: 'Not authorised to update this ride' });
+    }
+
+    // ── State machine: enforce valid predecessor ──────────────────────────────
+    const currentStatus = ownerCheck.rows[0].current_status;
+    const allowed = VALID_TRANSITIONS[status] || [];
+    if (!allowed.includes(currentStatus)) {
+      return res.status(409).json({
+        error: `Cannot transition ride from '${currentStatus}' to '${status}'`,
+        allowed_from: allowed,
+        code: 'INVALID_STATE_TRANSITION',
+      });
+    }
+
+    // ── Distance mismatch guard (on completion) ───────────────────────────────
+    if (status === 'completed' && actual_distance_km != null) {
+      const estimated = parseFloat(ownerCheck.rows[0].estimated_distance_km) || 0;
+      if (estimated > 0) {
+        const ratio = actual_distance_km / estimated;
+        if (ratio > 3.0) {
+          logger.warn('[DistanceMismatch] Actual distance far exceeds estimate — flagging', {
+            rideId: id, estimated, actual: actual_distance_km, ratio: ratio.toFixed(2),
+          });
+          // Store for ops review but still complete the ride
+          await pool.query(
+            `INSERT INTO ride_events (ride_id, event_type, actor_role, metadata)
+             VALUES ($1, 'distance_mismatch', 'system', $2)`,
+            [id, JSON.stringify({ estimated_km: estimated, actual_km: actual_distance_km, ratio })]
+          ).catch(() => {});
+        }
+      }
     }
 
     let extra = '';
@@ -1725,6 +1799,18 @@ const cancelRide = async (req, res) => {
     // Cannot cancel an already terminal ride
     if (r.status === 'completed' || r.status === 'cancelled') {
       return res.status(400).json({ error: `Cannot cancel a ride that is already ${r.status}` });
+    }
+
+    // Policy: cancellation is blocked once the trip is in progress (P2 fix)
+    // Admin can force-cancel via the admin dispatch endpoint
+    if (r.status === 'in_progress') {
+      const isAdmin = req.user?.role === 'admin';
+      if (!isAdmin) {
+        return res.status(400).json({
+          error: 'Cannot cancel a ride that is already in progress. Contact support if there is an emergency.',
+          code: 'CANCEL_TRIP_IN_PROGRESS',
+        });
+      }
     }
 
     // Only the rider or the assigned driver may cancel
@@ -2225,42 +2311,57 @@ const getSurgePricing = async (req, res) => {
 };
 
 const applyPromoCode = async (req, res) => {
+  const { code, fare } = req.body;
+  const userId = String(req.user?.id);
+  const client = await pool.connect();
   try {
-    const { code, fare } = req.body;
-    const userId = String(req.user?.id);
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    // Lock the promo row with SELECT FOR UPDATE to prevent race conditions under
+    // concurrent requests (e.g. two users redeeming the last use of a code simultaneously).
+    const result = await client.query(
       `SELECT * FROM promo_codes WHERE code = $1 AND is_active = true
-       AND (expires_at IS NULL OR expires_at > NOW()) AND used_count < max_uses`,
+       AND (expires_at IS NULL OR expires_at > NOW()) AND used_count < max_uses
+       FOR UPDATE`,
       [code]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Invalid or expired promo code' });
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invalid or expired promo code' });
+    }
     const promo = result.rows[0];
 
     // Prevent the same user from redeeming the same code more than once
-    const alreadyUsed = await pool.query(
+    const alreadyUsed = await client.query(
       `SELECT 1 FROM promo_redemptions WHERE promo_code_id = $1 AND user_id = $2`,
       [promo.id, userId]
     );
     if (alreadyUsed.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ error: 'You have already used this promo code' });
     }
 
-    // Atomically increment used_count and record this user's redemption
-    await pool.query(
+    // Increment used_count and record redemption atomically within the same transaction
+    await client.query(
       `UPDATE promo_codes SET used_count = used_count + 1 WHERE id = $1`, [promo.id]
     );
-    await pool.query(
+    await client.query(
       `INSERT INTO promo_redemptions (promo_code_id, user_id) VALUES ($1, $2)
        ON CONFLICT (promo_code_id, user_id) DO NOTHING`,
       [promo.id, userId]
     );
+
+    await client.query('COMMIT');
 
     const discount = promo.discount_type === 'percent'
       ? Math.round(fare * promo.discount_value / 100)
       : promo.discount_value;
     res.json({ discount, final_fare: fare - discount, promo });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 };
 

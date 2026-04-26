@@ -123,6 +123,59 @@ const trackingSubscriptions = new Map();
  */
 const onlineDrivers = new Set();
 
+/**
+ * Map of driverId -> last activity timestamp (ms).
+ * Updated on every accepted update_location event.
+ * Used by the inactivity watchdog to auto-offline silent drivers.
+ */
+const driverLastActivityMs = new Map();
+
+/** Mark activity for a driver (called on every accepted location update). */
+function touchDriverActivity(driverId) {
+  driverLastActivityMs.set(String(driverId), Date.now());
+}
+
+/** Remove driver from activity map on disconnect. */
+function clearDriverActivity(driverId) {
+  driverLastActivityMs.delete(String(driverId));
+}
+
+// ── Inactivity watchdog ───────────────────────────────────────────────────────
+// Drivers on 3G may silently drop their connection without triggering a Socket.IO
+// disconnect event. After INACTIVITY_TIMEOUT_MS of silence, auto-mark them offline
+// and free their `is_available` flag so rides can be dispatched to other drivers.
+const INACTIVITY_TIMEOUT_MS = 90_000; // 90 s
+const WATCHDOG_INTERVAL_MS  = 30_000; // check every 30 s
+
+/* istanbul ignore next */
+function startInactivityWatchdog(locationNs) {
+  return setInterval(async () => {
+    const now = Date.now();
+    for (const [driverId, lastMs] of driverLastActivityMs.entries()) {
+      if (now - lastMs < INACTIVITY_TIMEOUT_MS) continue;
+
+      logger.warn('[LocationSocket] Driver inactivity timeout — marking offline', { driverId, silentSec: Math.round((now - lastMs) / 1000) });
+      onlineDrivers.delete(driverId);
+      driverLastActivityMs.delete(driverId);
+      clearDriverThrottle(driverId);
+      cacheDelDriverLocation(driverId).catch(() => {});
+
+      // Update DB: mark driver offline
+      try {
+        await db.query(
+          `UPDATE drivers SET is_available = false WHERE user_id = $1`,
+          [driverId]
+        );
+      } catch (dbErr) {
+        logger.warn('[LocationSocket] Failed to mark driver offline in DB', { driverId, err: dbErr.message });
+      }
+
+      // Notify connected clients
+      locationNs.emit('driver_offline', { driverId, reason: 'inactivity_timeout', timestamp: now });
+    }
+  }, WATCHDOG_INTERVAL_MS);
+}
+
 /** Subscription room name for a driver's location stream. */
 const driverLocationRoom = (driverId) => `location:driver:${driverId}`;
 
@@ -216,6 +269,9 @@ function initLocationSocket(io) {
       // We use is_active_ride from the payload if provided, otherwise assume idle.
       const isActive = !!is_active_ride;
       if (shouldThrottle(driverId, isActive)) return; // silently drop — no error to client
+
+      // Record activity timestamp for inactivity watchdog
+      touchDriverActivity(driverId);
 
       // SEC-003: Enforce GDPR location_tracking consent before recording GPS data.
       // Drivers must have granted location_tracking consent (Article 6 lawful basis).
@@ -461,7 +517,8 @@ function initLocationSocket(io) {
         if (stored === socket.id) {
           driverSockets.delete(String(userId));
           onlineDrivers.delete(String(userId));
-          clearDriverThrottle(String(userId)); // free throttle memory
+          clearDriverThrottle(String(userId));   // free throttle memory
+          clearDriverActivity(String(userId));   // free watchdog entry
           // Evict from Redis cache — driver is no longer streaming location
           cacheDelDriverLocation(String(userId)).catch(() => {});
 
@@ -471,6 +528,27 @@ function initLocationSocket(io) {
             reason: 'disconnected',
             timestamp: Date.now(),
           });
+
+          // If driver disconnected during an active ride, update DB + log event
+          db.query(
+            `SELECT id, status FROM rides WHERE driver_id = (SELECT id FROM drivers WHERE user_id = $1 LIMIT 1)
+               AND status IN ('accepted', 'arriving', 'in_progress') LIMIT 1`,
+            [userId]
+          ).then(async (rideRes) => {
+            if (!rideRes.rows[0]) return;
+            const activeRide = rideRes.rows[0];
+            await db.query(
+              `INSERT INTO ride_events
+                 (ride_id, event_type, old_status, new_status, actor_id, actor_role, metadata)
+               VALUES ($1, 'driver_disconnected', $2, $2, $3, 'system', $4)`,
+              [activeRide.id, activeRide.status, userId, JSON.stringify({ reason, socketId: socket.id })]
+            );
+            logger.warn('[LocationSocket] Driver disconnected during active ride', {
+              driverId: userId,
+              rideId: activeRide.id,
+              rideStatus: activeRide.status,
+            });
+          }).catch(() => {});
         }
       }
 
@@ -481,6 +559,9 @@ function initLocationSocket(io) {
       }
     });
   });
+
+  // Start inactivity watchdog — auto-offline drivers that stop emitting GPS
+  startInactivityWatchdog(location);
 
   return location;
 }

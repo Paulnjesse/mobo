@@ -91,4 +91,34 @@ async function delPattern(pattern) {
   } catch { /* silent */ }
 }
 
-module.exports = { get, set, del, delPattern };
+// ---------------------------------------------------------------------------
+// Sorted-set helpers (used by Push DLQ)
+// Redis only — graceful no-op when Redis is unavailable.
+// ---------------------------------------------------------------------------
+
+/** Add a member to a sorted set with the given score. */
+async function zadd(key, score, member) {
+  try {
+    /* istanbul ignore next */
+    if (redis) await redis.zadd(key, score, member);
+  } catch { /* silent */ }
+}
+
+/** Return all members with score between min and max (inclusive). */
+async function zrangebyscore(key, min, max) {
+  try {
+    /* istanbul ignore next */
+    if (redis) return await redis.zrangebyscore(key, min, max);
+  } catch { /* silent */ }
+  return [];
+}
+
+/** Remove a specific member from a sorted set. */
+async function zrem(key, member) {
+  try {
+    /* istanbul ignore next */
+    if (redis) await redis.zrem(key, member);
+  } catch { /* silent */ }
+}
+
+module.exports = { get, set, del, delPattern, zadd, zrangebyscore, zrem };

@@ -72,9 +72,9 @@ describe('ride_events — audit log on status transitions', () => {
   });
 
   test('updateRideStatus — inserts ride_event on arriving transition', async () => {
-    // ownerCheck passes
+    // ownerCheck passes — include current_status so the state machine allows accepted → arriving
     mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 'ride-1' }] })   // ownerCheck
+      .mockResolvedValueOnce({ rows: [{ id: 'ride-1', current_status: 'accepted', estimated_distance_km: null }] })   // ownerCheck
       .mockResolvedValueOnce({ rows: [{ status: 'accepted' }] }) // rideBeforeUpdate
       .mockResolvedValueOnce({ rows: [{ id: 'ride-1', status: 'arriving', rider_id: 'rider-1' }], rowCount: 1 }) // UPDATE rides
       .mockResolvedValueOnce({ rows: [], rowCount: 1 });          // INSERT ride_events
@@ -100,7 +100,7 @@ describe('ride_events — audit log on status transitions', () => {
 
   test('updateRideStatus — inserts ride_event on completed transition', async () => {
     mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 'ride-1' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'ride-1', current_status: 'in_progress', estimated_distance_km: 5 }] })
       .mockResolvedValueOnce({ rows: [{ status: 'in_progress' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'ride-1', status: 'completed', rider_id: 'rider-1' }], rowCount: 1 })
       .mockResolvedValue({ rows: [], rowCount: 1 }); // subsequent calls (push, ride_events)
@@ -120,7 +120,7 @@ describe('ride_events — audit log on status transitions', () => {
 
   test('updateRideStatus — ride_event failure is non-fatal (ride returns 200)', async () => {
     mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 'ride-1' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'ride-1', current_status: 'accepted', estimated_distance_km: null }] })
       .mockResolvedValueOnce({ rows: [{ status: 'accepted' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'ride-1', status: 'arriving', rider_id: 'r1' }], rowCount: 1 })
       .mockRejectedValueOnce(new Error('ride_events table not found')); // INSERT fails
@@ -132,8 +132,9 @@ describe('ride_events — audit log on status transitions', () => {
     // Ride flow completes successfully despite audit log failure
     expect(res.status).toBe(200);
     const logger = require('../src/utils/logger');
+    // logRideEvent now retries once — first attempt failure is logged with this message
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('[RideEvent] Failed to log event'),
+      expect.stringContaining('[RideEvent] First attempt failed — retrying once'),
       expect.objectContaining({ eventType: 'status_change' })
     );
   });

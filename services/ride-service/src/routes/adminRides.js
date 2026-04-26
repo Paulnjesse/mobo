@@ -44,4 +44,13 @@ router.get('/payments',         canReadFinance, ctrl.listPayments);
 router.post('/bulk/rides/reassign',    requirePermission('rides:manage'), ctrl.bulkReassignRides);
 router.get('/rides/:id/waypoints',     ctrl.getRideWaypoints);
 
+// ── Manual dispatch ───────────────────────────────────────────────────────────
+router.post('/rides/:id/dispatch', requirePermission('rides:manage'), ctrl.manualDispatch);
+
+// ── Alert acknowledgment ──────────────────────────────────────────────────────
+router.patch('/alerts/:id/acknowledge', ctrl.acknowledgeAlert);
+
+// ── Report export ─────────────────────────────────────────────────────────────
+router.get('/reports/export', requirePermission('finance:read'), ctrl.exportReport);
+
 module.exports = router;

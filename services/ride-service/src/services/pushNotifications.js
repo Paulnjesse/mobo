@@ -1,20 +1,86 @@
 /**
  * MOBO Push Notification Service — ride-service
  * Ride-specific notification helpers built on top of Expo Push API.
+ * Includes a Redis-backed Dead Letter Queue (DLQ) with exponential backoff retries.
  */
 
 const logger = require('../utils/logger');
 
 const { Expo } = require('expo-server-sdk');
-const db = require('../config/database');
+const db    = require('../config/database');
+const cache = require('../utils/cache');
 
 const expo = new Expo();
+
+// ---------------------------------------------------------------------------
+// Push DLQ — Redis sorted set keyed by retry-at timestamp (score)
+// ---------------------------------------------------------------------------
+const DLQ_KEY       = 'push:dlq';          // Redis ZSET key
+const MAX_RETRIES   = 3;                   // drop after 3 failed attempts
+const BACKOFF_BASE  = 30;                  // seconds — doubles each attempt: 30s, 60s, 120s
+
+/** Enqueue a failed push notification for retry. */
+async function enqueuePushRetry(token, title, body, data, attempt = 1) {
+  if (attempt > MAX_RETRIES) {
+    logger.warn('[PushDLQ] Max retries exceeded — dropping notification', { token: token?.slice(-8), title });
+    return;
+  }
+  const retryAfterMs = Date.now() + (BACKOFF_BASE * Math.pow(2, attempt - 1)) * 1000;
+  const entry = JSON.stringify({ token, title, body, data, attempt });
+  try {
+    await cache.zadd(DLQ_KEY, retryAfterMs, entry);
+    logger.info('[PushDLQ] Queued for retry', { attempt, retryAfterMs, title });
+  } catch (redisErr) {
+    logger.warn('[PushDLQ] Failed to enqueue retry', { err: redisErr.message });
+  }
+}
+
+/** Drain DLQ — call periodically (e.g. every 60 s) to retry ready messages. */
+async function drainPushDlq() {
+  try {
+    // Fetch all entries whose retry time has passed
+    const now     = Date.now();
+    const entries = await cache.zrangebyscore(DLQ_KEY, 0, now);
+    if (!entries || entries.length === 0) return;
+
+    for (const raw of entries) {
+      let item;
+      try { item = JSON.parse(raw); } catch { continue; }
+      // Remove from queue before retrying (prevents re-processing on crash)
+      await cache.zrem(DLQ_KEY, raw);
+      const result = await _send(item.token, item.title, item.body, item.data, true);
+      if (!result.success) {
+        await enqueuePushRetry(item.token, item.title, item.body, item.data, (item.attempt || 1) + 1);
+      }
+    }
+  } catch (err) {
+    logger.warn('[PushDLQ] Drain error', { err: err.message });
+  }
+}
+
+// Start DLQ drain on a 60-second interval (only once per process)
+let _dlqTimer = null;
+function startPushDlqWorker() {
+  if (_dlqTimer) return;
+  _dlqTimer = setInterval(drainPushDlq, 60_000);
+  logger.info('[PushDLQ] Worker started — draining every 60 s');
+}
+
+// Auto-start when module is loaded (ride-service import starts the worker)
+startPushDlqWorker();
 
 // ---------------------------------------------------------------------------
 // Core send helper (shared internally)
 // ---------------------------------------------------------------------------
 
-async function _send(token, title, body, data = {}) {
+/**
+ * @param {string}  token
+ * @param {string}  title
+ * @param {string}  body
+ * @param {object}  data
+ * @param {boolean} [isDlqRetry=false]  Skip re-enqueueing if this is already a retry
+ */
+async function _send(token, title, body, data = {}, isDlqRetry = false) {
   if (!token || !Expo.isExpoPushToken(token)) {
     logger.warn(`[RideNotification] Skipping invalid/missing token: ${token}`);
     return { success: false, error: 'Invalid or missing push token' };
@@ -32,6 +98,9 @@ async function _send(token, title, body, data = {}) {
         logger.error('[RideNotification] Ticket error:', ticket.message, ticket.details);
         if (ticket.details?.error === 'DeviceNotRegistered') {
           _removeStalePushToken(token).catch(() => {});
+        } else if (!isDlqRetry) {
+          // Transient error — enqueue for retry
+          await enqueuePushRetry(token, title, body, data, 1);
         }
       }
     }
@@ -52,6 +121,9 @@ async function _send(token, title, body, data = {}) {
     return { success: ticket?.status === 'ok', ticket };
   } catch (err) {
     logger.error('[RideNotification] Send error:', err.message);
+    if (!isDlqRetry) {
+      await enqueuePushRetry(token, title, body, data, 1);
+    }
     return { success: false, error: err.message };
   }
 }

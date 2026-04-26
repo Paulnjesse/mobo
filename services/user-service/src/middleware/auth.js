@@ -1,10 +1,12 @@
-const { verifyJwt } = require('../../../shared/jwtUtil');
+const { verifyJwt, isTokenRevoked } = require('../../../shared/jwtUtil');
+const logger = require('../utils/logger');
 
 /**
  * Authenticate JWT token — attaches req.user.
+ * Checks the token's jti against the Redis revocation list before proceeding.
  * Algorithm is determined by jwtUtil (RS256 in production, HS256 in dev/test).
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -13,16 +15,35 @@ const authenticate = (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
 
+  let decoded;
   try {
-    const decoded = verifyJwt(token);
-    req.user = decoded;
-    next();
+    decoded = verifyJwt(token);
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ success: false, message: 'Token expired' });
     }
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
+
+  // Session revocation check — tokens are added to revocation list on logout / forced sign-out
+  if (decoded.jti) {
+    try {
+      const revoked = await isTokenRevoked(decoded.jti);
+      if (revoked) {
+        return res.status(401).json({
+          success: false,
+          message: 'Token has been revoked. Please log in again.',
+          code: 'TOKEN_REVOKED',
+        });
+      }
+    } catch (redisErr) {
+      // Fail-open: Redis unavailable — log and continue to prevent service outage
+      logger.warn('[Auth] Token revocation check failed — Redis unavailable', { err: redisErr.message });
+    }
+  }
+
+  req.user = decoded;
+  next();
 };
 
 /**

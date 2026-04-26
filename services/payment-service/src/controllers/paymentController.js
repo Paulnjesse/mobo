@@ -184,6 +184,7 @@ async function processMtnMobileMoney(phone, amount, currency) {
       payeeNote:    'Ride fare payment',
     },
     {
+      timeout: 30000, // 30 s — prevent indefinite hangs on slow 3G networks
       headers: {
         Authorization:                `Bearer ${token}`,
         'X-Reference-Id':              referenceId,
@@ -294,6 +295,7 @@ async function processOrangeMoney(phone, amount, currency) {
       reference:    orderId,
     },
     {
+      timeout: 30000, // 30 s — prevent hangs on slow connections
       headers: {
         Authorization:  `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -322,6 +324,7 @@ async function pollOrangeStatus(orderId, payToken) {
     'https://api.orange.com/orange-money-webpay/cm/v1/transactionstatus',
     { order_id: orderId, pay_token: payToken },
     {
+      timeout: 15000, // 15 s polling timeout
       headers: {
         Authorization:  `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -698,9 +701,28 @@ const chargeRide = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid fare amount' });
     }
 
-    // req.currency is attached by currencyMiddleware (runs inside authenticate)
-    // No extra DB query needed — country_code comes from the JWT
-    const countryCode    = req.currency?.country_code || 'CM';
+    // Derive country_code from the rider's DB record (authoritative source of truth).
+    // The JWT country_code can lag if the user moved countries — always trust the DB.
+    const riderRow = await db.query(
+      'SELECT country_code FROM users WHERE id = $1',
+      [ride.rider_id]
+    );
+    const dbCountryCode  = riderRow.rows[0]?.country_code || 'CM';
+    const jwtCountryCode = req.currency?.country_code || 'CM';
+
+    // Currency mismatch guard: if JWT says one country but DB says another, reject.
+    // This prevents charges going through in the wrong currency (e.g. USD vs XAF).
+    if (jwtCountryCode !== dbCountryCode) {
+      logger.warn('[chargeRide] Currency context mismatch', { jwtCountryCode, dbCountryCode, ride_id, userId });
+      return res.status(400).json({
+        success: false,
+        message: 'Payment currency mismatch. Please refresh your session and retry.',
+        code: 'CURRENCY_MISMATCH',
+        expected_country: dbCountryCode,
+      });
+    }
+
+    const countryCode    = dbCountryCode;
     const localCurrency  = convertFromXAF(amountXAF, countryCode);
     // amount used for the actual payment provider call (local currency integer)
     const amount         = localCurrency.amount;
@@ -1994,28 +2016,56 @@ const webhookFlutterwave = async (req, res) => {
 
     const body = req.body || {};
     // Flutterwave wraps event data in body.data
-    const event  = body.event || '';
-    const data   = body.data  || {};
-    const txRef  = data.tx_ref || data.flw_ref;
-    const status = (data.status || '').toUpperCase();
+    const event   = body.event || '';
+    const data    = body.data  || {};
+    const txRef   = data.tx_ref || data.flw_ref;
+    const eventId = String(data.id || txRef || '');  // Flutterwave transaction ID
+    const status  = (data.status || '').toUpperCase();
 
     if (!txRef || !status) {
       return res.status(400).json({ message: 'Missing tx_ref or status' });
     }
 
-    const { rows } = await db.query(
-      "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1",
-      [txRef]
-    );
-
-    if (rows.length === 0) {
-      return res.sendStatus(200); // already resolved or unknown tx_ref
+    // Idempotency: record event BEFORE processing; ON CONFLICT means already seen → skip
+    if (eventId) {
+      const inserted = await db.query(
+        `INSERT INTO flutterwave_webhook_events (flw_event_id, event_type, tx_ref, raw_payload)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (flw_event_id) DO NOTHING`,
+        [eventId, event || 'unknown', txRef, JSON.stringify(body)]
+      );
+      if (inserted.rowCount === 0) {
+        // Already processed this event — 200 so Flutterwave stops retrying
+        return res.sendStatus(200);
+      }
     }
 
-    if (status === 'SUCCESSFUL') {
-      await resolvePendingPayment(rows[0].id, 'completed', data.flw_ref || txRef, null);
-    } else if (status === 'FAILED') {
-      await resolvePendingPayment(rows[0].id, 'failed', null, data.processor_response || 'Flutterwave declined');
+    // SELECT FOR UPDATE SKIP LOCKED prevents concurrent webhook deliveries double-processing
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        "SELECT id FROM payments WHERE provider_ref = $1 AND status = 'pending' LIMIT 1 FOR UPDATE SKIP LOCKED",
+        [txRef]
+      );
+
+      if (rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.sendStatus(200); // already resolved, locked by peer, or unknown tx_ref
+      }
+
+      if (status === 'SUCCESSFUL') {
+        await resolvePendingPayment(rows[0].id, 'completed', data.flw_ref || txRef, null);
+      } else if (status === 'FAILED') {
+        await resolvePendingPayment(rows[0].id, 'failed', null, data.processor_response || 'Flutterwave declined');
+      }
+
+      await client.query('COMMIT');
+    } catch (innerErr) {
+      await client.query('ROLLBACK');
+      throw innerErr;
+    } finally {
+      client.release();
     }
 
     logger.info({ txRef, status, event }, '[Webhook/Flutterwave] callback processed');
