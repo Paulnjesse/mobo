@@ -1412,7 +1412,7 @@ jobs:
 # ══════════════════════════════════════════════════════════════════════════════
 
   eas-build-android:
-    name: "EAS: Android AAB → Google Play"
+    name: "EAS: Android AAB -> Google Play"
     runs-on: ubuntu-latest
     needs: [deploy-gate]
     if: needs.deploy-gate.outputs.authorized == 'true'
@@ -1432,29 +1432,26 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "⚠️  EXPO_TOKEN not set — skipping EAS build."
-            echo "    Add EXPO_TOKEN to GitHub repository secrets to enable automated Play Store builds."
+            echo "EXPO_TOKEN not set -- skipping EAS build."
+            echo "Add EXPO_TOKEN to GitHub repository secrets to enable automated Play Store builds."
             exit 0
           fi
           echo "Building Android AAB (production profile)..."
           eas build --platform android --profile production --non-interactive --wait
 
-      - name: Write Google Play service account key
-        if: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT != '' }}
-        run: echo '${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}' > google-play-service-account.json
-
-      - name: Submit to Google Play (internal track)
-        working-directory: mobile
+      - name: Write Google Play service account key and submit
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GOOGLE_PLAY_SA: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             exit 0
           fi
-          if [ ! -f "../google-play-service-account.json" ]; then
-            echo "⚠️  GOOGLE_PLAY_SERVICE_ACCOUNT secret not configured — skipping submission."
-            echo "    Add the JSON key from Google Play Console as a GitHub secret to enable automated submission."
+          if [ -z "$GOOGLE_PLAY_SA" ]; then
+            echo "GOOGLE_PLAY_SERVICE_ACCOUNT secret not configured -- skipping submission."
+            echo "Add the JSON key from Google Play Console as a GitHub secret to enable automated submission."
             exit 0
           fi
+          echo "$GOOGLE_PLAY_SA" > google-play-service-account.json
           echo "Submitting AAB to Google Play internal track..."
-          eas submit --platform android --profile production --non-interactive
+          cd mobile && eas submit --platform android --profile production --non-interactive
