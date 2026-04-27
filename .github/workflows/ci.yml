@@ -1233,7 +1233,7 @@ jobs:
     if: needs.deploy-gate.outputs.authorized == 'true'
     environment:
       name: production
-      url: https://api.moboride.com
+      url: https://api.mobo-ride.com
     steps:
       - uses: actions/checkout@v4
 
@@ -1274,7 +1274,7 @@ jobs:
 
           echo "Checking service health..."
           SERVICES=(
-            "https://api.moboride.com/health"
+            "https://api.mobo-ride.com/health"
           )
 
           for url in "${SERVICES[@]}"; do
@@ -1300,7 +1300,7 @@ jobs:
 
       - name: Smoke test — health endpoints
         run: |
-          BASE="https://api.moboride.com"
+          BASE="https://api.mobo-ride.com"
           FAILED=0
 
           echo "Running post-deploy smoke tests..."
@@ -1323,7 +1323,7 @@ jobs:
       - name: Security headers validation
         run: |
           echo "Validating security response headers..."
-          BASE="https://api.moboride.com"
+          BASE="https://api.mobo-ride.com"
 
           HEADERS=$(curl -sI "$BASE/health" 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
@@ -1363,7 +1363,7 @@ jobs:
       - name: TLS/SSL grade check
         run: |
           echo "Checking TLS configuration grade..."
-          HOST="api.moboride.com"
+          HOST="api.mobo-ride.com"
 
           # Check TLS version — must be 1.2 minimum, prefer 1.3
           TLS_VERSION=$(curl -sv --max-time 15 "https://$HOST/health" 2>&1 | \
@@ -1384,7 +1384,7 @@ jobs:
           echo "  Commit:  ${{ github.sha }}"
           echo "  By:      ${{ github.actor }}"
           echo "  At:      $(date -u '+%Y-%m-%d %H:%M UTC')"
-          echo "  URL:     https://api.moboride.com"
+          echo "  URL:     https://api.mobo-ride.com"
           echo "══════════════════════════════════════════════"
 
       - name: Notify on failure (Slack webhook)
@@ -1406,3 +1406,55 @@ jobs:
                 }]
               }'
           fi
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STAGE 11 — EAS BUILD (Android — Google Play Store)
+# ══════════════════════════════════════════════════════════════════════════════
+
+  eas-build-android:
+    name: "EAS: Android AAB → Google Play"
+    runs-on: ubuntu-latest
+    needs: [deploy-gate]
+    if: needs.deploy-gate.outputs.authorized == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Build Android AAB
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "⚠️  EXPO_TOKEN not set — skipping EAS build."
+            echo "    Add EXPO_TOKEN to GitHub repository secrets to enable automated Play Store builds."
+            exit 0
+          fi
+          echo "Building Android AAB (production profile)..."
+          eas build --platform android --profile production --non-interactive --wait
+
+      - name: Write Google Play service account key
+        if: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT != '' }}
+        run: echo '${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}' > google-play-service-account.json
+
+      - name: Submit to Google Play (internal track)
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            exit 0
+          fi
+          if [ ! -f "../google-play-service-account.json" ]; then
+            echo "⚠️  GOOGLE_PLAY_SERVICE_ACCOUNT secret not configured — skipping submission."
+            echo "    Add the JSON key from Google Play Console as a GitHub secret to enable automated submission."
+            exit 0
+          fi
+          echo "Submitting AAB to Google Play internal track..."
+          eas submit --platform android --profile production --non-interactive
