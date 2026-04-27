@@ -20,6 +20,11 @@ CREATE INDEX IF NOT EXISTS idx_ride_events_schema_version
 ALTER TABLE dead_letter_events
   ADD COLUMN IF NOT EXISTS schema_version INTEGER NOT NULL DEFAULT 1;
 
+-- Ensure audit:write permission exists before granting it
+INSERT INTO permissions (name, description, category)
+  VALUES ('audit:write', 'Replay dead-letter events (destructive — super_admin only)', 'audit')
+  ON CONFLICT (name) DO NOTHING;
+
 -- Grant audit:write (dead-letter replay) to super_admin only
 -- ops_admin gets audit:read but NOT audit:write (replay is a destructive action)
 INSERT INTO role_permissions (role, permission)

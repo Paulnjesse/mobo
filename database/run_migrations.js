@@ -82,6 +82,8 @@ const FILES = [
   'migration_047.sql',  // Performance indexes: rides(status,created_at), users(phone), payments(user_id,created_at)
   'migration_048.sql',  // BGC columns (drivers), messages attachments, insurance_claims table
   'migration_049.sql',  // Flutterwave webhook dedup, admin_alerts, ride_idempotency_keys, driver_sessions
+  'migration_050.sql',  // dead_letter_events table for DLQ persistence
+  'migration_051.sql',  // Event schema versioning: schema_version on ride_events
 ];
 
 function buildMigrationSsl() {
