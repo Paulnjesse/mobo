@@ -36,18 +36,34 @@
         "backgroundColor": "#1A1A2E"
       },
       "package": "com.mobo.mobile",
+      "versionCode": 1,
       "config": {
         "googleMaps": {
           "apiKey": ""
         }
       },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [{ "scheme": "mobo" }]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            { "scheme": "https", "host": "www.mobo-ride.com", "pathPrefix": "/ride" },
+            { "scheme": "https", "host": "www.mobo-ride.com", "pathPrefix": "/payment" },
+            { "scheme": "https", "host": "www.mobo-ride.com", "pathPrefix": "/invite" }
+          ]
+        }
+      ],
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
         "RECORD_AUDIO",
         "VIBRATE",
         "RECEIVE_BOOT_COMPLETED",

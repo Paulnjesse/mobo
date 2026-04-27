@@ -41,7 +41,7 @@ function makeUser(overrides = {}) {
     id:                    'user-uuid-1',
     full_name:             'Jean Dupont',
     phone:                 '+237612345678',
-    email:                 'jean@moboride.com',
+    email:                 'jean@mobo-ride.com',
     password_hash:         '$2a$12$KIX/3LkfixR9WQjHYvWzAe2msMzVkRCOLlN/y/mklXTnkOkqF5KIm', // hash of 'Password123!'
     role:                  'rider',
     country:               'Cameroon',
@@ -237,7 +237,7 @@ describe('User Service — Auth', () => {
       mockDb.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
       const res = await request(app)
         .post('/auth/login')
-        .send({ identifier: 'jean@moboride.com', password: 'Password123!' });
+        .send({ identifier: 'jean@mobo-ride.com', password: 'Password123!' });
       // User not found → 401, but no 400/500 — proves routing works
       expect(res.status).toBe(401);
     });

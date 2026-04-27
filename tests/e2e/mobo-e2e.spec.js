@@ -30,11 +30,11 @@ const { test, expect, request } = require('@playwright/test');
 
 const BASE_URL     = process.env.BASE_URL     || 'http://localhost:3005';
 const API_URL      = process.env.API_URL      || 'http://localhost:3000';
-const ADMIN_EMAIL  = process.env.ADMIN_EMAIL  || 'admin@moboride.com';
+const ADMIN_EMAIL  = process.env.ADMIN_EMAIL  || 'admin@mobo-ride.com';
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || 'TestAdmin123!';
-const OPS_EMAIL    = process.env.OPS_EMAIL    || 'ops@moboride.com';
+const OPS_EMAIL    = process.env.OPS_EMAIL    || 'ops@mobo-ride.com';
 const OPS_PASS     = process.env.OPS_PASSWORD || 'TestOps123!';
-const FIN_EMAIL    = process.env.FINANCE_EMAIL    || 'finance@moboride.com';
+const FIN_EMAIL    = process.env.FINANCE_EMAIL    || 'finance@mobo-ride.com';
 const FIN_PASS     = process.env.FINANCE_PASSWORD || 'TestFinance123!';
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -450,7 +450,7 @@ test.describe('RBAC Enforcement', () => {
 
   test('TC-E2E-016: Support agent cannot see financial data', async ({ page }) => {
     // Login as support agent (lowest privilege role)
-    await loginAs(page, process.env.SUPPORT_EMAIL || 'support@moboride.com', process.env.SUPPORT_PASSWORD || 'Support123!');
+    await loginAs(page, process.env.SUPPORT_EMAIL || 'support@mobo-ride.com', process.env.SUPPORT_PASSWORD || 'Support123!');
 
     // Attempt to navigate to financial reports
     await page.goto(`${BASE_URL}/reports/financial`);

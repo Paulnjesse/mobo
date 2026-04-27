@@ -154,7 +154,7 @@ git rm --cached database/.env
 Rotate the Supabase password immediately.
 
 ### ~~SEC-004: No Content-Security-Policy on Admin Dashboard~~ — FIXED ✅
-**Resolution:** `admin/netlify.toml` `[[headers]]` block adds `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `HSTS`, and `Permissions-Policy` to every response. CSP allows MUI inline styles, Google Fonts, Leaflet tile servers (OSM/CartoCDN), and WebSocket connections to moboride.com; blocks all frames and object sources.
+**Resolution:** `admin/netlify.toml` `[[headers]]` block adds `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `HSTS`, and `Permissions-Policy` to every response. CSP allows MUI inline styles, Google Fonts, Leaflet tile servers (OSM/CartoCDN), and WebSocket connections to mobo-ride.com; blocks all frames and object sources.
 
 ### ~~SEC-005: No Two-Factor Authentication for Admin Accounts~~ — FIXED ✅
 **Resolution:** TOTP via `speakeasy` fully wired end-to-end:

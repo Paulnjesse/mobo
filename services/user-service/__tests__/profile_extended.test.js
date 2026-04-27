@@ -649,7 +649,7 @@ describe('Corporate Account', () => {
     const res = await request(app)
       .post('/users/corporate')
       .set('Authorization', `Bearer ${riderToken}`)
-      .send({ company_name: 'MOBO Corp', company_email: 'corp@moboride.com', billing_limit: 500000 });
+      .send({ company_name: 'MOBO Corp', company_email: 'corp@mobo-ride.com', billing_limit: 500000 });
     expect([200, 201, 400]).toContain(res.status);
   });
 

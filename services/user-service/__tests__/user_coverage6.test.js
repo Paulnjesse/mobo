@@ -93,7 +93,7 @@ jest.mock('axios', () => ({
 
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
-const adminToken  = 'Bearer ' + jwt.sign({ id: 99, role: 'admin',  email: 'admin@moboride.com'  }, JWT_SECRET, { expiresIn: '1h' });
+const adminToken  = 'Bearer ' + jwt.sign({ id: 99, role: 'admin',  email: 'admin@mobo-ride.com'  }, JWT_SECRET, { expiresIn: '1h' });
 const riderToken  = 'Bearer ' + jwt.sign({ id: 1,  role: 'rider',  phone: '+237612345678' }, JWT_SECRET, { expiresIn: '1h' });
 
 const mockDb = require('../src/config/database');
@@ -330,7 +330,7 @@ describe('adminAudit.js — middleware direct tests', () => {
 
   function makeReq(overrides = {}) {
     return {
-      user: { id: 1, email: 'admin@moboride.com', role: 'admin' },
+      user: { id: 1, email: 'admin@mobo-ride.com', role: 'admin' },
       ip: '127.0.0.1',
       method: 'PATCH',
       path: '/users/42/deactivate',
@@ -470,7 +470,7 @@ describe('adminAudit.js — middleware direct tests', () => {
 
     expect(mockDb.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO admin_audit_logs'),
-      expect.arrayContaining([1, 'admin@moboride.com'])
+      expect.arrayContaining([1, 'admin@mobo-ride.com'])
     );
   });
 

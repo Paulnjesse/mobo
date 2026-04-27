@@ -708,7 +708,7 @@ describe('AdminManagement — Staff CRUD', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ full_name: 'New Staff', email: 'staff@moboride.com', role_id: 1, password: 'Staff123!' });
+      .send({ full_name: 'New Staff', email: 'staff@mobo-ride.com', role_id: 1, password: 'Staff123!' });
     expect(ANY).toContain(res.status);
   });
 

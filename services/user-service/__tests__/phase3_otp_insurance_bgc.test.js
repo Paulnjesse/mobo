@@ -317,7 +317,7 @@ describe('BGC endpoints — adminController', () => {
 
   const mockDriver = {
     id: DRIVER_ID, user_id: 'user-drv-1',
-    full_name: 'Kofi Mensah', email: 'kofi@moboride.com',
+    full_name: 'Kofi Mensah', email: 'kofi@mobo-ride.com',
     phone: '+233201234567',
     bgc_status: 'not_started', bgc_report_id: null,
   };

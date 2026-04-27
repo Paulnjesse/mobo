@@ -327,7 +327,7 @@ describe('2FA — setup2FA', () => {
 
   test('sets up 2FA for admin', async () => {
     mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 99, email: 'admin@moboride.com', totp_enabled: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: 99, email: 'admin@mobo-ride.com', totp_enabled: false }] })
       .mockResolvedValueOnce({ rows: [] }); // update
     const res = await request(app).post('/auth/2fa/setup')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -617,7 +617,7 @@ describe('AdminManagement — roles', () => {
 describe('AdminManagement — staff', () => {
   test('GET /admin/admin-mgmt/staff lists admin staff', async () => {
     mockDb.query.mockResolvedValueOnce({
-      rows: [{ id: 10, full_name: 'Admin User', role: 'admin', email: 'admin@moboride.com' }],
+      rows: [{ id: 10, full_name: 'Admin User', role: 'admin', email: 'admin@mobo-ride.com' }],
     });
     const res = await request(app).get('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -630,7 +630,7 @@ describe('AdminManagement — staff', () => {
       .mockResolvedValueOnce({ rows: [{ id: 10, full_name: 'New Admin' }] }); // insert
     const res = await request(app).post('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ full_name: 'New Admin', phone: '+237699999999', email: 'newadmin@moboride.com', admin_role: 'support' });
+      .send({ full_name: 'New Admin', phone: '+237699999999', email: 'newadmin@mobo-ride.com', admin_role: 'support' });
     expect(ANY).toContain(res.status);
   });
 
@@ -693,7 +693,7 @@ describe('Auth — register fleet owner', () => {
       .mockResolvedValueOnce({ rows: [{ id: 3, owner_id: 1 }] }); // insert fleet owner
     const res = await request(app).post('/auth/register-fleet-owner')
       .set('Authorization', `Bearer ${riderToken}`)
-      .send({ company_name: 'MOBO Fleet Co', company_email: 'fleet@moboride.com' });
+      .send({ company_name: 'MOBO Fleet Co', company_email: 'fleet@mobo-ride.com' });
     expect(ANY).toContain(res.status);
   });
 });

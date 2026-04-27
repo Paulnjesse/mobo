@@ -743,7 +743,7 @@ describe('adminManagementController — staff', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ email: 'staff@moboride.com' }); // missing full_name and password
+      .send({ email: 'staff@mobo-ride.com' }); // missing full_name and password
     expect([400]).toContain(res.statusCode);
   });
 
@@ -751,7 +751,7 @@ describe('adminManagementController — staff', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ full_name: 'New Staff', email: 'staff@moboride.com', password: '123' });
+      .send({ full_name: 'New Staff', email: 'staff@mobo-ride.com', password: '123' });
     expect([400]).toContain(res.statusCode);
   });
 
@@ -760,7 +760,7 @@ describe('adminManagementController — staff', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ full_name: 'New Staff', email: 'existing@moboride.com', password: 'password123' });
+      .send({ full_name: 'New Staff', email: 'existing@mobo-ride.com', password: 'password123' });
     expect([409]).toContain(res.statusCode);
   });
 
@@ -771,7 +771,7 @@ describe('adminManagementController — staff', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ full_name: 'New Staff', email: 'new@moboride.com', password: 'password123', admin_role: 'nonexistent_role' });
+      .send({ full_name: 'New Staff', email: 'new@mobo-ride.com', password: 'password123', admin_role: 'nonexistent_role' });
     expect([400]).toContain(res.statusCode);
   });
 
@@ -779,11 +779,11 @@ describe('adminManagementController — staff', () => {
     mockDb.query
       .mockResolvedValueOnce({ rows: [] }) // email not taken
       .mockResolvedValueOnce({ rows: [{ name: 'read_only' }] }) // roleExists → true
-      .mockResolvedValueOnce({ rows: [{ id: 'new-admin', full_name: 'New Staff', email: 'new@moboride.com', admin_role: 'read_only' }] });
+      .mockResolvedValueOnce({ rows: [{ id: 'new-admin', full_name: 'New Staff', email: 'new@mobo-ride.com', admin_role: 'read_only' }] });
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ full_name: 'New Staff', email: 'new@moboride.com', password: 'password123', admin_role: 'read_only' });
+      .send({ full_name: 'New Staff', email: 'new@mobo-ride.com', password: 'password123', admin_role: 'read_only' });
     expect(ANY).toContain(res.statusCode);
   });
 

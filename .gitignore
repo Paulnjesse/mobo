@@ -2,9 +2,16 @@ node_modules/
 .env
 .env.local
 .env.production
+mobile/.env.production
 database/.env
 services/**/.env
 api-gateway/.env
+# Google Play / Firebase credentials — never commit these
+google-play-service-account.json
+google-services.json
+mobile/google-services.json
+GoogleService-Info.plist
+mobile/GoogleService-Info.plist
 *.log
 npm-debug.log*
 yarn-debug.log*

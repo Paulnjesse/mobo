@@ -62,7 +62,7 @@ const app      = require('../server');
 const JWT_SECRET  = process.env.JWT_SECRET;
 const riderToken  = jwt.sign({ id: 1, role: 'rider',  phone: '+237612345678' }, JWT_SECRET, { expiresIn: '1h' });
 const driverToken = jwt.sign({ id: 2, role: 'driver', phone: '+237699000001' }, JWT_SECRET, { expiresIn: '1h' });
-const adminToken  = jwt.sign({ id: 99, role: 'admin', email: 'admin@moboride.com', phone: '+237600000099' }, JWT_SECRET, { expiresIn: '1h' });
+const adminToken  = jwt.sign({ id: 99, role: 'admin', email: 'admin@mobo-ride.com', phone: '+237600000099' }, JWT_SECRET, { expiresIn: '1h' });
 
 const ANY = [200, 201, 202, 400, 401, 403, 404, 409, 422, 500, 503];
 
@@ -92,7 +92,7 @@ describe('2FA — setup2FA success path', () => {
 
   test('setup2FA successfully generates secret', async () => {
     mockDb.query
-      .mockResolvedValueOnce({ rows: [{ id: 99, email: 'admin@moboride.com', totp_enabled: false }] })
+      .mockResolvedValueOnce({ rows: [{ id: 99, email: 'admin@mobo-ride.com', totp_enabled: false }] })
       .mockResolvedValueOnce({ rows: [] }); // store secret
     const res = await request(app).post('/auth/2fa/setup')
       .set('Authorization', `Bearer ${adminToken}`);

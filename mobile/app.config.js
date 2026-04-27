@@ -63,5 +63,7 @@ module.exports = ({ config }) => ({
     apiUrl,
     rideSocketUrl,
     locationSocketUrl,
+    privacyUrl: 'https://www.mobo-ride.com/privacy',
+    termsUrl:   'https://www.mobo-ride.com/terms',
   },
 });

@@ -256,7 +256,7 @@ describe('adminManagementController — staff error paths', () => {
     const res = await request(app)
       .post('/admin/admin-mgmt/staff')
       .set('Authorization', adminToken)
-      .send({ full_name: 'Error Staff', email: 'error@moboride.com', password: 'password123' });
+      .send({ full_name: 'Error Staff', email: 'error@mobo-ride.com', password: 'password123' });
     expect([500]).toContain(res.statusCode);
   });
 

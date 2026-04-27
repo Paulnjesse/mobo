@@ -8,7 +8,7 @@
  *   k6 run k6/latency-africa.js
  *
  * Run against production:
- *   BASE_URL=https://api.moboride.com k6 run k6/latency-africa.js
+ *   BASE_URL=https://api.mobo-ride.com k6 run k6/latency-africa.js
  *
  * What it measures:
  *   P50, P90, P95, P99 latency for each critical endpoint group.

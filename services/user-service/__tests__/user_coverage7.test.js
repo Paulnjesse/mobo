@@ -77,7 +77,7 @@ jest.mock('axios', () => ({
 
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
-const adminToken = 'Bearer ' + jwt.sign({ id: 99, role: 'admin', email: 'admin@moboride.com' }, JWT_SECRET, { expiresIn: '1h' });
+const adminToken = 'Bearer ' + jwt.sign({ id: 99, role: 'admin', email: 'admin@mobo-ride.com' }, JWT_SECRET, { expiresIn: '1h' });
 const riderToken = 'Bearer ' + jwt.sign({ id: 1, role: 'rider', phone: '+237612345678' }, JWT_SECRET, { expiresIn: '1h' });
 
 const mockDb = require('../src/config/database');

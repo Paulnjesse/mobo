@@ -67,7 +67,7 @@ const app     = require('../server');
 const JWT_SECRET      = process.env.JWT_SECRET;
 const riderToken      = jwt.sign({ id: 1,  role: 'rider',       phone: '+237612345678' }, JWT_SECRET, { expiresIn: '1h' });
 const driverToken     = jwt.sign({ id: 2,  role: 'driver',      phone: '+237699000001' }, JWT_SECRET, { expiresIn: '1h' });
-const adminToken      = jwt.sign({ id: 99, role: 'admin', email: 'admin@moboride.com', phone: '+237600000099' }, JWT_SECRET, { expiresIn: '1h' });
+const adminToken      = jwt.sign({ id: 99, role: 'admin', email: 'admin@mobo-ride.com', phone: '+237600000099' }, JWT_SECRET, { expiresIn: '1h' });
 const fleetOwnerToken = jwt.sign({ id: 5,  role: 'fleet_owner', phone: '+237699000005' }, JWT_SECRET, { expiresIn: '1h' });
 
 const ANY = [200, 201, 202, 400, 401, 403, 404, 409, 422, 500];
@@ -305,17 +305,17 @@ describe('AdminManagement — createAdminStaff (with password)', () => {
   test('returns 400 with short password', async () => {
     const res = await request(app).post('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ full_name: 'New Admin', email: 'new@moboride.com', password: 'short' });
+      .send({ full_name: 'New Admin', email: 'new@mobo-ride.com', password: 'short' });
     expect(ANY).toContain(res.status);
   });
 
   test('creates admin staff member', async () => {
     mockDb.query
       .mockResolvedValueOnce({ rows: [] }) // email not taken
-      .mockResolvedValueOnce({ rows: [{ id: 10, full_name: 'New Admin', email: 'new@moboride.com', admin_role: 'support' }] });
+      .mockResolvedValueOnce({ rows: [{ id: 10, full_name: 'New Admin', email: 'new@mobo-ride.com', admin_role: 'support' }] });
     const res = await request(app).post('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ full_name: 'New Admin', email: 'new@moboride.com', password: 'StrongPass@123', admin_role: 'support' });
+      .send({ full_name: 'New Admin', email: 'new@mobo-ride.com', password: 'StrongPass@123', admin_role: 'support' });
     expect(ANY).toContain(res.status);
   });
 
@@ -323,7 +323,7 @@ describe('AdminManagement — createAdminStaff (with password)', () => {
     mockDb.query.mockResolvedValueOnce({ rows: [{ id: 1 }] }); // email taken
     const res = await request(app).post('/admin/admin-mgmt/staff')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ full_name: 'Dup Admin', email: 'existing@moboride.com', password: 'StrongPass@123' });
+      .send({ full_name: 'Dup Admin', email: 'existing@mobo-ride.com', password: 'StrongPass@123' });
     expect(ANY).toContain(res.status);
   });
 });

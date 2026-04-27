@@ -218,7 +218,7 @@ describe('notifyContacts.js — dev mode (no Twilio creds)', () => {
       plate: 'LT-1234',
       vehicleColor: 'Blue',
       vehicleMake: 'Toyota',
-      shareUrl: 'https://moboride.com/track/abc',
+      shareUrl: 'https://mobo-ride.com/track/abc',
       eta: 10,
     });
     expect(result).toMatchObject({ sent: 0, simulated: contacts.length });

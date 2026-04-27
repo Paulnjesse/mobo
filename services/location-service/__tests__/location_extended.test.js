@@ -460,7 +460,7 @@ describe('driverRealIDSubmit', () => {
     const res = await request(app)
       .post('/safety/realid')
       .set('Authorization', `Bearer ${driverToken}`)
-      .send({ selfie_url: 'https://cdn.moboride.com/selfie.jpg' });
+      .send({ selfie_url: 'https://cdn.mobo-ride.com/selfie.jpg' });
     expect([200, 201, 400, 404, 403, 500]).toContain(res.status);
   });
 });
