@@ -605,13 +605,19 @@ jobs:
       - name: Install psql client
         run: sudo apt-get install -y postgresql-client
 
-      - name: Apply all database migrations in order
+      - name: Apply base schema then all migrations in order
         run: |
-          echo "Applying migrations to test database..."
+          echo "Applying base schema (init.sql)..."
+          PGPASSWORD=mobo_test_pw_ci psql \
+            -h localhost -U mobo_test -d mobo_test \
+            --set ON_ERROR_STOP=1 \
+            -f database/init.sql -q
+          echo "Applying incremental migrations..."
           for f in $(ls database/migration_*.sql | sort -V); do
             echo "  → $f"
             PGPASSWORD=mobo_test_pw_ci psql \
               -h localhost -U mobo_test -d mobo_test \
+              --set ON_ERROR_STOP=1 \
               -f "$f" -q
           done
           echo "✅ All migrations applied"
