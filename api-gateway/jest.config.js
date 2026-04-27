@@ -11,7 +11,7 @@ module.exports = {
     '!src/utils/errors.js',   // thin class, tested indirectly via errorHandler
     '!src/constants/index.js', // static data, no logic to test
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines:      70,
       functions:  55,   // server.js init fns are integration-only; middleware well-covered
@@ -20,4 +20,5 @@ module.exports = {
     },
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  modulePaths: ['<rootDir>/node_modules'],
 };

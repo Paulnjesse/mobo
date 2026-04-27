@@ -13,7 +13,7 @@ module.exports = {
     '!src/utils/cache.js',
     '!src/utils/errors.js',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines:      70,
       functions:  70,
@@ -22,4 +22,5 @@ module.exports = {
     },
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  modulePaths: ['<rootDir>/node_modules'],
 };

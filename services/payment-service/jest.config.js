@@ -14,7 +14,7 @@ module.exports = {
     '!src/queues/paymentQueue.js',
     '!src/queues/paymentWorker.js',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines:      70,
       functions:  70,
@@ -23,4 +23,5 @@ module.exports = {
     },
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  modulePaths: ['<rootDir>/node_modules'],
 };

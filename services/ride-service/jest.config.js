@@ -20,7 +20,7 @@ module.exports = {
     'src/socket/rideSocket\\.js',
     'src/socket/deliverySocket\\.js',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines:      70,
       functions:  70,
@@ -29,4 +29,5 @@ module.exports = {
     },
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  modulePaths: ['<rootDir>/node_modules'],
 };

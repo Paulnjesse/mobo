@@ -14,7 +14,7 @@ module.exports = {
     '!src/middleware/dataAccessLogger.js',
     '!src/services/pushNotifications.js',
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       lines:      70,
       functions:  70,
@@ -23,4 +23,6 @@ module.exports = {
     },
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  // Allow shared/ modules to resolve packages installed in user-service/node_modules
+  modulePaths: ['<rootDir>/node_modules'],
 };
