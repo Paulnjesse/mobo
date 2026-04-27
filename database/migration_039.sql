@@ -5,23 +5,22 @@
 --   Adds is_archived / archived_at to users (soft-delete support for admin archive)
 --   Adds is_online / last_lat / last_lng / last_seen to drivers (live map)
 
--- ── admin_notifications ───────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS admin_notifications (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  title       TEXT        NOT NULL,
-  body        TEXT        NOT NULL,
-  target      VARCHAR(20) NOT NULL DEFAULT 'all',   -- 'all','role','user'
-  target_role VARCHAR(20),                           -- 'driver','rider', etc.
-  target_user UUID REFERENCES users(id) ON DELETE SET NULL,
-  sent_by     UUID REFERENCES users(id) ON DELETE SET NULL,
-  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- ── admin_notifications — extend migration_034 schema for bulk broadcasts ────
+-- admin_notifications was created in migration_034 for per-admin alerts.
+-- Here we add the columns needed for bulk notifications sent from the dashboard.
+ALTER TABLE admin_notifications
+  ADD COLUMN IF NOT EXISTS body        TEXT,
+  ADD COLUMN IF NOT EXISTS target      VARCHAR(20) DEFAULT 'all',
+  ADD COLUMN IF NOT EXISTS target_role VARCHAR(20),
+  ADD COLUMN IF NOT EXISTS target_user UUID REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS sent_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS sent_at     TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS admin_notifications_sent_at_idx ON admin_notifications(sent_at DESC);
 CREATE INDEX IF NOT EXISTS admin_notifications_sent_by_idx ON admin_notifications(sent_by);
 
 COMMENT ON TABLE admin_notifications IS
-  'Audit trail of bulk notifications dispatched from the admin dashboard.';
+  'Audit trail of admin alerts and bulk notifications dispatched from the admin dashboard.';
 
 -- ── system_settings ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS system_settings (
