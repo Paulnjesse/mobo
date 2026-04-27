@@ -174,9 +174,8 @@ export default function PaymentScreen({ navigation, route }) {
 
   // ── Stripe card payment sheet ─────────────────────────────────────────────
   const handleCardPayment = async (rideId) => {
-    // Fetch PaymentIntent from backend
-    const piData = await paymentsService.createPaymentIntent(rideId, grandTotal);
-    const { client_secret: intentSecret, publishable_key } = piData?.data || piData;
+    // Fetch PaymentIntent from backend — service maps Stripe's field to intentSecret
+    const { intentSecret, publishable_key } = await paymentsService.createPaymentIntent(rideId, grandTotal);
 
     if (!intentSecret) throw new Error('Failed to initialize card payment.');
 

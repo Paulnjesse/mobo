@@ -4,7 +4,7 @@ process.env.DATABASE_URL = 'postgresql://localhost/mobo_test';
 process.env.MTN_WEBHOOK_SECRET = 'test_mtn_webhook_secret';
 process.env.ORANGE_WEBHOOK_SECRET = 'test_orange_webhook_secret';
 // Set a non-placeholder key so createStripePaymentIntent uses the real validation path
-process.env.STRIPE_SECRET_KEY = 'sk_live_test_mobo_key';
+process.env.STRIPE_SECRET_KEY = 'sk_test_mobo_key';
 
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),

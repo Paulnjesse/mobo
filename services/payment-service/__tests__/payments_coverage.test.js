@@ -6,7 +6,7 @@
 process.env.NODE_ENV          = 'test';
 process.env.JWT_SECRET        = 'test_secret_minimum_32_chars_long_abc';
 process.env.DATABASE_URL      = 'postgresql://localhost/mobo_test';
-process.env.STRIPE_SECRET_KEY = 'sk_live_test_mobo_key_for_jest';
+process.env.STRIPE_SECRET_KEY = 'sk_test_mobo_key_for_jest';
 process.env.MTN_API_KEY       = 'mtn_test_key';
 process.env.ORANGE_API_KEY    = 'orange_test_key';
 

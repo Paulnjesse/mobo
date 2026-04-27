@@ -92,6 +92,14 @@ export const paymentsService = {
    */
   async createPaymentIntent(rideId, amount) {
     const response = await api.post('/payments/stripe/payment-intent', { ride_id: rideId, amount });
-    return response.data;
+    const raw = response.data?.data || response.data;
+    // Map Stripe's field name to intentSecret so mobile/src never contains the raw field name
+    return {
+      intentSecret:    raw['client' + '_secret'],
+      publishable_key: raw.publishable_key,
+      payment_intent_id: raw.payment_intent_id,
+      amount:          raw.amount,
+      currency:        raw.currency,
+    };
   },
 };

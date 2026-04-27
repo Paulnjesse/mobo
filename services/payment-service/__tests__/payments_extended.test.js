@@ -14,7 +14,7 @@ process.env.JWT_SECRET             = 'test_secret_minimum_32_chars_long_abc';
 process.env.DATABASE_URL           = 'postgresql://localhost/mobo_test';
 process.env.MTN_WEBHOOK_SECRET     = 'test_mtn_webhook_secret';
 process.env.ORANGE_WEBHOOK_SECRET  = 'test_orange_webhook_secret';
-process.env.STRIPE_SECRET_KEY      = 'sk_live_test_mobo_key';
+process.env.STRIPE_SECRET_KEY      = 'sk_test_mobo_key';
 
 const mockDb = {
   query:   jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
