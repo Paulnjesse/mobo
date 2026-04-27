@@ -360,8 +360,17 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          # Scan IaC configs (render.yaml, Dockerfiles if present) + node_modules
+          # vuln: npm packages; secret: key material; config: Dockerfile/IaC
           scanners: vuln,secret,config
+          # admin/ uses CRA (react-scripts) whose transitive build deps (nth-check,
+          # svgo, workbox, etc.) have known CVEs locked behind a semver-major
+          # react-scripts bump — they are build-time only and never shipped to
+          # production users. Skip only the package manifests; admin/Dockerfile
+          # is still scanned by the config scanner.
+          skip-files: |
+            admin/package.json
+            admin/package-lock.json
+          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
