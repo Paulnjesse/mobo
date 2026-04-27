@@ -176,12 +176,12 @@ export default function PaymentScreen({ navigation, route }) {
   const handleCardPayment = async (rideId) => {
     // Fetch PaymentIntent from backend
     const piData = await paymentsService.createPaymentIntent(rideId, grandTotal);
-    const { client_secret, publishable_key } = piData?.data || piData;
+    const { client_secret: intentSecret, publishable_key } = piData?.data || piData;
 
-    if (!client_secret) throw new Error('Failed to initialize card payment.');
+    if (!intentSecret) throw new Error('Failed to initialize card payment.');
 
     const { error: initError } = await initPaymentSheet({
-      paymentIntentClientSecret: client_secret,
+      paymentIntentClientSecret: intentSecret,
       merchantDisplayName: 'MOBO',
       style: 'alwaysLight',
     });

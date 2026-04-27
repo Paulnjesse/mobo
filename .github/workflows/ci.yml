@@ -544,7 +544,7 @@ jobs:
       startsWith(github.ref, 'refs/heads/release/')
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgis/postgis:16-3.4-alpine
         env:
           POSTGRES_USER:     mobo_test
           POSTGRES_PASSWORD: mobo_test_pw_ci

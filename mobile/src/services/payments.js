@@ -88,7 +88,7 @@ export const paymentsService = {
 
   /**
    * Create a Stripe PaymentIntent for the card payment sheet.
-   * Returns { client_secret, payment_intent_id, publishable_key, amount, currency }
+   * Returns { intentSecret, payment_intent_id, publishable_key, amount, currency }
    */
   async createPaymentIntent(rideId, amount) {
     const response = await api.post('/payments/stripe/payment-intent', { ride_id: rideId, amount });
