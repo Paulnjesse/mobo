@@ -1,0 +1,8 @@
+# .trivyignore — suppress known accepted-risk findings
+# Format: <CVE-ID> or <Misconfiguration-ID>
+# Each entry should have a comment explaining the business rationale.
+
+# DS026 — No HEALTHCHECK instruction defined
+# Reason: Health checks are managed externally by Render's platform and
+#         docker-compose healthcheck directives, not baked into images.
+DS026

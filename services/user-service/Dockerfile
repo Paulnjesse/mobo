@@ -6,7 +6,9 @@ COPY package*.json ./
 
 RUN npm install --production
 
-COPY . .
+COPY --chown=node:node . .
+
+USER node
 
 EXPOSE 3001
 
