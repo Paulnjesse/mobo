@@ -364,7 +364,7 @@ jobs:
           output: trivy-iac-secrets.sarif
           severity: CRITICAL,HIGH
           scanners: config,secret
-          trivyignores: .trivyignore,.trivyignore.yaml
+          trivyignores: .trivyignore.yaml
 
       # ── Scan 2: Vulnerability scan — INFORMATIONAL ───────────────────────────
       # npm audit (security-sca job) is the authoritative CVE hard gate (zero
@@ -385,7 +385,7 @@ jobs:
           severity: CRITICAL,HIGH
           scanners: vuln
           skip-files: admin/package.json,admin/package-lock.json
-          trivyignores: .trivyignore
+          trivyignores: .trivyignore.yaml
 
       - name: Upload IaC + Secret SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
