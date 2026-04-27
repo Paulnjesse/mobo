@@ -1,0 +1,72 @@
+# ZAP Baseline Scan Rules — MOBO Platform
+# Format: ruleId	threshold
+# Thresholds: IGNORE | WARN | FAIL
+# Reference: https://www.zaproxy.org/docs/alerts/
+
+# ── Informational / low-risk noise — downgrade to WARN ────────────────────────
+# 10015 — Incomplete or No Cache-control Header (API responses don't need caching)
+10015	WARN
+# 10017 — Cross-Domain JavaScript Source File Inclusion
+10017	WARN
+# 10027 — Information Disclosure - Suspicious Comments
+10027	WARN
+# 10109 — Modern Web Application (detection, not a vulnerability)
+10109	IGNORE
+# 90022 — Application Error Disclosure (caught by error handler)
+90022	WARN
+
+# ── Authentication & Session ───────────────────────────────────────────────────
+# 10010 — Cookie No HttpOnly Flag — FAIL (we set HttpOnly on all cookies)
+10010	FAIL
+# 10011 — Cookie Without Secure Flag — FAIL
+10011	FAIL
+# 10012 — Password Autocomplete in Browser — WARN (mobile app, not web form)
+10012	WARN
+# 10054 — Cookie with SameSite Attribute Problems — WARN
+10054	WARN
+
+# ── Injection ─────────────────────────────────────────────────────────────────
+# 40012 — Cross Site Scripting (Reflected) — FAIL
+40012	FAIL
+# 40014 — Cross Site Scripting (Persistent) — FAIL
+40014	FAIL
+# 40018 — SQL Injection — FAIL
+40018	FAIL
+# 40019 — SQL Injection (MySQL) — FAIL
+40019	FAIL
+# 40020 — SQL Injection (Hypersonic SQL) — FAIL
+40020	FAIL
+# 40021 — SQL Injection (Oracle) — FAIL
+40021	FAIL
+# 40022 — SQL Injection (PostgreSQL) — FAIL
+40022	FAIL
+
+# ── Headers ───────────────────────────────────────────────────────────────────
+# 10020 — Anti-clickjacking Header — FAIL (X-Frame-Options / CSP frame-ancestors)
+10020	FAIL
+# 10021 — X-Content-Type-Options Header Missing — FAIL
+10021	FAIL
+# 10023 — Information Disclosure - Debug Error Messages — FAIL
+10023	FAIL
+# 10024 — Information Disclosure - Sensitive Information in URL — WARN
+10024	WARN
+# 10036 — Server Leaks Version Information via "Server" Header — WARN
+10036	WARN
+# 10037 — Server Leaks Information via "X-Powered-By" Header — FAIL
+10037	FAIL
+# 10038 — Content Security Policy (CSP) Header Not Set — FAIL
+10038	FAIL
+# 10098 — Cross-Domain Misconfiguration — FAIL
+10098	FAIL
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# 10094 — Base64 Disclosure — WARN (JWTs are base64, not secrets)
+10094	WARN
+# 40040 — CORS Misconfiguration — FAIL
+40040	FAIL
+
+# ── TLS ───────────────────────────────────────────────────────────────────────
+# 10035 — Strict-Transport-Security Header Not Set — FAIL
+10035	FAIL
+# 90033 — Loosely Scoped Cookie — WARN
+90033	WARN

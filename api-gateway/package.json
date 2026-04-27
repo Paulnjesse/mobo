@@ -40,27 +40,5 @@
     "nodemon": "^3.0.2",
     "supertest": "^6.3.4"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "forceExit": true,
-    "testTimeout": 15000,
-    "collectCoverageFrom": [
-      "src/**/*.js",
-      "!src/**/*.test.js",
-      "!src/tracing.js"
-    ],
-    "coverageThresholds": {
-      "global": {
-        "lines": 40,
-        "functions": 40,
-        "branches": 30,
-        "statements": 40
-      }
-    },
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "clover"
-    ]
-  }
+  "_jest_note": "Jest config lives in jest.config.js — removed duplicate here to fix 'multiple configurations' error"
 }

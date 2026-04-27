@@ -161,7 +161,7 @@ jobs:
             "rk_live_[0-9a-zA-Z]{24}"           # Stripe restricted key
             "Bearer [A-Za-z0-9\-._~+/]{40,}"    # Bare Bearer tokens
             "password\s*=\s*['\"][^'\"]{8,}"     # Inline passwords
-            "PRIVATE KEY"                        # Private keys
+            "-----BEGIN.*PRIVATE KEY-----"        # PEM-encoded private keys
             "AIza[0-9A-Za-z\-_]{35}"            # Google API key
             "ghp_[0-9a-zA-Z]{36}"               # GitHub PAT
           )
@@ -1305,20 +1305,91 @@ jobs:
 
           echo "Running post-deploy smoke tests..."
 
-          # Health check
-          STATUS=$(curl -sf "$BASE/health" | python3 -c "
+          check_health() {
+            local url="$1"
+            local label="$2"
+            STATUS=$(curl -sf --max-time 10 "$url" | python3 -c "
           import json,sys
           try:
             d = json.load(sys.stdin)
-            print('ok' if d.get('status') == 'healthy' else 'degraded')
+            print('ok' if d.get('success') or d.get('status') == 'healthy' else 'degraded')
           except:
             print('error')
           " 2>/dev/null || echo "unreachable")
+            echo "  $label → $STATUS"
+            if [ "$STATUS" = "unreachable" ] || [ "$STATUS" = "error" ]; then
+              echo "::error::$label health check failed: $STATUS"
+              FAILED=$((FAILED + 1))
+            elif [ "$STATUS" = "degraded" ]; then
+              echo "::warning::$label health check degraded"
+            fi
+          }
 
-          echo "  /health → $STATUS"
-          if [ "$STATUS" != "ok" ]; then
-            echo "::warning::Health check returned: $STATUS"
+          check_health "$BASE/health"                        "api-gateway /health"
+          check_health "$BASE/api/users/health"              "user-service /health"
+          check_health "$BASE/api/rides/health"              "ride-service /health"
+          check_health "$BASE/api/payments/health"           "payment-service /health"
+          check_health "$BASE/api/location/health"           "location-service /health"
+
+          echo ""
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED health check(s) failed."
+            exit 1
           fi
+          echo "✅ All health checks passed"
+
+      - name: Smoke test — functional endpoints
+        run: |
+          BASE="https://api.mobo-ride.com"
+          FAILED=0
+
+          echo "Running functional smoke tests..."
+
+          check_status() {
+            local method="$1"
+            local url="$2"
+            local expected_status="$3"
+            local label="$4"
+            local body="${5:-}"
+            local ARGS=(-s -o /dev/null -w "%{http_code}" --max-time 10 -X "$method")
+            [ -n "$body" ] && ARGS+=(-H "Content-Type: application/json" -d "$body")
+            STATUS=$(curl "${ARGS[@]}" "$url" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "$expected_status" ]; then
+              echo "  ✅ $label → HTTP $STATUS"
+            else
+              echo "  ❌ $label → HTTP $STATUS (expected $expected_status)"
+              echo "::error::Smoke test failed: $label returned $STATUS, expected $expected_status"
+              FAILED=$((FAILED + 1))
+            fi
+          }
+
+          # Auth endpoint — 400 on missing body (not 500 = service is up + routing works)
+          check_status POST "$BASE/api/users/auth/send-otp" "400" "POST /auth/send-otp (no body → 400)"
+
+          # Ride types — public endpoint, should return 200
+          check_status GET  "$BASE/api/rides/types"         "200" "GET /rides/types (public)"
+
+          # Protected endpoints — no JWT → 401
+          check_status GET  "$BASE/api/users/profile"       "401" "GET /profile (no auth → 401)"
+          check_status POST "$BASE/api/rides/request"       "401" "POST /rides/request (no auth → 401)"
+          check_status GET  "$BASE/api/payments/wallet"     "401" "GET /payments/wallet (no auth → 401)"
+
+          # Rate limit check — endpoint exists (not 404)
+          RIDES_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BASE/api/rides/health")
+          if [ "$RIDES_STATUS" = "404" ]; then
+            echo "  ❌ /api/rides/health → 404 (route not registered)"
+            echo "::error::ride-service health route not reachable via gateway"
+            FAILED=$((FAILED + 1))
+          else
+            echo "  ✅ /api/rides/health → HTTP $RIDES_STATUS (route reachable)"
+          fi
+
+          echo ""
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED functional smoke test(s) failed."
+            exit 1
+          fi
+          echo "✅ All functional smoke tests passed"
 
       - name: Security headers validation
         run: |
