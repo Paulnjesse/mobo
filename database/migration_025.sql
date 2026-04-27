@@ -67,13 +67,13 @@ CREATE POLICY payment_methods_owner_policy ON payment_methods
   USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- locations  (drivers own their own location rows)
+-- locations  (drivers own their own location rows, keyed by user_id)
 -- ─────────────────────────────────────────────────────────────────────────────
 ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS locations_owner_policy ON locations;
 CREATE POLICY locations_owner_policy ON locations
-  USING (driver_id::text = current_setting('app.current_user_id', true));
+  USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- notifications
@@ -121,7 +121,7 @@ CREATE POLICY ride_ratings_participant_policy ON ride_ratings
   USING (
     rater_id::text  = current_setting('app.current_user_id', true)
     OR
-    ratee_id::text  = current_setting('app.current_user_id', true)
+    rated_id::text  = current_setting('app.current_user_id', true)
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ ALTER TABLE preferred_drivers ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS preferred_drivers_owner_policy ON preferred_drivers;
 CREATE POLICY preferred_drivers_owner_policy ON preferred_drivers
-  USING (rider_id::text = current_setting('app.current_user_id', true));
+  USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- GDPR tables
