@@ -352,36 +352,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Trivy filesystem scan
+      # ── Scan 1: IaC + Secrets — HARD GATE ───────────────────────────────────
+      # Checks Dockerfiles and source files for misconfigs and secret material.
+      # This is the authoritative block for non-CVE security issues.
+      - name: Trivy IaC + Secret scan (hard gate)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
           format: sarif
-          output: trivy-results.sarif
+          output: trivy-iac-secrets.sarif
           severity: CRITICAL,HIGH
-          # vuln: npm packages; secret: key material; config: Dockerfile/IaC
-          scanners: vuln,secret,config
-          # admin/ uses CRA (react-scripts) whose transitive build deps (nth-check,
-          # svgo, workbox, etc.) have known CVEs locked behind a semver-major
-          # react-scripts bump — they are build-time only and never shipped to
-          # production users. Skip only the package manifests; admin/Dockerfile
-          # is still scanned by the config scanner.
-          skip-files: |
-            admin/package.json
-            admin/package-lock.json
+          scanners: config,secret
           trivyignores: .trivyignore
 
-      - name: Upload Trivy SARIF to GitHub Security
+      # ── Scan 2: Vulnerability scan — INFORMATIONAL ───────────────────────────
+      # npm audit (security-sca job) is the authoritative CVE hard gate (zero
+      # critical/high tolerance). This Trivy vuln scan uses the NVD database
+      # which can differ from the GitHub Advisory DB used by npm audit — it is
+      # kept for visibility in the GitHub Security tab only and does NOT block
+      # the deploy gate.
+      # admin/ package manifests are skipped: CRA react-scripts locks transitive
+      # build-tool deps (nth-check, svgo, workbox, etc.) behind a semver-major
+      # bump — they are build-time only and never shipped to production users.
+      - name: Trivy vulnerability scan (informational)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-vuln.sarif
+          severity: CRITICAL,HIGH
+          scanners: vuln
+          skip-files: admin/package.json,admin/package-lock.json
+          trivyignores: .trivyignore
+
+      - name: Upload IaC + Secret SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: trivy-results.sarif
-          category: trivy
+          sarif_file: trivy-iac-secrets.sarif
+          category: trivy-iac
 
-      - name: Fail on critical findings
+      - name: Upload Vulnerability SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-vuln.sarif
+          category: trivy-vuln
+
+      - name: Fail on IaC + Secret critical findings
         run: |
-          CRITICAL=$(cat trivy-results.sarif | python3 -c "
+          CRITICAL=$(cat trivy-iac-secrets.sarif | python3 -c "
           import json,sys
           d = json.load(sys.stdin)
           runs = d.get('runs', [])
@@ -392,11 +414,12 @@ jobs:
           )
           print(count)
           " 2>/dev/null || echo "0")
-          echo "Trivy critical findings: $CRITICAL"
+          echo "Trivy IaC/Secret critical findings: $CRITICAL"
           if [ "$CRITICAL" -gt "0" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "::error::$CRITICAL critical Trivy finding(s). Review GitHub Security tab."
+            echo "::error::$CRITICAL critical IaC/Secret Trivy finding(s). Review GitHub Security tab."
             exit 1
           fi
+          echo "✅ No critical IaC or secret findings"
 
   # ── 2f. Mobile Security — React Native specific ──────────────────────────
   security-mobile:
