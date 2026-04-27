@@ -84,6 +84,7 @@ const FILES = [
   'migration_049.sql',  // Flutterwave webhook dedup, admin_alerts, ride_idempotency_keys, driver_sessions
   'migration_050.sql',  // dead_letter_events table for DLQ persistence
   'migration_051.sql',  // Event schema versioning: schema_version on ride_events
+  'migration_052.sql',  // Add missing is_available column to drivers table
 ];
 
 function buildMigrationSsl() {

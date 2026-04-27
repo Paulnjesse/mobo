@@ -37,10 +37,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_rides_id_rider
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payments_user_created
   ON payments (user_id, created_at DESC);
 
--- checkPaymentStatus + reconciliation: WHERE reference = $1 (external provider ref)
+-- checkPaymentStatus + reconciliation: WHERE provider_ref = $1 (external provider ref)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payments_reference
-  ON payments (reference)
-  WHERE reference IS NOT NULL;
+  ON payments (provider_ref)
+  WHERE provider_ref IS NOT NULL;
 
 -- flagStalePayments: WHERE status='pending' AND method=ANY(...) AND created_at < ...
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payments_status_method_created

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   national_id VARCHAR(100),
   national_id_doc_url TEXT,
   is_approved BOOLEAN DEFAULT false,
+  is_available BOOLEAN DEFAULT true,
   is_online BOOLEAN DEFAULT false,
   vehicle_id UUID,
   current_location GEOMETRY(Point, 4326),
