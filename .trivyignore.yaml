@@ -1,0 +1,15 @@
+# .trivyignore.yaml — path-scoped Trivy suppression rules (YAML format)
+# Used alongside .trivyignore (CVE-level suppressions).
+# Requires Trivy v0.46+. Referenced via trivyignores in ci.yml.
+
+misconfigurations:
+  - id: DS002
+    paths:
+      - pgbouncer/Dockerfile
+    statement: >
+      The edoburu/pgbouncer base image entrypoint runs as root at startup to
+      write runtime config files to /etc/pgbouncer/, then drops privileges to
+      the pgbouncer OS user before exec-ing the daemon. Adding USER pgbouncer
+      in our Dockerfile would break the entrypoint. The production process runs
+      as non-root; this DS002 flag is a false positive for managed base images
+      with built-in privilege drop. Review: https://github.com/edoburu/docker-pgbouncer

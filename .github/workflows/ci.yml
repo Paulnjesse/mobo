@@ -364,7 +364,7 @@ jobs:
           output: trivy-iac-secrets.sarif
           severity: CRITICAL,HIGH
           scanners: config,secret
-          trivyignores: .trivyignore
+          trivyignores: .trivyignore,.trivyignore.yaml
 
       # ── Scan 2: Vulnerability scan — INFORMATIONAL ───────────────────────────
       # npm audit (security-sca job) is the authoritative CVE hard gate (zero
