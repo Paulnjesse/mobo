@@ -7,7 +7,7 @@ databases:
     ipAllowList: []         # Allow all Render private network IPs (services use internal URLs)
 
   # ── Read Replica (Frankfurt — EU West) for GDPR data residency compliance ─────
-  # Promote to primary manually via Render dashboard if Oregon becomes unavailable.
+  # Promote to primary manually via Render dashboard if primary becomes unavailable.
   # RTO target: 30 minutes (manual promotion) | RPO target: < 60 seconds
   - name: mobo-db-replica-eu
     region: frankfurt
@@ -29,7 +29,7 @@ envVarGroups:
         # MUST be set in production.
         sync: false
       # ── Database connections go through PgBouncer (private service below) ──
-      # In production set PGBOUNCER_URL to the internal URL of the pgbouncer
+      # In production set DATABASE_URL to the internal URL of the pgbouncer
       # private service:  postgres://mobo_user:<pass>@mobo-pgbouncer:5432/mobo
       # Set DATABASE_URL_DIRECT to the raw Render PostgreSQL connection string
       # for migrations only (pgbouncer transaction mode blocks DDL statements).
@@ -54,9 +54,10 @@ envVarGroups:
         sync: false           # SEC-001: PEM CA cert for PostgreSQL TLS validation (rejectUnauthorized: true)
                               # Download from Render Dashboard → PostgreSQL → Connection → CA Certificate
                               # Store as single-line with \n replacing actual newlines
+      - key: FIELD_ENCRYPTION_KEY
+        generateValue: true   # 32-byte key for field-level encryption of sensitive DB columns
       - key: REQUIRE_RS256
         value: "true"         # BLOCK-5: Force RS256 JWT signing even outside NODE_ENV=production
-                              # Protects staging environments that share the production database
 
 services:
   # ── PgBouncer — PostgreSQL connection pooler (private service) ────────────────
@@ -140,25 +141,85 @@ services:
         value: 3001
       - key: JWT_EXPIRES_IN
         value: 7d
+      # ── SMS (Twilio) ──────────────────────────────────────────────────────────
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_PHONE_NUMBER
         sync: false
-      - key: DATABASE_READ_URL
+      # ── Email (SMTP) ──────────────────────────────────────────────────────────
+      - key: SMTP_HOST
         sync: false
-      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
         sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@mobo-ride.com
+      # ── Google Sign-In ────────────────────────────────────────────────────────
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      - key: GOOGLE_CLIENT_ID_WEB
+        sync: false
+      - key: GOOGLE_CLIENT_ID_IOS
+        sync: false
+      - key: GOOGLE_CLIENT_ID_ANDROID
+        sync: false
+      # ── Apple Sign-In ─────────────────────────────────────────────────────────
       - key: APPLE_CLIENT_ID
         sync: false
       - key: APPLE_TEAM_ID
         sync: false
       - key: APPLE_KEY_ID
+        sync: false
+      - key: APPLE_APP_BUNDLE_ID
+        sync: false
+      # ── Facebook Sign-In ──────────────────────────────────────────────────────
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      # ── Smile Identity (KYC / Biometric verification) ─────────────────────────
+      - key: SMILE_ID_PARTNER_ID
+        sync: false
+      - key: SMILE_ID_API_KEY
+        sync: false
+      - key: SMILE_ID_BASE_URL
+        sync: false
+      - key: SMILE_ID_CALLBACK_URL
+        sync: false
+      - key: SMILE_PARTNER_ID
+        sync: false
+      - key: SMILE_API_KEY
+        sync: false
+      - key: SMILE_SID_SERVER
+        value: "1"              # 0 = sandbox, 1 = production
+      - key: LIVENESS_THRESHOLD
+        value: "0.7"
+      - key: SELFIE_MATCH_THRESHOLD
+        value: "0.7"
+      # ── Checkr (Background Checks for drivers) ────────────────────────────────
+      - key: CHECKR_API_KEY
+        sync: false
+      - key: CHECKR_PACKAGE
+        value: driver_pro
+      - key: CHECKR_WEBHOOK_SECRET
+        sync: false
+      # ── Webhook secrets ───────────────────────────────────────────────────────
+      - key: MTN_WEBHOOK_SECRET
+        sync: false
+      - key: ORANGE_WEBHOOK_SECRET
+        sync: false
+      # ── Access control ────────────────────────────────────────────────────────
+      - key: ADMIN_ALLOWED_IPS
+        sync: false
+      # ── Observability ─────────────────────────────────────────────────────────
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
         value: https://api.mobo-ride.com,https://app.mobo-ride.com,https://mobo-ride.com
@@ -184,16 +245,37 @@ services:
         value: production
       - key: PORT
         value: 3002
+      # ── Inter-service URLs ────────────────────────────────────────────────────
+      - key: USER_SERVICE_URL
+        sync: false
       - key: LOCATION_SERVICE_URL
         sync: false
       - key: PAYMENT_SERVICE_URL
         sync: false
       - key: ML_SERVICE_URL
         sync: false
-      - key: DATABASE_READ_URL
-        sync: false
+      # ── Maps ──────────────────────────────────────────────────────────────────
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+      # ── Email (ride receipts / cancellation notices) ──────────────────────────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@mobo-ride.com
+      # ── SMS (Twilio) ──────────────────────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      # ── Observability ─────────────────────────────────────────────────────────
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: SOCKET_CORS_ORIGIN
@@ -220,26 +302,58 @@ services:
         value: production
       - key: PORT
         value: 3003
+      - key: API_BASE_URL
+        value: https://api.mobo-ride.com
+      # ── Flutterwave ───────────────────────────────────────────────────────────
       - key: FLUTTERWAVE_SECRET_KEY
         sync: false
+      - key: FLW_SECRET_HASH
+        sync: false             # Flutterwave webhook verification hash
+      # ── Stripe ───────────────────────────────────────────────────────────────
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: MTN_API_USER
+      # ── MTN Mobile Money ──────────────────────────────────────────────────────
+      - key: MTN_API_USER_ID
         sync: false
       - key: MTN_API_KEY
         sync: false
-      - key: MTN_SUBSCRIPTION_KEY
+      - key: MTN_COLLECTION_SUBSCRIPTION_KEY
         sync: false
+      - key: MTN_ENVIRONMENT
+        value: production       # sandbox | production
+      - key: MTN_BASE_URL
+        value: https://proxy.momoapi.mtn.com
+      - key: MTN_WEBHOOK_SECRET
+        sync: false
+      # ── Orange Money ──────────────────────────────────────────────────────────
       - key: ORANGE_CLIENT_ID
         sync: false
       - key: ORANGE_CLIENT_SECRET
         sync: false
-      - key: DATABASE_READ_URL
+      - key: ORANGE_MERCHANT_KEY
         sync: false
+      - key: ORANGE_RETURN_URL
+        value: https://mobo-ride.com/payment/return
+      - key: ORANGE_CANCEL_URL
+        value: https://mobo-ride.com/payment/cancel
+      - key: ORANGE_NOTIF_URL
+        value: https://api.mobo-ride.com/payments/webhook/orange
+      - key: ORANGE_WEBHOOK_SECRET
+        sync: false
+      # ── Wave ──────────────────────────────────────────────────────────────────
+      - key: WAVE_API_KEY
+        sync: false
+      - key: WAVE_BASE_URL
+        value: https://api.wave.com/v1
+      - key: WAVE_SUCCESS_URL
+        value: https://mobo-ride.com/payment/success
+      - key: WAVE_ERROR_URL
+        value: https://mobo-ride.com/payment/error
+      # ── Observability ─────────────────────────────────────────────────────────
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
@@ -266,12 +380,30 @@ services:
         value: production
       - key: PORT
         value: 3004
-      - key: GOOGLE_MAPS_API_KEY
+      # ── Inter-service URLs ────────────────────────────────────────────────────
+      - key: USER_SERVICE_URL
         sync: false
       - key: ML_SERVICE_URL
         sync: false
-      - key: DATABASE_READ_URL
+      # ── Maps ──────────────────────────────────────────────────────────────────
+      - key: GOOGLE_MAPS_API_KEY
         sync: false
+      # ── Twilio (anonymous call proxy) ─────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PROXY_SERVICE_SID
+        sync: false
+      # ── Location data retention ───────────────────────────────────────────────
+      - key: LOCATION_RETENTION_DAYS
+        value: "90"
+      - key: LOCATION_PURGE_HOUR_UTC
+        value: "3"
+      # ── App base URL (used for callback links) ────────────────────────────────
+      - key: APP_BASE_URL
+        value: https://app.mobo-ride.com
+      # ── Observability ─────────────────────────────────────────────────────────
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
@@ -301,6 +433,7 @@ services:
         value: production
       - key: PORT
         value: 3000
+      # ── Upstream service URLs ─────────────────────────────────────────────────
       - key: USER_SERVICE_URL
         sync: false
       - key: RIDE_SERVICE_URL
@@ -309,6 +442,12 @@ services:
         sync: false
       - key: LOCATION_SERVICE_URL
         sync: false
+      # ── Access control ────────────────────────────────────────────────────────
+      - key: CLIENT_URL
+        value: https://app.mobo-ride.com
+      - key: METRICS_ALLOWED_IPS
+        sync: false             # Comma-separated IPs allowed to scrape /metrics
+      # ── Observability ─────────────────────────────────────────────────────────
       - key: OTEL_EXPORTER_OTLP_ENDPOINT
         sync: false
       - key: CORS_ORIGIN
@@ -323,8 +462,11 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
     rootDir: services/ml-service
+    healthCheckPath: /health
     envVars:
       - key: INTERNAL_SERVICE_KEY
+        fromGroup: mobo-shared-secrets
+      - key: SENTRY_DSN
         fromGroup: mobo-shared-secrets
       - key: MODEL_DIR
         value: /tmp/models
